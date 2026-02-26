@@ -1,0 +1,295 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h2 class="h4 mb-1">Detalle del Pedido</h2>
+      <p class="mb-0"><strong>Cliente:</strong> {{ pedido.nombre_cliente }}</p>
+      <p class="mb-0"><strong>Fecha:</strong> {{ pedido.fecha_pedido|date:"d-m-Y" }}</p>
+      <p class="mb-0">
+        <strong>Estado:</strong>
+        {% if pedido.estado_pedido == "Entregado" %}
+          <span class="badge bg-primary">Entregado</span>
+        {% elif pedido.estado_pedido == "Pendiente" %}
+          <span class="badge bg-warning text-dark">Pendiente</span>
+        {% elif pedido.estado_pedido == "Pagado" %}
+          <span class="badge bg-success">Pagado</span>
+        {% else %}
+          {{ pedido.estado_pedido }}
+        {% endif %}
+      </p>
+    </div>
+
+    <div>
+      {# Agregar Productos solo si NO está Entregado #}
+      {% if pedido.estado_pedido != "Entregado" %}
+        <a href="{% url 'agregar_productos_pedido' pedido.id %}" class="btn btn-outline-primary me-2">
+          <i class="fas fa-box-open"></i> Agregar Productos
+        </a>
+      {% endif %}
+
+      <a href="{% url 'generar_pdf_pedido' pedido.id %}" class="btn btn-outline-danger me-2" title="PDF del pedido">
+        <i class="fas fa-file-pdf"></i>
+      </a>
+
+      {# Botón principal cambia según estado #}
+      {% if pedido.estado_pedido == "Entregado" %}
+        <a href="{% url 'finalizar_venta' pedido.id %}" class="btn btn-outline-success me-2">
+          <i class="fas fa-check"></i> Finalizar Venta
+        </a>
+      {% else %}
+        <!-- Botón que abre el modal de entrega -->
+        <button type="button" class="btn btn-outline-success me-2" data-bs-toggle="modal" data-bs-target="#modalEntrega">
+          <i class="fas fa-check"></i> Entregar Pedido
+        </button>
+      {% endif %}
+
+      <a href="{% url 'lista_pedidos' %}" class="btn btn-outline-secondary me-2">Cerrar</a>
+    </div>
+  </div>
+
+  {% if pedido.comentario_pedido %}
+    <div class="alert alert-secondary">
+      <strong>Comentario:</strong> {{ pedido.comentario_pedido }}
+    </div>
+  {% endif %}
+
+  <!-- Tabla productos -->
+  <div class="table-responsive mb-4">
+    <table class="table table-striped table-hover align-middle">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Producto</th>
+          <th class="text-center">Cantidad</th>
+          <th class="text-center">Empaque</th>
+          <th class="text-center">Precio Unitario</th>
+          <th class="text-center">Subtotal</th>
+          <th class="text-center">Utilidad ($ | %) </th>
+          <th>Eliminar</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reservas %}
+        <tr>
+          <td class="text-start">{{ r.producto__nombre_producto }}</td>
+          <td class="text-center">{{ r.qty_sum|formatear_miles }}</td>
+          <td class="text-center">
+            {% if r.empaque == 'PRIMARIO' %}{{ r.producto__empaque_primario__nombre }}
+            {% elif r.empaque == 'SECUNDARIO' %}{{ r.producto__empaque_secundario__nombre }}
+            {% elif r.empaque == 'TERCIARIO' %}{{ r.producto__empaque_terciario__nombre }}
+            {% else %}{{ r.empaque }}{% endif %}
+          </td>
+          <td class="text-center">${{ r.precio_unitario|formatear_miles }}</td>
+          <td class="text-center">${{ r.subtotal|formatear_miles }}</td>
+          <td class="text-center">${{ r.ganancia|formatear_miles }} | {{ r.ganancia_pct }}%</td>
+          <td class="text-center">
+            {% if pedido.estado_pedido == "Entregado" %}
+              <button class="btn btn-sm btn-outline-secondary" title="No disponible en Entregado" disabled>
+                <i class="fas fa-ban"></i>
+              </button>
+            {% else %}
+              <form method="post" action="{% url 'eliminar_producto_pedido' pedido.id r.producto %}" style="display:inline-block;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger d-flex justify-content-center align-items-center" title="Eliminar producto">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="text-end" style="margin-right: 135px;">
+    <p class="mb-1"><strong>Total Neto:</strong> ${{ total_neto|formatear_miles }}</p>
+    <p class="mb-1"><strong>IVA (19%):</strong> ${{ iva|formatear_miles }}</p>
+    <h5><strong>Total:</strong> ${{ total|formatear_miles }}</h5>
+    <p class="mb-1"><strong>Ganancia total:</strong> ${{ ganancia_total|formatear_miles }}</p>
+  </div>
+
+  <!-- ENTREGAS REGISTRADAS (PDFs + Foto) -->
+  {% with entregas=pedido.entregas.all %}
+  {% if entregas %}
+    <div class="card mt-3">
+      <div class="card-header">Entregas registradas</div>
+      <div class="card-body">
+        {% for e in entregas %}
+          <p class="mb-1"><strong>Receptor:</strong> {{ e.nombre_receptor }} ({{ e.rut_receptor }})</p>
+          <p class="mb-1"><strong>Fecha:</strong> {{ e.fecha_entrega|date:"d-m-Y H:i" }}</p>
+
+          <div class="d-flex gap-2 align-items-center mb-2">
+            {% if e.archivo_pdf %}
+              <a class="btn btn-outline-danger btn-sm" href="{{ e.archivo_pdf.url }}" target="_blank">
+                <i class="fas fa-file-pdf"></i> Ver Recepcción (PDF)
+              </a>
+            {% endif %}
+
+            {% if e.foto %}
+              <a class="btn btn-outline-primary btn-sm" href="{{ e.foto.url }}" target="_blank">
+                <i class="fas fa-image"></i>  Ver Foto
+              </a>
+            {% endif %}
+          </div>
+          <hr>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+  {% endwith %}
+
+
+{# ===================== Modal Registro de Entrega (solo si NO está entregado) ===================== #}
+{% if pedido.estado_pedido != "Entregado" %}
+<div class="modal fade" id="modalEntrega" tabindex="-1" aria-labelledby="modalEntregaLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" action="{% url 'finalizar_pedido' pedido.id %}" enctype="multipart/form-data" id="formEntrega">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalEntregaLabel">Registrar Entrega</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Nombre receptor</label>
+              <input type="text" name="entrega_nombre" class="form-control" required maxlength="120">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">RUT receptor</label>
+              <input type="text" name="entrega_rut" class="form-control" placeholder="12.345.678-9" required maxlength="12">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Fecha y hora</label>
+              <input type="datetime-local" name="entrega_fecha" id="entrega_fecha" class="form-control" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Foto (opcional)</label>
+              <input type="file" name="entrega_foto" class="form-control" accept="image/*" capture="environment">
+            </div>
+
+            <div class="col-12">
+              <label class="form-label d-block mb-2">Firma del receptor</label>
+              <div class="border rounded p-2">
+                <canvas id="firmaCanvas" width="800" height="200" style="width:100%; height:200px; display:block;"></canvas>
+                <div class="mt-2 d-flex gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="btnLimpiarFirma">Limpiar firma</button>
+                </div>
+              </div>
+              <input type="hidden" name="entrega_firma" id="entrega_firma">
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-outline-success" id="btnSubmitEntrega">Guardar y Finalizar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block script %}
+<script>
+  // Fecha ahora por defecto
+  (function setNow() {
+    const input = document.getElementById('entrega_fecha');
+    if (!input) return; // si no hay modal (estado entregado)
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    input.value = now.toISOString().slice(0,16);
+  })();
+
+  // Firma en canvas (solo si no está entregado)
+  (function firma() {
+    const canvas = document.getElementById('firmaCanvas');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    let dibujando = false, lastX = 0, lastY = 0, hayTrazo = false;
+
+    function resizeCanvas() {
+      const displayWidth = canvas.clientWidth;
+      const displayHeight = 200;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = displayWidth * ratio;
+      canvas.height = displayHeight * ratio;
+      canvas.style.height = displayHeight + 'px';
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.scale(ratio, ratio);
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#000';
+      limpiar();
+    }
+    function limpiar() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      hayTrazo = false;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    function comenzar(x, y) { dibujando = true; [lastX, lastY] = [x, y]; }
+    function trazar(x, y) {
+      if (!dibujando) return;
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      [lastX, lastY] = [x, y];
+      hayTrazo = true;
+    }
+    function terminar() { dibujando = false; }
+
+    // Mouse
+    canvas.addEventListener('mousedown', e => comenzar(e.offsetX, e.offsetY));
+    canvas.addEventListener('mousemove', e => trazar(e.offsetX, e.offsetY));
+    canvas.addEventListener('mouseup', terminar);
+    canvas.addEventListener('mouseleave', terminar);
+
+    // Touch
+    canvas.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const t = e.touches[0];
+      comenzar(t.clientX - rect.left, t.clientY - rect.top);
+    }, {passive:false});
+    canvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const t = e.touches[0];
+      trazar(t.clientX - rect.left, t.clientY - rect.top);
+    }, {passive:false});
+    canvas.addEventListener('touchend', terminar);
+
+    // Botón limpiar
+    document.getElementById('btnLimpiarFirma')?.addEventListener('click', limpiar);
+
+    // Antes de enviar: firma base64 y prevenir doble submit
+    const form = document.getElementById('formEntrega');
+    const btn = document.getElementById('btnSubmitEntrega');
+
+    form.addEventListener('submit', function(e){
+      if (!hayTrazo) {
+        e.preventDefault();
+        alert('Por favor, registre la firma del receptor.');
+        return;
+      }
+      const dataUrl = canvas.toDataURL('image/png');
+      document.getElementById('entrega_firma').value = dataUrl;
+      btn.disabled = true;
+      btn.innerText = 'Guardando...';
+    });
+  })();
+</script>
+{% endblock %}

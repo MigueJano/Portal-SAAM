@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block CSS %}
+{% endblock CSS %}
+
+{% block content %}
+<div class="container mt-3">
+
+  <h1 class="h5 mb-3">Gestión de Categorías y Subcategorías</h1>
+
+  <!-- Agregar Categoría -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <h6 class="card-title mb-3">Agregar categoría</h6>
+      <form method="post" class="row g-2 align-items-center">
+        {% csrf_token %}
+        <div class="col-md-10">
+          <input type="text"
+                 name="categoria_nombre"
+                 class="form-control form-control-sm"
+                 placeholder="Nueva categoría"
+                 maxlength="120"
+                 required
+                 autofocus>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" name="crear_categoria" class="btn btn-outline-primary btn-sm w-100">
+            <i class="fas fa-plus me-1"></i> Agregar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Agregar Subcategoría -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <h6 class="card-title mb-3">Agregar subcategoría</h6>
+      <form method="post" class="row g-2 align-items-end">
+        {% csrf_token %}
+        <div class="col-md-5">
+          <input type="text"
+                 name="subcategoria_nombre"
+                 class="form-control form-control-sm"
+                 placeholder="Nueva subcategoría"
+                 maxlength="120"
+                 required>
+        </div>
+        <div class="col-md-5">
+          <select name="categoria_id" class="form-select form-select-sm" required>
+            <option value="">Selecciona una categoría</option>
+            {% for cat in categorias %}
+              <option value="{{ cat.id }}">{{ cat.categoria }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" name="crear_subcategoria" class="btn btn-outline-primary btn-sm w-100">
+            <i class="fas fa-plus me-1"></i> Agregar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tabla de Subcategorías -->
+  <div class="table-responsive">
+    <table id="tabla-filtros" class="table table-bordered table-striped table-sm">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Categoría</th>
+          <th>Subcategoría</th>
+          <th style="width: 140px;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sub in subcategorias %}
+          <tr>
+            <td>{{ sub.categoria.categoria }}</td>
+            <td>{{ sub.subcategoria }}</td>
+            <td class="text-center align-middle">
+              <a href="{% url 'editar_subcategoria' sub.id %}" class="btn btn-outline-primary btn-sm" title="Editar">
+                <i class="fas fa-pen"></i>
+              </a>
+              <a href="{% url 'eliminar_subcategoria' sub.id %}"
+                 class="btn btn-outline-danger btn-sm"
+                 title="Eliminar"
+                 onclick="return confirm('¿Seguro que deseas eliminar esta subcategoría?');">
+                <i class="fas fa-trash-alt"></i>
+              </a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="3" class="text-center text-muted">No hay subcategorías registradas.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock content %}
+
+{% block script %}
+<script>
+  $(function () {
+    $('#tabla-filtros').DataTable({
+      order: [[0, 'asc']],
+      language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json" },
+      autoWidth: false,
+      scrollX: true
+    });
+  });
+</script>
+{% endblock script %}

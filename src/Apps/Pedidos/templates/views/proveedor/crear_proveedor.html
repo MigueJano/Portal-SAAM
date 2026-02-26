@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block CSS %}
+{% endblock CSS %}
+
+{% block content %}
+<form method="post">
+  {% csrf_token %}
+  <h1 class="h4 mt-4 mb-3">Crear Proveedor</h1>
+
+  <!-- Nombre -->
+  <div class="mb-3">
+    <label for="nombre_proveedor" class="form-label">Nombre del Proveedor</label>
+    <input type="text" class="form-control" id="nombre_proveedor" name="nombre_proveedor"
+           value="{{ form.nombre_proveedor.value|default_if_none:'' }}" required>
+  </div>
+
+  <!-- RUT -->
+  <div class="mb-3">
+    <label for="rut_proveedor" class="form-label">RUT del Proveedor</label>
+    <input type="text" class="form-control" id="rut_proveedor" name="rut_proveedor"
+           value="{{ form.rut_proveedor.value|default_if_none:'' }}" required>
+  </div>
+
+  <!-- Dirección -->
+  <div class="mb-3">
+    <label for="direccion_proveedor" class="form-label">Dirección del Proveedor</label>
+    <input type="text" class="form-control" id="direccion_proveedor" name="direccion_proveedor"
+           value="{{ form.direccion_proveedor.value|default_if_none:'' }}">
+  </div>
+
+  <!-- Dirección Bodega -->
+  <div class="mb-3">
+    <label for="direccion_bodega_proveedor" class="form-label">Dirección de Bodega</label>
+    <input type="text" class="form-control" id="direccion_bodega_proveedor" name="direccion_bodega_proveedor"
+           value="{{ form.direccion_bodega_proveedor.value|default_if_none:'' }}" placeholder="Ej: Av. Los Pinos 123, Santiago">
+  </div>
+
+  <!-- Activa -->
+  <div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" id="empresa_activa" name="empresa_activa" value="True"
+           {% if form.empresa_activa.value %}checked{% endif %}>
+    <label class="form-check-label" for="empresa_activa">Empresa Activa</label>
+  </div>
+
+  <!-- Banco -->
+  <div class="mb-3">
+    <label for="banco_proveedor" class="form-label">Banco</label>
+    <input type="text" class="form-control" id="banco_proveedor" name="banco_proveedor"
+           value="{{ form.banco_proveedor.value|default_if_none:'' }}">
+  </div>
+
+  <!-- Tipo de Cuenta -->
+  <div class="mb-3">
+    <label for="cta_proveedor" class="form-label">Tipo de Cuenta</label>
+    <select class="form-select" id="cta_proveedor" name="cta_proveedor">
+      <option value="">Seleccione...</option>
+      <option value="Corriente" {% if form.cta_proveedor.value == "Corriente" %}selected{% endif %}>Corriente</option>
+      <option value="Vista" {% if form.cta_proveedor.value == "Vista" %}selected{% endif %}>Vista</option>
+      <option value="Prepago" {% if form.cta_proveedor.value == "Prepago" %}selected{% endif %}>Prepago</option>
+      <option value="Ahorro" {% if form.cta_proveedor.value == "Ahorro" %}selected{% endif %}>Ahorro</option>
+      <option value="RUT" {% if form.cta_proveedor.value == "RUT" %}selected{% endif %}>RUT</option>
+    </select>
+  </div>
+
+  <!-- Número de Cuenta -->
+  <div class="mb-3">
+    <label for="num_cuenta_proveedor" class="form-label">Número de Cuenta</label>
+    <input type="text" class="form-control" id="num_cuenta_proveedor" name="num_cuenta_proveedor"
+           value="{{ form.num_cuenta_proveedor.value|default_if_none:'' }}">
+  </div>
+
+  <!-- Botones -->
+  <div class="d-flex gap-2 mt-4 justify-content-end">
+    <button type="submit" class="btn btn-outline-success me-2">Guardar</button>
+    <a href="{% url 'lista_proveedores' %}" class="btn btn-outline-secondary me-2">Cancelar</a>
+  </div>
+</form>
+{% endblock content %}
+
+{% block script %}
+<script
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDVTr6Wjh_cwhimHwWNuWOSxzKbBrakTf8&libraries=places&callback=initAutocomplete"
+  async defer></script>
+
+<script>
+  function initAutocomplete() {
+    const input1 = document.getElementById('direccion_proveedor');
+    const input2 = document.getElementById('direccion_bodega_proveedor');
+
+    if (input1) {
+      new google.maps.places.Autocomplete(input1, { componentRestrictions: { country: 'cl' } });
+    }
+    if (input2) {
+      new google.maps.places.Autocomplete(input2, { componentRestrictions: { country: 'cl' } });
+    }
+  }
+</script>
+{% endblock %}

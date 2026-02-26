@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+  <h3 class="mb-4">Editar Producto</h3>
+
+  <form method="post">
+    {% csrf_token %}
+
+    <!-- Categoría / Subcategoría -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label for="categoria_producto" class="form-label">Categoría</label>
+        <select name="categoria_producto" class="form-select" required>
+          <option value="">Selecciona una categoría</option>
+          {% for c in categorias %}
+            <option value="{{ c.id }}" {% if producto.categoria_producto.id == c.id %}selected{% endif %}>{{ c.categoria }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label for="subcategoria_producto" class="form-label">Subcategoría</label>
+        <select name="subcategoria_producto" class="form-select" required>
+          <option value="">Selecciona una subcategoría</option>
+          {% for s in subcategorias %}
+            <option value="{{ s.id }}" {% if producto.subcategoria_producto.id == s.id %}selected{% endif %}>{{ s.subcategoria }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <!-- Códigos -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label for="codigo_producto_interno" class="form-label">Código Interno</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+          <input type="text" name="codigo_producto_interno" class="form-control" value="{{ producto.codigo_producto_interno }}" readonly required>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <label for="nombre_producto" class="form-label">Nombre del Producto</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+          <input type="text" name="nombre_producto" class="form-control" value="{{ producto.nombre_producto }}" readonly required>
+        </div>
+      </div>
+    </div>
+
+    <!-- Repetidor: Códigos de Proveedor -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="mb-0">Códigos de proveedor</h6>
+          <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-codigo">
+            <i class="bi bi-plus-circle"></i> Agregar código
+          </button>
+        </div>
+
+        <div id="codigos-wrapper" class="vstack gap-2">
+          {# 🔹 Renderiza los códigos existentes #}
+          {% for cp in codigos_proveedor %}
+            <div class="row g-2 align-items-end codigo-row">
+              <div class="col-md-5">
+                <label class="form-label mb-1">Proveedor</label>
+                <select class="form-select" name="codigos_proveedor[{{ forloop.counter0 }}][proveedor]">
+                  <option value="">-- Seleccione --</option>
+                  {% for prov in proveedores %}
+                    <option value="{{ prov.id }}" {% if cp.proveedor_id == prov.id %}selected{% endif %}>
+                      {{ prov.nombre_proveedor }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-5">
+                <label class="form-label mb-1">Código del proveedor</label>
+                <input type="text"
+                      class="form-control"
+                      name="codigos_proveedor[{{ forloop.counter0 }}][codigo_proveedor]"
+                      value="{{ cp.codigo_proveedor|default_if_none:'' }}"
+                      placeholder="Ej: COD-123">
+              </div>
+              <div class="col-md-2 d-grid">
+                <button type="button" class="btn btn-outline-danger btn-remove-codigo">
+                  <i class="bi bi-trash3"></i> Quitar
+                </button>
+              </div>
+            </div>
+          {% empty %}
+            {# Si no hay registros, partimos con 1 fila vacía #}
+            <div class="row g-2 align-items-end codigo-row">
+              <div class="col-md-5">
+                <label class="form-label mb-1">Proveedor</label>
+                <select class="form-select" name="codigos_proveedor[0][proveedor]">
+                  <option value="">-- Seleccione --</option>
+                  {% for prov in proveedores %}
+                    <option value="{{ prov.id }}">{{ prov.nombre_proveedor }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-5">
+                <label class="form-label mb-1">Código del proveedor</label>
+                <input type="text" class="form-control" name="codigos_proveedor[0][codigo_proveedor]" placeholder="Ej: COD-123">
+              </div>
+              <div class="col-md-2 d-grid">
+                <button type="button" class="btn btn-outline-danger btn-remove-codigo">
+                  <i class="bi bi-trash3"></i> Quitar
+                </button>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+
+        <!-- plantilla oculta para nuevas filas -->
+        <template id="tpl-codigo">
+          <div class="row g-2 align-items-end codigo-row">
+            <div class="col-md-5">
+              <label class="form-label mb-1">Proveedor</label>
+              <select class="form-select" name="codigos_proveedor[__idx__][proveedor]">
+                <option value="">-- Seleccione --</option>
+                {% for prov in proveedores %}
+                  <option value="{{ prov.id }}">{{ prov.nombre_proveedor }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label mb-1">Código del proveedor</label>
+              <input type="text" class="form-control" name="codigos_proveedor[__idx__][codigo_proveedor]" placeholder="Ej: COD-123">
+            </div>
+            <div class="col-md-2 d-grid">
+              <button type="button" class="btn btn-outline-danger btn-remove-codigo">
+                <i class="bi bi-trash3"></i> Quitar
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <small class="text-muted d-block mt-2">
+          Puedes agregar varios códigos (por ejemplo si distintos proveedores usan códigos diferentes para el mismo producto).
+        </small>
+      </div>
+    </div>
+
+
+    <!-- Cantidades -->
+    <div class="row mb-3">
+      <div class="col-md-4">
+        <label for="qty_terciario" class="form-label">Cantidad Terciaria</label>
+        <input type="number" name="qty_terciario" class="form-control" value="{{ producto.qty_terciario }}" required>
+      </div>
+      <div class="col-md-4">
+        <label for="qty_secundario" class="form-label">Cantidad Secundaria</label>
+        <input type="number" name="qty_secundario" class="form-control" value="{{ producto.qty_secundario }}" required>
+      </div>
+      <div class="col-md-4">
+        <label for="qty_primario" class="form-label">Cantidad Primaria</label>
+        <input type="number" name="qty_primario" class="form-control" value="{{ producto.qty_primario }}" required>
+      </div>
+    </div>
+
+    <!-- Empaques -->
+    <div class="row mt-3 mb-3">
+      <div class="col-md-4">
+        <label>Empaque Terciario</label>
+        <select name="empaque_terciario" class="form-select">
+          <option value="">-- Seleccione --</option>
+          {% for empaque in empaques_terciarios %}
+            <option value="{{ empaque.id }}" {% if producto.empaque_terciario.id == empaque.id %}selected{% endif %}>{{ empaque.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label>Empaque Secundario</label>
+        <select name="empaque_secundario" class="form-select">
+          <option value="">-- Seleccione --</option>
+          {% for empaque in empaques_secundarios %}
+            <option value="{{ empaque.id }}" {% if producto.empaque_secundario.id == empaque.id %}selected{% endif %}>{{ empaque.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label>Empaque Primario</label>
+        <select name="empaque_primario" class="form-select">
+          <option value="">-- Seleccione --</option>
+          {% for empaque in empaques_primarios %}
+            <option value="{{ empaque.id }}" {% if producto.empaque_primario.id == empaque.id %}selected{% endif %}>{{ empaque.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <!-- Unidad / Stock -->
+    <div class="row mb-3">
+      <div class="col-md-4">
+        <label for="qty_unidad" class="form-label">Cantidad por Unidad</label>
+        <input type="number" name="qty_unidad" class="form-control" value="{{ producto.qty_unidad }}" required>
+      </div>
+      <div class="col-md-4">
+        <label for="medida" class="form-label">Unidad de Medida</label>
+        <select name="medida" class="form-select" required>
+          {% for unidad, texto in producto.UNIDAD_CHOICES %}
+            <option value="{{ unidad }}" {% if producto.medida == unidad %}selected{% endif %}>{{ texto }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label for="qty_minima" class="form-label">Cantidad Mínima Stock (Empaque PRIMARIO)</label>
+        <input type="number" name="qty_minima" class="form-control" value="{{ producto.qty_minima }}" required>
+      </div>
+    </div>
+
+    <!-- Botones -->
+    <div class="d-flex justify-content-end">
+      <button type="submit" class="btn btn-outline-primary me-2">Guardar Cambios</button>
+      <a href="{% url 'lista_productos' %}" class="btn btn-outline-secondary me-2">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<!-- Script repetidor -->
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const wrapper = document.getElementById('codigos-wrapper');
+  const btnAdd = document.getElementById('btn-add-codigo');
+  const tpl = document.getElementById('tpl-codigo').innerHTML.trim();
+
+  // ✅ Evita errores del linter y funciona igual tras el render de Django
+  const _countStr = '{{ codigos_proveedor|length|default:0|escapejs }}';
+  let idx = Number(_countStr) || 0;
+
+  function addRow() {
+    const html = tpl.replaceAll('__idx__', String(idx++));
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    wrapper.appendChild(div.firstElementChild);
+  }
+
+  btnAdd?.addEventListener('click', addRow);
+  wrapper.addEventListener('click', function(e) {
+    if (e.target.closest('.btn-remove-codigo')) {
+      e.target.closest('.codigo-row')?.remove();
+    }
+  });
+});
+</script>
+
+{% endblock %}

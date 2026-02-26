@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<h3 class="mb-3">Seleccionar productos para {{ cliente.nombre_cliente }}</h3>
+
+<form method="post" action="{% url 'vista_previa_cotizacion' %}">
+  {% csrf_token %}
+  <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
+
+  <div class="table-responsive">
+    <table class="table table-bordered table-sm align-middle">
+      <thead class="table-light">
+        <tr>
+          <th class="text-center" style="width: 10%;">
+            <div class="form-check m-0">
+              <input class="form-check-input" type="checkbox" id="select_all">
+              <label class="form-check-label small" for="select_all">Todos</label>
+            </div>
+          </th>
+          <th class="text-center" style="width: 60%;">Producto</th>
+          <th class="text-center" style="width: 15%;">Empaque</th>
+          <th class="text-center" style="width: 15%;">Precio Venta</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for precio in productos %}
+        <tr class="producto-row" id="row_{{ precio.id }}">
+          <td class="text-center">
+            <input type="checkbox" name="producto_id" value="{{ precio.id }}" id="prod_{{ precio.id }}" class="select-item">
+          </td>
+          <td>
+            <label for="prod_{{ precio.id }}" class="mb-0" style="white-space: normal; word-break: break-word;">
+              {{ precio.nombre_producto.nombre_producto }}
+            </label>
+          </td>
+          <td class="text-center">
+            {% if precio.empaque == "PRIMARIO" and precio.nombre_producto.empaque_primario %}
+              {{ precio.nombre_producto.empaque_primario.nombre }}
+            {% elif precio.empaque == "SECUNDARIO" and precio.nombre_producto.empaque_secundario %}
+              {{ precio.nombre_producto.empaque_secundario.nombre }}
+            {% elif precio.empaque == "TERCIARIO" and precio.nombre_producto.empaque_terciario %}
+              {{ precio.nombre_producto.empaque_terciario.nombre }}
+            {% else %}
+              {{ precio.empaque }}
+            {% endif %}
+          </td>
+          <td class="text-end">
+            ${{ precio.precio_venta|floatformat:0|formatear_miles }}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="4" class="text-center text-muted">No hay productos disponibles.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="text-end mt-3">
+    <button type="submit" class="btn btn-outline-primary">Generar Vista Previa PDF</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block script %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const selectAll = document.getElementById('select_all');
+    const checks = document.querySelectorAll('.select-item');
+
+    // Toggle de selección por fila
+    checks.forEach((checkbox) => {
+      const row = document.getElementById(`row_${checkbox.value}`);
+      checkbox.addEventListener('change', function () {
+        if (this.checked) {
+          row.classList.add('table-primary');
+        } else {
+          row.classList.remove('table-primary');
+        }
+      });
+    });
+
+    // Seleccionar todos
+    if (selectAll) {
+      selectAll.addEventListener('change', function () {
+        checks.forEach(chk => {
+          chk.checked = selectAll.checked;
+          const row = document.getElementById(`row_${chk.value}`);
+          if (selectAll.checked) {
+            row.classList.add('table-primary');
+          } else {
+            row.classList.remove('table-primary');
+          }
+        });
+      });
+    }
+  });
+</script>
+{% endblock script %}

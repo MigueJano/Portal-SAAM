@@ -1,0 +1,24 @@
+table {
+  table-layout: auto;
+  width: auto; /* para que la tabla no se expanda al 100% */
+}
+
+
+#tabla-filtros_wrapper .dataTables_length,
+#tabla-filtros_wrapper .dataTables_filter {
+  margin-bottom: 15px; /* separa controles de la tabla o título */
+}
+
+#tabla-filtros_wrapper {
+  margin-top: 15px; /* separa todo el bloque de la tabla del título */
+}
+
+#tabla-filtros_wrapper .dataTables_info {
+  margin-top: 15px;    /* separa info de la tabla */
+  margin-bottom: 5px; /* espacio debajo del texto info */
+}
+
+#tabla-filtros_wrapper .dataTables_paginate {
+  margin-top: 15px;    /* separa paginación de la tabla o info */
+  margin-bottom: 5px; /* espacio debajo paginación */
+}

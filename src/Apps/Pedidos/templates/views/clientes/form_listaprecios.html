@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block CSS %}{% endblock CSS %}
+
+{% block content %}
+<form method="post" novalidate>
+  {% csrf_token %}
+  <h1 class="h4 mt-4 mb-3">
+    {% if modo == "editar" %}Editar Lista de Precios{% else %}Crear Lista de Precios{% endif %}
+  </h1>
+
+  <!-- Nombre -->
+  <div class="mb-3">
+    <label for="nombre_listaprecios" class="form-label">Nombre Lista de Precios</label>
+    <input
+      type="text"
+      class="form-control"
+      id="nombre_listaprecios"
+      name="nombre_listaprecios"
+      value="{{ listaprecios.nombre_listaprecios|default_if_none:'' }}"
+      placeholder="Ej: Jardines Infantiles"
+      autocomplete="organization"
+      required
+    >
+  </div>
+
+  <!-- Descripción -->
+  <div class="mb-3">
+    <label for="descripcion_listaprecios" class="form-label">Descripción</label>
+    <input
+      type="text"
+      class="form-control"
+      id="descripcion_listaprecios"
+      name="descripcion_listaprecios"
+      value="{{ listaprecios.descripcion_listaprecios|default_if_none:'' }}"
+      placeholder="Ej: Jardines infantiles de Huechuraba"
+      autocomplete="description"
+      required
+    >
+  </div>
+
+  <!-- Botones -->
+  <div class="d-flex justify-content-end gap-2 mt-3">
+    <button type="submit" class="btn btn-outline-success">Guardar</button>
+    <a href="{% url 'lista_listaprecios' %}" class="btn btn-outline-secondary">Cancelar</a>
+  </div>
+</form>
+{% endblock content %}
+
+{% block script %}{% endblock %}

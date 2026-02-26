@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2 class="mb-4">Tareas Pendientes</h2>
+  <div class="row g-4">
+
+    <!-- Recepciones Pendientes -->
+    <div class="col-md-4">
+      <div class="card shadow">
+        <div class="card-body">
+          <h5 class="card-title text-primary">Recepciones Pendientes ({{ cantidad_recepciones }})</h5>
+          {% for r in recepciones %}
+            <a href="{% url 'crear_recepcion_productos' r.id %}" class="text-decoration-none text-dark">
+              <div class="border p-2 rounded mb-2 bg-light-subtle">
+                <strong>{{ r.proveedor }}</strong><br>
+                N° Doc: {{ r.num_documento_recepcion }} |
+                ${{ r.total_recepcion|floatformat:0|formatear_miles }}
+              </div>
+            </a>
+          {% empty %}
+            <p>No hay recepciones pendientes.</p>
+          {% endfor %}
+          <a href="{% url 'lista_recepcion' %}" class="btn btn-outline-primary btn-sm mt-2">Ver todas</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pedidos Pendientes -->
+    <div class="col-md-4">
+      <div class="card shadow">
+        <div class="card-body">
+          <h5 class="card-title text-success">Pedidos Pendientes ({{ cantidad_pedidos_pendiente }})</h5>
+          {% for p in pedidos %}
+            <a href="{% url 'detalle_pedido' p.id %}" class="text-decoration-none text-dark">
+              <div class="border p-2 rounded mb-2 bg-light-subtle">
+                <strong>{{ p.nombre_cliente }}</strong><br>
+                N° Pedido: {{ p.id }} |
+                ${{ p.total_pedido_pendiente|floatformat:0|formatear_miles }}
+              </div>
+            </a>
+          {% empty %}
+            <p>No hay pedidos pendientes.</p>
+          {% endfor %}
+          <a href="{% url 'lista_pedidos' %}?estado=Pendiente" class="btn btn-outline-success btn-sm mt-2">Ver todos</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pedidos Entregados No Pagados -->
+    <div class="col-md-4">
+      <div class="card shadow">
+        <div class="card-body">
+          <h5 class="card-title text-warning">Pendientes de Pago ({{ cantidad_pedidos_no_pagados }})</h5>
+          {% for p in pedidos_no_pagados %}
+            <a href="{% url 'detalle_pedido' p.id %}" class="text-decoration-none text-dark">
+              <div class="border p-2 rounded mb-2 bg-light-subtle">
+                <strong>{{ p.nombre_cliente }}</strong><br>
+                N° Pedido: {{ p.id }} |
+                ${{ p.total_pedido_no_pagado|floatformat:0|formatear_miles }}
+              </div>
+            </a>
+          {% empty %}
+            <p>No hay pedidos pendientes de pago.</p>
+          {% endfor %}
+          <a href="{% url 'lista_pedidos' %}?estado=Entregado" class="btn btn-outline-warning btn-sm mt-2">Ver entregados</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

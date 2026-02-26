@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<h3 class="mb-4">Indicadores Estratégicos</h3>
+
+<div class="row mt-4">
+  <div class="col-md-4">
+    <div class="card text-white bg-dark mb-3">
+      <div class="card-header text-center">Ventas Totales</div>
+      <div class="card-body text-center">
+        <h5 class="card-title">${{ kpis.ingresos|formatear_miles }}</h5>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card text-white bg-success mb-3">
+      <div class="card-header text-center">Ganancia Neta | Utilidad</div>
+      <div class="card-body text-center">
+        <h5 class="card-title">${{ kpis.ganancia_bruta|formatear_miles }} | {{ kpis.margen_utilidad }}%</h5>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card text-dark bg-warning mb-3">
+      <div class="card-header text-center">IVA Total</div>
+      <div class="card-body text-center">
+        <h5 class="card-title">${{ kpis.iva_total|formatear_miles }}</h5>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block content %}
+<h3>Nueva Recepción</h3>
+<form method="post" class="row g-3">
+  {% csrf_token %}
+
+  <!-- Proveedor -->
+  <div class="col-md-6">
+    <label for="proveedor" class="form-label">Proveedor</label>
+    <select class="form-select" id="proveedor" name="proveedor" required>
+      <option value="" disabled {% if not form.proveedor.value %}selected{% endif %}>Seleccione un proveedor</option>
+      {% for prov in proveedores %}
+        <option value="{{ prov.id }}" {% if prov.id|stringformat:"s" == form.proveedor.value|stringformat:"s" %}selected{% endif %}>
+          {{ prov.nombre_proveedor }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- Fecha recepción -->
+  <div class="col-md-6">
+    <label for="fecha_recepcion" class="form-label">Fecha de Recepción</label>
+    <input type="date" class="form-control" id="fecha_recepcion" name="fecha_recepcion" required
+           value="{{ form.fecha_recepcion.value|default_if_none:'' }}">
+  </div>
+
+  <!-- Estado (predefinido, no editable) -->
+  <div class="col-md-4">
+    <label for="estado_recepcion" class="form-label">Estado</label>
+    <input type="text" class="form-control" value="Pendiente" readonly>
+    <input type="hidden" name="estado_recepcion" value="Pendiente">
+  </div>
+
+  <!-- Tipo Documento -->
+  <div class="col-md-4">
+    <label for="documento_recepcion" class="form-label">Tipo de Documento</label>
+    <select class="form-select" id="documento_recepcion" name="documento_recepcion" required>
+      {% for key, val in form.documento_recepcion.field.choices %}
+        <option value="{{ key }}" {% if key == form.documento_recepcion.value %}selected{% endif %}>{{ val }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- Número documento -->
+  <div class="col-md-4">
+    <label for="num_documento_recepcion" class="form-label">Número Documento</label>
+    <input type="text" class="form-control" id="num_documento_recepcion" name="num_documento_recepcion" required
+           value="{{ form.num_documento_recepcion.value|default_if_none:'' }}">
+  </div>
+
+  <!-- Total neto -->
+  <div class="col-md-4">
+    <label for="total_neto_recepcion" class="form-label">Total Neto</label>
+    <input type="text" class="form-control" id="total_neto_recepcion" name="total_neto_recepcion"
+           inputmode="decimal" step="0.01" pattern="[0-9,\.]*"
+           value="{{ form.total_neto_recepcion.value|formatear_miles }}">
+  </div>
+
+  <!-- Moneda -->
+  <div class="col-md-4">
+    <label for="moneda_recepcion" class="form-label">Moneda</label>
+    <select class="form-select" id="moneda_recepcion" name="moneda_recepcion" required>
+      {% for key, val in form.moneda_recepcion.field.choices %}
+        <option value="{{ key }}" {% if key == form.moneda_recepcion.value %}selected{% endif %}>{{ val }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- Incluir IVA -->
+  <div class="col-md-4 d-flex align-items-end">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="incluir_iva" name="incluir_iva" value="True"
+            style="transform: scale(1.5); margin-right: 8px;"
+            {% if form.incluir_iva.value %}checked{% endif %}>
+      <label class="form-check-label" for="incluir_iva">Valor productos incluye IVA (19%)</label>
+    </div>
+  </div>
+
+  <!-- Comentario Recepción -->
+  <div class="col-12">
+    <label for="comentario_recepcion" class="form-label">Comentario</label>
+    <textarea id="comentario_recepcion" name="comentario_recepcion" class="form-control" rows="2" maxlength="500" placeholder="Comentarios adicionales...">{{ form.comentario_recepcion.value }}</textarea>
+  </div>
+
+  <!-- Botones -->
+  <div class="col-12 d-flex justify-content-end gap-2">
+    <button type="submit" class="btn btn-outline-success me-2">Guardar Recepción</button>
+    <a href="{% url 'lista_recepcion' %}" class="btn btn-outline-secondary me-2">Cancelar</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block script %}
+{% endblock %}

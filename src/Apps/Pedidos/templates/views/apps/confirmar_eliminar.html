@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="alert alert-warning">
+    <h4 class="mb-3">¿Deseas eliminar {{ modelo }}?</h4>
+    <p class="text-danger">Esta acción no se puede deshacer.</p>
+      <ul>
+        {% for campo in campos %}
+          <li><strong>{{ campo.nombre }}:</strong> {{ campo.valor }}</li>
+        {% endfor %}
+      </ul>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="d-flex justify-content-end gap-2 mt-3">
+      <button type="submit" class="btn btn-outline-danger me-2">Sí, eliminar</button>
+      <a href="{% url 'home' %}" class="btn btn-outline-secondary me-2">Cancelar</a>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

@@ -1,0 +1,253 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block CSS %}
+<style>
+  .table-products { table-layout: fixed; width: 100%; }
+  #tabla-productos td.col-cantidad input[type="number"]{
+    width: 100%; max-width: 7ch; text-align: center; padding: .35rem .4rem; line-height: 1.2;
+  }
+  #tabla-productos input[type=number]::-webkit-outer-spin-button,
+  #tabla-productos input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin:0; }
+
+  @media (max-width: 576px) {
+    .table-products thead { display:none; }
+    .table-products, .table-products tbody, .table-products tr, .table-products td { display:block; width:100%; }
+    .table-products tr {
+      margin-bottom:.85rem; border:1px solid var(--bs-border-color,#dee2e6);
+      border-radius:.75rem; background:var(--bs-body-bg,#fff); box-shadow:0 1px 6px rgba(0,0,0,.05);
+      overflow:hidden;
+    }
+    .table-products td {
+      display:flex; justify-content:space-between; align-items:center;
+      padding:.55rem .75rem; border:none; border-bottom:1px solid rgba(0,0,0,.05); font-size:.95rem;
+    }
+    .table-products td:last-child { border-bottom:0; }
+    .table-products td::before {
+      content:attr(data-label); font-weight:600; margin-right:1rem; flex:0 0 40%;
+      color:var(--bs-secondary-color,#6c757d);
+    }
+    .table-products td.col-producto { align-items:flex-start; }
+    .table-products td.col-producto .nombre-wrap { text-align:right; }
+    .table-products td.col-codigo, .table-products td.col-empaque,
+    .table-products td.col-precio,.table-products td.col-precio-iva, .table-products td.col-cantidad,
+    .table-products td.col-subtotal { text-align:left !important; }
+    #tabla-productos td.col-cantidad input[type="number"]{ max-width:11ch; padding:.5rem; border-radius:.5rem; }
+    .actions-wrap { flex-direction:column; gap:.5rem; align-items:stretch !important; }
+    #buscador, #scan-codigo { width:100% !important; }
+    .mobile-summary {
+      position:sticky; bottom:0; z-index:10; background:var(--bs-body-bg,#fff);
+      border-top:1px solid var(--bs-border-color,#dee2e6); box-shadow:0 -6px 16px rgba(0,0,0,.08);
+      padding:.65rem .9rem;
+    }
+    .mobile-summary .row > div { display:flex; justify-content:space-between; }
+  }
+
+  /* feedback al encontrar producto por código */
+  .row-flash { animation: flashRow .8s ease; }
+  @keyframes flashRow { from { background:#d1e7dd; } to { background:transparent; } }
+</style>
+{% endblock CSS %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3 actions-wrap">
+    <div>
+      <h2 class="mb-0">Pedido N° {{ pedido.id }}</h2>
+      <div class="header-subtitle">para {{ pedido.nombre_cliente }}</div>
+    </div>
+    <div class="d-flex align-items-center">
+      <!-- NUEVO: input para escanear/ingresar código externo -->
+      <input type="text" id="scan-codigo" class="form-control d-inline-block me-2"
+             placeholder="Escanea/ingresa código proveedor…" style="width: 260px;">
+      <input type="text" id="buscador" class="form-control d-inline-block me-2"
+             placeholder="Buscar código, nombre o empaque..." style="width: 280px;">
+      <button type="submit" form="form-productos" class="btn btn-outline-primary me-2">Guardar Reservas</button>
+      <a href="{% url 'lista_pedidos' %}" class="btn btn-outline-secondary">Cerrar</a>
+    </div>
+  </div>
+
+  <form method="post" id="form-productos">
+    {% csrf_token %}
+    {{ formset.management_form }}
+
+    <div class="table-responsive mt-4">
+      <table class="table table-striped table-bordered align-middle table-products">
+        <thead class="table-light text-center">
+          <tr>
+            <th class="text-center" style="width: 6%;">Código</th>
+            <th class="text-center" style="width: 60%;">Producto</th>
+            <th class="text-center" style="width: 8%;">Empaque</th>
+            <th class="text-center" style="width: 10%;">Precio Neto</th>
+            <th class="text-center" style="width: 10%;">Precio Venta</th>
+            <th class="text-center" style="width: 8%;">Cantidad</th>
+            <th class="text-center" style="width: 8%;">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-productos">
+          {% for form in formset %}
+          <tr>
+            <td class="text-center col-codigo producto-codigo"
+                data-label="Código"
+                title="{{ form.initial.producto_codigo }}">
+              {{ form.initial.producto_codigo }}
+            </td>
+
+            <td class="col-producto"
+                data-label="Producto">
+              <div class="nombre-wrap producto-nombre" title="{{ form.producto_nombre.value }}">
+                {{ form.producto_nombre.value }}
+              </div>
+            </td>
+
+            <td class="col-empaque producto-empaque text-center"
+                data-label="Empaque"
+                title="{{ form.empaque.value }}">
+              {% if form.empaque.value == 'PRIMARIO' %}
+                {{ form.initial.empaque_primario_nombre }}
+              {% elif form.empaque.value == 'SECUNDARIO' %}
+                {{ form.initial.empaque_secundario_nombre }}
+              {% else %}
+                {{ form.empaque.value }}
+              {% endif %}
+            </td>
+
+            <td class="col-precio precio text-end"
+                data-label="Precio Neto"
+                data-precio="{{ form.precio_unitario.value }}">
+              ${{ form.precio_unitario.value|floatformat:0|formatear_miles }}
+            </td>
+
+            <td class="col-precio-iva precio-iva text-end"
+                data-label="Precio Venta">
+              $0
+            </td>
+
+
+            <td class="col-cantidad cantidad text-center"
+                data-label="Cantidad">
+              {{ form.cantidad }}
+            </td>
+
+            <td class="col-subtotal subtotal text-end"
+                data-label="Subtotal">
+              $0
+            </td>
+
+            <!-- Ocultos: no ensucian layout móvil -->
+            <div class="d-none">
+              {{ form.producto_id }}
+              {{ form.producto_nombre }}
+              {{ form.precio_unitario }}
+              {{ form.empaque }}
+            </div>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </form>
+
+  <!-- Totales desktop -->
+  <div class="d-flex justify-content-end mt-3 d-none d-sm-flex">
+    <div class="text-end">
+      <p><strong>Total Neto:</strong> $<span id="total-neto">0</span></p>
+      <p><strong>IVA (19%):</strong> $<span id="iva">0</span></p>
+      <p><strong>Total:</strong> $<span id="total">0</span></p>
+    </div>
+  </div>
+
+  <!-- Totales móvil -->
+  <div class="mobile-summary d-sm-none">
+    <div class="row g-1">
+      <div class="col-12"><strong>Total Neto</strong> <span id="total-neto-m">0</span></div>
+      <div class="col-12"><strong>IVA (19%)</strong> <span id="iva-m">0</span></div>
+      <div class="col-12"><strong>Total</strong> <span id="total-m">0</span></div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block script %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const fmt = (n) => n.toLocaleString("es-CL");
+
+  function leerPrecioCentavos(celdaPrecio) {
+    if (!celdaPrecio) return 0;
+    const raw = (celdaPrecio.dataset?.precio ?? "0").trim();
+    const num = Number(raw.replace(',', '.'));
+    return Math.round((isNaN(num) ? 0 : num) * 100);
+  }
+
+  const centavosAPesosEnteros = (c) => Math.round(c / 100);
+
+  function actualizarResumenDesdeCentavos(totalCents, ivaCents) {
+    const totalNeto = centavosAPesosEnteros(totalCents);
+    const iva       = centavosAPesosEnteros(ivaCents);
+    const total     = totalNeto + iva;
+
+    document.getElementById("total-neto").textContent = fmt(totalNeto);
+    document.getElementById("iva").textContent        = fmt(iva);
+    document.getElementById("total").textContent      = fmt(total);
+
+    document.getElementById("total-neto-m").textContent = "$ " + fmt(totalNeto);
+    document.getElementById("iva-m").textContent        = "$ " + fmt(iva);
+    document.getElementById("total-m").textContent      = "$ " + fmt(total);
+  }
+
+  // NUEVO: pinta el precio venta (con IVA) por fila
+  function pintarPrecioVentaFilas() {
+    document.querySelectorAll("#tabla-productos tr").forEach((row) => {
+      const celdaPrecioNeto = row.querySelector(".precio");
+      const celdaPrecioIva  = row.querySelector(".precio-iva");
+      if (!celdaPrecioNeto || !celdaPrecioIva) return;
+
+      const precioNetoCents = leerPrecioCentavos(celdaPrecioNeto);
+      const precioVentaCents = Math.round(precioNetoCents * 1.19);
+
+      celdaPrecioIva.textContent = "$" + fmt(centavosAPesosEnteros(precioVentaCents));
+    });
+  }
+
+  function calcularTotales() {
+    let totalCents = 0;
+    document.querySelectorAll("#tabla-productos tr").forEach((row) => {
+      const celdaPrecio = row.querySelector(".precio");
+      const input       = row.querySelector('input[name$="-cantidad"]');
+      const cantidad    = parseInt((input?.value || "0").trim(), 10) || 0;
+
+      const precioCents   = leerPrecioCentavos(celdaPrecio);
+      const subtotalCents = precioCents * cantidad;
+      totalCents += subtotalCents;
+
+      const celdaSubtotal = row.querySelector(".subtotal");
+      if (celdaSubtotal) {
+        celdaSubtotal.textContent = "$" + fmt(centavosAPesosEnteros(subtotalCents));
+      }
+    });
+
+    const ivaCents = Math.round(totalCents * 0.19);
+    actualizarResumenDesdeCentavos(totalCents, ivaCents);
+
+    // Asegura que la columna "Precio Venta" se actualiza si algo cambió
+    pintarPrecioVentaFilas();
+  }
+
+  document.querySelectorAll('input[name$="-cantidad"]').forEach(input => {
+    input.addEventListener("input", calcularTotales);
+    input.setAttribute("inputmode", "numeric");
+    input.setAttribute("pattern", "[0-9]*");
+    input.setAttribute("min", "0");
+    input.setAttribute("step", "1");
+  });
+
+  // Inicializa
+  pintarPrecioVentaFilas();
+  calcularTotales();
+});
+</script>
+
+{% endblock script %}
+

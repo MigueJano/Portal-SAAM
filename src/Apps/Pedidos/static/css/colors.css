@@ -1,0 +1,45 @@
+:root {
+  /* Menú principal */
+  --fondo-menu-principal: rgba(28, 90, 140, 0.998);
+  --texto-menu-principal: rgba(255, 255, 255, 0.998);
+  --texto-menu-hover: rgba(173, 216, 230, 0.998);
+  --fondo-menu-hover: rgba(25, 102, 173, 0.998);
+
+  /* Submenú (dropdown) */
+  --fondo-submenu: rgba(28, 90, 140, 0.998);
+  --texto-submenu: rgba(255, 255, 255, 0.998);
+  --fondo-submenu-hover: rgba(36, 115, 179, 0.998);
+  --texto-submenu-hover: rgba(0, 0, 0, 0.998);
+  --fondo-submenu-focus: rgba(18, 63, 112, 0.998);
+  --texto-submenu-focus: rgba(255, 255, 255, 0.998);
+  --fondo-submenu-hover-alt: rgba(0, 123, 255, 0.998);
+  --texto-submenu-hover-alt: rgba(255, 255, 255, 0.998);
+
+  --link-deshabilitado:  #6c757d;;
+
+  /* Icono Sadwich */
+  --color-icono-menu: rgba(255, 255, 255, 0.998);
+  --color-icono-menu-hover: rgba(231, 1, 1, 0.998);
+  --color-icono-menu-hover-fondo: rgba(133, 125, 125, 0.998);
+  --color-icono-menu-activo: rgba(174, 20, 191, 0.998);
+  --color-icono-menu-activo-fondo:  rgba(0, 0, 0, 0.998);
+
+  /* Colores para el botón de búsqueda */
+  --btn-buscar-texto: rgba(15, 76, 129, 0.998);
+  --btn-buscar-borde: rgba(15, 76, 129, 0.998);
+  --btn-buscar-fondo: rgba(174, 177, 179, 0.998);
+  --btn-buscar-texto-hover: rgba(255, 255, 255, 0.998);
+  --btn-buscar-borde-hover: rgba(15, 76, 129, 0.998);
+  --btn-buscar-fondo-hover: rgba(218, 15, 15, 0.998);
+  --btn-buscar-texto-focus: rgba(242, 21, 21, 0.998);
+  --btn-buscar-borde-focus: rgba(10, 50, 90, 0.998);   
+  --btn-buscar-fondo-focus: rgba(59, 206, 76, 0.998);
+
+  /* Cuerpo de la página */
+  --fondo-body: rgba(230, 242, 255, 0.998);
+  --texto-body: rgba(0, 0, 0, 0.998);
+
+  /* Contenedor principal */
+  --fondo-contenedor: rgba(255, 255, 255, 0.998);
+
+}

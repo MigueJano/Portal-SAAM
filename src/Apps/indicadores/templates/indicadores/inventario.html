@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<h3 class="mb-4">Indicadores de Inventario</h3>
+
+<div class="row">
+  <!-- Stock total actual -->
+  <div class="col-md-4">
+    <div class="card shadow-sm p-3 mb-4 border-primary">
+      <h5 class="text-primary">Stock Total</h5>
+      <p class="fs-4">{{ kpis.stock_total|floatformat:0 }} unidades</p>
+    </div>
+  </div>
+
+  <!-- Productos con stock crítico -->
+  <div class="col-md-4">
+    <div class="card shadow-sm p-3 mb-4 border-danger">
+      <h5 class="text-danger">Productos Críticos</h5>
+      <p class="fs-4">{{ kpis.productos_criticos }}</p>
+    </div>
+  </div>
+
+  <!-- Unidades reservadas actualmente -->
+  <div class="col-md-4">
+    <div class="card shadow-sm p-3 mb-4 border-warning">
+      <h5 class="text-warning">Productos Reservados</h5>
+      <p class="fs-4">{{ kpis.productos_reservados|floatformat:0 }} unidades</p>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <!-- Rotación estimada (salidas promedio por día) -->
+  <div class="col-md-6">
+    <div class="card shadow-sm p-3 mb-4 border-info">
+      <h5 class="text-info">Rotación Promedio (30 días)</h5>
+      <p class="fs-4">{{ kpis.rotacion_estimada }} unidades/día</p>
+    </div>
+  </div>
+
+  <!-- Cobertura estimada en días -->
+  <div class="col-md-6">
+    <div class="card shadow-sm p-3 mb-4 border-success">
+      <h5 class="text-success">Cobertura Estimada</h5>
+      <p class="fs-4">{{ kpis.cobertura_inventario_dias }} días</p>
+    </div>
+  </div>
+  <div class="card mt-4 shadow-sm">
+    <div class="card-header">
+        <strong>Gráfico: Stock Actual vs Stock Mínimo</strong>
+    </div>
+    <div class="card-body text-center">
+        <img src="data:image/png;base64,{{ grafico }}" class="img-fluid" alt="Gráfico de stock">
+    </div>
+  </div>
+</div>
+
+{% endblock %}

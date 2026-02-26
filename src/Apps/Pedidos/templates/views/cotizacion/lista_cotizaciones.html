@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Listado de Cotizaciones</h2>
+    <a href="{% url 'crear_cotizacion' %}" class="btn btn-outline-success">Nueva Cotización</a>
+  </div>
+
+  <div class="table-responsive">
+    <table id="tabla-filtros" class="table table-striped table-bordered table-sm">
+      <thead class="table-light text-center">
+        <tr>
+          <th>N° Cotización</th>
+          <th>Cliente</th>
+          <th>Fecha</th>
+          <th>Archivo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in cotizaciones %}
+        <tr>
+          <td class="text-center">{{ c.num_cotizacion }}</td>
+          <td>{{ c.nombre_cliente }}</td>
+          <td class="text-center" data-order="{{ c.fecha_cotizacion|date:'Y-m-d' }}">{{ c.fecha_cotizacion|date:"d-m-Y" }}</td>
+          <td class="text-center">
+            {% if c.archivo_pdf %}
+              <a href="{{ c.archivo_pdf.url }}" target="_blank" class="btn btn-sm btn-outline-danger" title="Ver PDF">
+                <i class="fas fa-file-pdf"></i>
+              </a>
+            {% else %}
+              <span class="text-muted">Sin PDF</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+$(document).ready(function() {
+  $('#tabla-filtros').DataTable({
+    order: [[2, 'desc']], // ordenar por columna Fecha
+    language: {
+      decimal: ",",
+      thousands: ".",
+      processing: "Procesando...",
+      search: "Buscar:",
+      lengthMenu: "Mostrar _MENU_ registros",
+      info: "Mostrando registros del _START_ al _END_ de un total de _TOTAL_ registros",
+      infoEmpty: "Mostrando registros del 0 al 0 de un total de 0 registros",
+      infoFiltered: "(filtrado de un total de _MAX_ registros)",
+      loadingRecords: "Cargando...",
+      zeroRecords: "No se encontraron resultados",
+      emptyTable: "Ningún dato disponible en esta tabla",
+      paginate: {
+        first: "Primero",
+        previous: "Anterior",
+        next: "Siguiente",
+        last: "Último"
+      },
+      aria: {
+        sortAscending: ": Activar para ordenar la columna de manera ascendente",
+        sortDescending: ": Activar para ordenar la columna de manera descendente"
+      }
+    },
+    autoWidth: false,
+    scrollX: true
+  });
+});
+</script>
+{% endblock %}

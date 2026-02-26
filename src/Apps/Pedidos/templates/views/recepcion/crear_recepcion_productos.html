@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% load custom_filters %}
+
+{% block content %}
+<h3>Recepción de {{ documento.documento_recepcion }} N°{{ documento.num_documento_recepcion }}</h3>
+<p>Proveedor: {{ documento.proveedor.nombre_proveedor }} | ${{ documento.total_neto_recepcion|floatformat:0|formatear_miles }}</p>
+
+<form method="post" class="row g-3 align-items-end" id="form-agregar-producto">
+  {% csrf_token %}
+
+  <!-- Código Proveedor (desde CodigoProveedor) -->
+  <div class="col-12 col-sm-2 col-md-2">
+    <label for="busqueda_codigo" class="form-label">Código proveedor</label>
+    <input type="text"
+           id="busqueda_codigo"
+           class="form-control form-control-sm"
+           placeholder="Código"
+           list="lista_codigos"
+           maxlength="50" />
+    <datalist id="lista_codigos">
+      {% for cp in codigos_proveedor %}
+        <option value="{{ cp.codigo_proveedor }}"></option>
+      {% endfor %}
+    </datalist>
+  </div>
+
+  <!-- Selector producto -->
+  <div class="col-12 col-sm-10 col-md-5 d-flex align-items-end gap-2">
+    <div class="w-100">
+      <label for="id_producto_proveedor" class="form-label">Producto</label>
+      <select id="id_producto_proveedor" name="producto" class="form-select form-select-sm" required>
+        <option value="" selected disabled>Seleccione un producto</option>
+        {% for producto in productos %}
+          <option value="{{ producto.id }}">
+            {{ producto.nombre_producto }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <!-- Cantidad -->
+  <div class="col-6 col-sm-4 col-md-2">
+    <label for="id_qty" class="form-label">Cantidad</label>
+    <input type="number" min="1" step="0.01" name="qty" id="id_qty" class="form-control form-control-sm" required>
+  </div>
+
+  <!-- Empaque -->
+  <div class="col-6 col-sm-4 col-md-2">
+    <label for="id_empaque" class="form-label">Empaque</label>
+    <select name="empaque" id="id_empaque" class="form-select form-select-sm" required>
+      <option value="" selected disabled>Seleccione empaque</option>
+    </select>
+  </div>
+
+  <!-- Precio unitario -->
+  <div class="col-6 col-sm-4 col-md-1">
+    <label for="id_precio_unitario" class="form-label">Precio unitario</label>
+    <input type="number" step="0.01" min="0" name="precio_unitario" id="id_precio_unitario" class="form-control form-control-sm" required>
+  </div>
+
+  <!-- Botones -->
+  <div class="d-flex justify-content-end gap-2 mt-3">
+    <button type="submit" class="btn btn-outline-primary me-2">Agregar Producto</button>
+    <a href="{% url 'lista_recepcion' %}" class="btn btn-outline-primary me-2">Cerrar</a>
+  </div>
+</form>
+
+<hr>
+
+<h4>Productos agregados</h4>
+<table class="table table-striped table-sm" id="tabla-productos-agregados">
+  <thead>
+    <tr>
+      <th class="text-center">Código Interno</th>
+      <th class="text-center">Producto</th>
+      <th class="text-center">Cantidad</th>
+      <th class="text-center">Unidad</th>
+      <th class="text-center">Precio Unitario</th>
+      <th class="text-center">Total</th>
+      <th class="text-center">Eliminar</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for rec in recepciones %}
+    <tr>
+      <td class="text-center">{{ rec.producto.codigo_producto_interno }}</td>
+      <td>{{ rec.producto.nombre_producto }}</td>
+      <td class="text-center td-qty" data-qty="{{ rec.qty|floatformat:2 }}">{{ rec.qty }}</td>
+      <td class="text-center">
+        {% if rec.empaque == 'PRIMARIO' and rec.producto.empaque_primario %}
+          {{ rec.producto.empaque_primario.nombre }}
+        {% elif rec.empaque == 'SECUNDARIO' and rec.producto.empaque_secundario %}
+          {{ rec.producto.empaque_secundario.nombre }}
+        {% elif rec.empaque == 'TERCIARIO' and rec.producto.empaque_terciario %}
+          {{ rec.producto.empaque_terciario.nombre }}
+        {% else %}
+          {{ rec.empaque }}
+        {% endif %}
+      </td>
+      <td class="text-end td-precio" data-precio="{{ rec.precio_unitario|floatformat:2 }}">
+        $ {{ rec.precio_unitario|floatformat:0|formatear_miles }}
+      </td>
+      <td class="text-end td-total">$ 0</td>
+      <td class="text-center">
+        <form method="post" action="{% url 'eliminar_recepcion_producto' rec.id %}" style="display:inline;">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-danger btn-sm" title="Eliminar">
+            <i class="fas fa-trash"></i>
+          </button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <th colspan="5" class="text-end">TOTAL</th>
+      <th id="suma-total" class="text-end">$ 0</th>
+      <th></th>
+    </tr>
+  </tfoot>
+</table>
+
+<!-- Botón Finalizar Recepción -->
+<div class="d-flex justify-content-end gap-2 mt-4">
+  <form method="post" action="{% url 'finalizar_recepcion' id=recepcion.id %}" class="d-inline">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-outline-success me-2">Finalizar Recepción</button>
+  </form>
+</div>
+{% endblock %}
+
+{# JSON seguro con [{"codigo_proveedor": "...", "producto_id": 123}, ...] #}
+{{ codigos_proveedor|json_script:"codigos-data" }}
+
+{% block script %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // --- DOM refs ---
+  var inputCodigo    = document.getElementById('busqueda_codigo');
+  var selectProducto = document.getElementById('id_producto_proveedor');
+  var selectEmpaque  = document.getElementById('id_empaque');
+  var inputQty       = document.getElementById('id_qty');
+
+  // --- IDs provenientes del template (como strings) ---
+  var recepcionIdStr  = '{{ recepcion.id|default_if_none:""|default:""|escapejs }}';
+  var documentoIdStr  = '{{ documento.id|default_if_none:""|default:""|escapejs }}';
+  // Convierte a número y usa 0 si no hay valor
+  var recepcionId = Number(recepcionIdStr) || Number(documentoIdStr) || 0;
+
+  // --- Helpers ---
+  function fillEmpaques(empaques) {
+    selectEmpaque.innerHTML = '<option value="" selected disabled>Seleccione empaque</option>';
+    if (empaques && empaques.length) {
+      for (var i = 0; i < empaques.length; i++) {
+        var e = empaques[i];
+        var opt = document.createElement('option');
+        opt.value = e.nivel;        // 'PRIMARIO' | 'SECUNDARIO' | 'TERCIARIO'
+        opt.textContent = e.nombre; // nombre visible
+        selectEmpaque.appendChild(opt);
+      }
+      if (empaques.length === 1) {
+        selectEmpaque.selectedIndex = 1;
+      }
+    }
+  }
+
+  function setValidOnce(el) {
+    if (!el) return;
+    el.classList.add('is-valid');
+    setTimeout(function () { el.classList.remove('is-valid'); }, 800);
+  }
+
+  function setInvalidBlink(el, titleMsg) {
+    if (!el) return;
+    if (titleMsg) el.setAttribute('title', titleMsg);
+    el.classList.add('is-invalid');
+    setTimeout(function () {
+      el.classList.remove('is-invalid');
+      if (titleMsg) el.removeAttribute('title');
+    }, 1200);
+  }
+
+  // Llama al backend para resolver el código y traer producto + empaques
+  function resolverCodigo(code, cbOk, cbErr) {
+    if (!code) {
+      if (cbErr) cbErr(new Error('Código vacío'));
+      return;
+    }
+    var qs = 'code=' + encodeURIComponent(code);
+    if (recepcionId) qs += '&recepcion_id=' + encodeURIComponent(String(recepcionId));
+
+    fetch('/ajax/resolver-codigo/?' + qs, { method: 'GET' })
+      .then(function (resp) {
+        return resp.json().then(function (data){ return { ok: resp.ok, data: data }; });
+      })
+      .then(function (res) {
+        if (!res.ok || !res.data || !res.data.ok) {
+          var msg = (res.data && res.data.error) ? res.data.error : 'Código no encontrado';
+          throw new Error(msg);
+        }
+        if (cbOk) cbOk(res.data);
+      })
+      .catch(function (err) {
+        if (cbErr) cbErr(err);
+      });
+  }
+
+  // Selecciona producto por código y rellena empaques
+  function seleccionarProductoPorCodigo(codigo) {
+    resolverCodigo(codigo, function (data) {
+      if (selectProducto) {
+        selectProducto.value = String(data.producto.id);
+      }
+      fillEmpaques(data.empaques);
+      if (inputQty) {
+        setTimeout(function(){ inputQty.focus(); }, 10);
+      }
+      setValidOnce(selectProducto);
+    }, function (err) {
+      setInvalidBlink(inputCodigo, (err && err.message) ? err.message : 'Código no encontrado');
+    });
+  }
+
+  // --- Eventos ---
+
+  // 1) Cuando el usuario elige un código del datalist
+  if (inputCodigo) {
+    inputCodigo.addEventListener('change', function () {
+      var codigo = (inputCodigo.value || '').trim();
+      if (codigo) seleccionarProductoPorCodigo(codigo);
+    });
+
+    // 2) Lectores de barra: Enter
+    inputCodigo.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        var codigo = (inputCodigo.value || '').trim();
+        if (codigo) seleccionarProductoPorCodigo(codigo);
+      }
+    });
+  }
+
+  // 3) Cambio manual del producto → traer empaques del endpoint existente
+  if (selectProducto) {
+    selectProducto.addEventListener('change', function () {
+      var productoId = selectProducto.value;
+      if (!productoId) return;
+
+      fetch('/pedidos/productos/' + encodeURIComponent(String(productoId)) + '/empaques/', { method: 'GET' })
+        .then(function (resp) { return resp.json(); })
+        .then(function (data) {
+          if (data && data.success) {
+            fillEmpaques(data.empaques);
+          }
+        })
+        .catch(function () { /* silencioso */ });
+    });
+  }
+
+  // 4) Totales de la tabla (sin optional chaining y sin cortes)
+  function getDataAttr(el, selector, attrName) {
+    if (!el) return null;
+    var node = el.querySelector(selector);
+    if (!node) return null;
+    if (node.dataset && Object.prototype.hasOwnProperty.call(node.dataset, attrName)) {
+      return node.dataset[attrName];
+    }
+    return null;
+  }
+
+  function toNumberOrZero(x) {
+    if (x === null || x === undefined) return 0;
+    var s = String(x).replace(',', '.'); // por si viene "1,23"
+    var n = Number(s);
+    if (isNaN(n)) return 0;
+    return n;
+  }
+
+  function recalcularTabla() {
+    var tbody = document.querySelector('#tabla-productos-agregados tbody');
+    var totalSuma = 0;
+    if (!tbody) return;
+
+    var rows = tbody.querySelectorAll('tr');
+    for (var i = 0; i < rows.length; i++) {
+      var tr = rows[i];
+      var qtyStr    = getDataAttr(tr, '.td-qty', 'qty');       // data-qty="..."
+      var precioStr = getDataAttr(tr, '.td-precio', 'precio'); // data-precio="..."
+
+      var qty    = toNumberOrZero(qtyStr);
+      var precio = toNumberOrZero(precioStr);
+
+      var total = Math.round(qty * precio);
+      var tdTot = tr.querySelector('.td-total');
+      if (tdTot) tdTot.textContent = '$ ' + total.toLocaleString('es-CL');
+
+      totalSuma += total;
+    }
+
+    var sumaEl = document.getElementById('suma-total');
+    if (sumaEl) sumaEl.textContent = '$ ' + totalSuma.toLocaleString('es-CL');
+  }
+
+  // init
+  recalcularTabla();
+});
+</script>
+{% endblock script %}
+
+
+
+
+

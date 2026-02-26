@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<h3>Finalizar Venta para Pedido N°{{ pedido.id }}</h3>
+<p>Cliente: {{ pedido.nombre_cliente }}</p>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="row g-3">
+    <div class="col-md-4">{{ form.fecha_venta.label_tag }} {{ form.fecha_venta }}</div>
+    <div class="col-md-4">{{ form.documento_pedido.label_tag }} {{ form.documento_pedido }}</div>
+    <div class="col-md-4">{{ form.num_documento.label_tag }} {{ form.num_documento }}</div>
+  </div>
+
+  <div class="d-flex justify-content-end gap-2 mt-4">
+  <hr>
+    <p><strong>Subtotal:</strong> ${{ total_neto|formatear_miles }}</p>
+    <p><strong>IVA:</strong> ${{ iva|formatear_miles }}</p>
+    <h4><strong>Total:</strong> ${{ total|formatear_miles }}</h4>
+  </div>
+  <div class="d-flex justify-content-end gap-2 mt-4">
+    <button type="submit" class="btn btn-outline-success me-2">Confirmar Venta</button>
+    <a href="{% url 'detalle_pedido' pedido.id %}" class="btn btn-outline-secondary me-2">Cancelar</a>
+  </div>
+
+</form>
+{% endblock %}

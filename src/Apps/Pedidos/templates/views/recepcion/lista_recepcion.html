@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block CSS %}
+<!-- CSS DataTables -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+{% endblock CSS%} 
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <!-- Título y Botón en la misma línea, uno a cada lado -->
+      <div class="d-flex justify-content-between align-items-center mt-3">
+        <h1 class="h4 mb-0">Recepción de Productos</h1>
+        <a href="{% url 'crear_recepcion'%}" class="btn btn-outline-primary me-2">Crear Recepción</a>
+      </div>
+
+      <!-- Tabla ocupando todo el ancho -->
+      <div class="table-responsive py-2 margin-5px">
+        <table id="tabla-filtros" class="table table-striped table-bordered table-sm">
+          <thead class="table-light text-center">
+            <tr>
+              <th class="text-center" scope="col">Proveedor</th>
+              <th class="text-center" scope="col">Fecha</th>
+              <th class="text-center" scope="col">Estado</th>
+              <th class="text-center" scope="col">Documento</th>
+              <th class="text-center" scope="col">N° Documento</th>
+              <th class="text-center" scope="col">Total Neto</th>
+              <th class="text-center" scope="col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in recepciones %}
+            <tr>
+              <td>{{ c.proveedor }}</td>
+              <td class="text-center" data-order="{{ c.fecha_recepcion|date:'Y-m-d' }}">{{ c.fecha_recepcion|date:"d-m-Y" }}</td>
+              <td class="text-center">{{ c.estado_recepcion }}</td>
+              <td class="text-center">{{ c.documento_recepcion }}</td>
+              <td class="text-center">{{ c.num_documento_recepcion }}</td>
+              <td class="text-end">${{ c.total_neto_recepcion|formatear_miles }} {{ c.moneda_recepcion }}</td>
+              <td class="text-center align-middle">
+                <!-- Botón Editar -->
+                <a href="{% url 'editar_recepcion' id=c.id %}" class="btn btn-outline-primary btn-sm" title="Editar">
+                  <i class="fas fa-pen"></i>
+                </a>
+
+                <!-- Botón Asociar Productos -->
+                <a href="{% url 'crear_recepcion_productos' recepcion_id=c.id %}" class="btn btn-outline-success btn-sm" title="Asociar Productos">
+                  <i class="fas fa-box-open"></i>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %} 
+
+{% block script %}
+<script>
+$(document).ready(function() {
+  $('#tabla-filtros').DataTable({
+    "order": [[1, "desc"]],
+    "language": {
+      "decimal": ",",
+      "thousands": ".",
+      "processing": "Procesando...",
+      "search": "Buscar:",
+      "lengthMenu": "Mostrar _MENU_ registros",
+      "info": "Mostrando registros del _START_ al _END_ de un total de _TOTAL_ registros",
+      "infoEmpty": "Mostrando registros del 0 al 0 de un total de 0 registros",
+      "infoFiltered": "(filtrado de un total de _MAX_ registros)",
+      "loadingRecords": "Cargando...",
+      "zeroRecords": "No se encontraron resultados",
+      "emptyTable": "Ningún dato disponible en esta tabla",
+      "paginate": {
+        "first": "Primero",
+        "previous": "Anterior",
+        "next": "Siguiente",
+        "last": "Último"
+      },
+      "aria": {
+        "sortAscending": ": Activar para ordenar la columna de manera ascendente",
+        "sortDescending": ": Activar para ordenar la columna de manera descendente"
+      }
+    },
+    "autoWidth": false,
+    "scrollX": true
+  });
+});
+</script>
+{% endblock script %}

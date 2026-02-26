@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% load humanize %}
+
+{% block CSS %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+<style>
+  .tabla-compacta td, .tabla-compacta th { padding: .4rem .5rem; }
+  .wrap { white-space: normal; }
+</style>
+{% endblock CSS %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <h1 class="h4 mb-0">Resumen de Ventas</h1>
+    <div class="small text-muted">Período: {{ inicio|date:"d-m-Y" }} al {{ fin|date:"d-m-Y" }}</div>
+  </div>
+
+  {# --- Filtros --- #}
+  <form method="get" class="row row-cols-1 row-cols-md-6 align-items-end g-3 mb-3">
+    <div class="col">
+      <label class="form-label" for="{{ form.cliente.id_for_label }}">{{ form.cliente.label }}</label>
+      {{ form.cliente|add_class:"form-select form-select-sm" }}
+    </div>
+    <div class="col">
+      <label class="form-label" for="{{ form.categoria.id_for_label }}">{{ form.categoria.label }}</label>
+      {{ form.categoria|add_class:"form-select form-select-sm" }}
+    </div>
+    <div class="col">
+      <label class="form-label" for="{{ form.proveedor.id_for_label }}">{{ form.proveedor.label }}</label>
+      {{ form.proveedor|add_class:"form-select form-select-sm" }}  {# 👈 NUEVO #}
+    </div>
+    <div class="col">
+      <label class="form-label" for="{{ form.meses.id_for_label }}">{{ form.meses.label }}</label>
+      {{ form.meses|add_class:"form-select form-select-sm" }}
+    </div>
+    <div class="col text-end">
+      <button type="submit" class="btn btn-sm btn-primary w-100">Filtrar</button>
+    </div>
+  </form>
+
+
+  <div class="table-responsive py-2">
+    <table id="tabla-filtros" class="table table-striped table-bordered table-sm align-middle tabla-compacta">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Código Interno</th>
+          <th>Producto</th>
+          <th>Stock (PRIMARIO)</th>
+          <th>Prom. mensual (u)</th>
+          {# Meses dinámicos (orden: más reciente → más antiguo) #}
+            {% for m in meses_cols %}
+              <th>{{ m.label }}</th>
+            {% endfor %}
+          <th>Total período (u)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in filas %}
+        {# Resaltar bajo mínimo #}
+        <tr {% if f.stock_actual <= f.producto.qty_minima %}class="table-danger"{% endif %}>
+          <td class="wrap">{{ f.codigo_interno }}</td>
+          <td class="wrap">{{ f.producto.nombre_producto }}</td>
+
+          {# Numeric cells con data-order para ordenar correctamente #}
+          <td class="text-end" data-order="{{ f.stock_actual|floatformat:0 }}">
+            {{ f.stock_actual|floatformat:0|formatear_miles }}
+          </td>
+          <td class="text-end" data-order="{{ f.promedio_mensual_unidades|floatformat:0 }}">
+            {{ f.promedio_mensual_unidades|floatformat:0|formatear_miles }}
+          </td>
+
+          {% for u in f.meses %}
+            <td class="text-end" data-order="{{ u|floatformat:0 }}">
+              {{ u|floatformat:0|formatear_miles }}
+            </td>
+          {% endfor %}
+
+          <td class="text-end" data-order="{{ f.total_periodo|floatformat:0 }}">
+            {{ f.total_periodo|floatformat:0|formatear_miles }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock content %}
+
+{% block script %}
+<script>
+  $(document).ready(function () {
+    $('#tabla-filtros').DataTable({
+      order: [[1, "asc"]],     // ordenar por "Producto"
+      pageLength: 50,
+      language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json" }
+    });
+  });
+</script>
+{% endblock script %}

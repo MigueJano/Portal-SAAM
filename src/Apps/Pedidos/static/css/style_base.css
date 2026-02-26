@@ -1,0 +1,120 @@
+@import url("colors.css");
+
+/* Menú principal */
+.navbar {
+  background-color: var(--fondo-menu-principal) !important;
+}
+
+.navbar .nav-link,
+.navbar .navbar-brand {
+  color: var(--texto-menu-principal) !important;
+}
+
+.navbar .nav-link:hover,
+.navbar .navbar-brand:hover {
+  color: var(--texto-menu-hover) !important;
+}
+
+/* Hover de ítems del menú */
+.navbar-nav .nav-link:hover {
+  background-color: var(--fondo-menu-hover);
+  color: var(--texto-menu-principal) !important;
+}
+
+/* Submenú (dropdown) */
+.dropdown-menu {
+  background-color: var(--fondo-submenu);
+}
+
+.dropdown-menu .dropdown-item {
+  color: var(--texto-submenu);
+}
+
+.dropdown-menu .dropdown-item:hover {
+  background-color: var(--fondo-submenu-hover);
+  color: var(--texto-submenu-hover) !important;
+}
+
+.dropdown-item:focus {
+  background-color: var(--fondo-submenu-focus);
+  color: var(--texto-submenu-focus);
+}
+
+/* Alternativa de hover en submenu */
+.dropdown-menu .dropdown-item:hover {
+  background-color: var(--fondo-submenu-hover-alt);
+  color: var(--texto-submenu-hover-alt) !important;
+}
+
+a.dropdown-item.disabled {
+  color: var(--link-deshabilitado);
+  pointer-events: none;
+  cursor: default;
+  text-decoration: none;
+}
+
+
+/* Cuerpo */
+body {
+  background-color: var(--fondo-body);
+  color: var(--texto-body);
+  font-family: 'Segoe UI', sans-serif;
+  overflow-x: hidden;
+}
+
+/* Contenedor principal */
+.custom-container {
+  background-color: var(--fondo-contenedor);
+  border-radius: 0.5rem;
+  width: 98%;
+  margin-top: 10px;
+}
+
+/* Icono Sandwich */
+.navbar-toggler-icon {
+  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E");
+}
+
+/* Borde normal */
+.navbar-toggler {
+  border: 2px solid var(--color-icono-menu);
+}
+
+/* Borde al pasar el mouse */
+.navbar-toggler:hover {
+  border-color: var(--color-icono-menu-hover); /* o el color que prefieras para hover */
+  background-color: var(--color-icono-menu-hover-fondo); /* si quieres un fondo al hover */
+}
+
+/* Borde cuando el botón está activo o en foco */
+.navbar-toggler:focus,
+.navbar-toggler:active {
+  border-color: var(--color-icono-menu-activo); /* o el color que prefieras para hover */
+  background-color: var(--color-icono-menu-activo-fondo); /* si quieres un fondo al hover */
+}
+
+
+/* Boton de busqueda */
+.btn-buscar {
+  color: var(--btn-buscar-texto);
+  border: 2px solid var(--btn-buscar-borde);
+  background-color: var(--btn-buscar-fondo);
+  transition: all 0.3s ease;
+}
+
+.btn-buscar:hover {
+  color: var(--btn-buscar-texto-hover);
+  border-color: var(--btn-buscar-borde-hover);
+  background-color: var(--btn-buscar-fondo-hover);
+}
+
+.btn-buscar:focus,
+.btn-buscar:active {
+  color: var(--btn-buscar-texto-focus);
+  border-color: var(--btn-buscar-borde-focus);
+  background-color: var(--btn-buscar-fondo-focus);
+  box-shadow: 0 0 8px var(--btn-buscar-borde-focus);
+  outline: none;
+}
+
+

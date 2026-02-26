@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block CSS %}
+{% endblock CSS %}
+
+{% block content %}
+<form method="post">
+  {% csrf_token %}
+  <h1 class="h4 mt-4 mb-3">Editar Proveedor</h1>
+
+  <!-- Nombre Proveedor (solo lectura) -->
+  <div class="mb-3">
+    <label for="nombre_proveedor" class="form-label">Nombre del Proveedor</label>
+    <div class="input-group">
+      <input type="text" name="nombre_proveedor" class="form-control" 
+             value="{{ proveedor.nombre_proveedor }}" required readonly>
+      <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+    </div>
+  </div>
+
+  <!-- RUT (solo lectura) -->
+  <div class="mb-3">
+    <label for="rut_proveedor" class="form-label">RUT</label>
+    <div class="input-group">
+      <input type="text" class="form-control" id="rut_proveedor" name="rut_proveedor" 
+             value="{{ proveedor.rut_proveedor }}" required readonly>
+      <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+    </div>
+  </div>
+
+  <!-- Dirección Proveedor -->
+  <div class="mb-3">
+    <label for="direccion_proveedor" class="form-label">Dirección del Proveedor</label>
+    <input type="text" id="direccion_proveedor" name="direccion_proveedor" 
+           class="form-control" value="{{ proveedor.direccion_proveedor }}">
+  </div>
+
+  <!-- Dirección Bodega -->
+  <div class="mb-3">
+    <label for="direccion_bodega_proveedor" class="form-label">Dirección de Bodega</label>
+    <input type="text" id="direccion_bodega_proveedor" name="direccion_bodega_proveedor" 
+           class="form-control" value="{{ proveedor.direccion_bodega_proveedor }}">
+  </div>
+
+  <!-- Empresa Activa -->
+  <div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" id="empresa_activa" name="empresa_activa"
+           {% if proveedor.empresa_activa %}checked{% endif %}>
+    <label class="form-check-label" for="empresa_activa">Empresa Activa</label>
+  </div>
+
+  <!-- Banco -->
+  <div class="mb-3">
+    <label for="banco_proveedor" class="form-label">Banco</label>
+    <input type="text" name="banco_proveedor" class="form-control" 
+           value="{{ proveedor.banco_proveedor }}">
+  </div>
+
+  <!-- Tipo de Cuenta -->
+  <div class="mb-3">
+    <label for="cta_proveedor" class="form-label">Tipo de Cuenta</label>
+    <select name="cta_proveedor" class="form-select">
+      <option value="">Seleccione...</option>
+      <option value="Corriente" {% if proveedor.cta_proveedor == "Corriente" %}selected{% endif %}>Corriente</option>
+      <option value="Vista" {% if proveedor.cta_proveedor == "Vista" %}selected{% endif %}>Vista</option>
+      <option value="Prepago" {% if proveedor.cta_proveedor == "Prepago" %}selected{% endif %}>Prepago</option>
+      <option value="Ahorro" {% if proveedor.cta_proveedor == "Ahorro" %}selected{% endif %}>Ahorro</option>
+      <option value="RUT" {% if proveedor.cta_proveedor == "RUT" %}selected{% endif %}>RUT</option>
+    </select>
+  </div>
+
+  <!-- Número de Cuenta -->
+  <div class="mb-3">
+    <label for="num_cuenta_proveedor" class="form-label">Número de Cuenta</label>
+    <input type="text" name="num_cuenta_proveedor" class="form-control" 
+           value="{{ proveedor.num_cuenta_proveedor }}">
+  </div>
+
+  <!-- Botones -->
+  <div class="d-flex gap-2 mt-4 justify-content-end">
+    <button type="submit" class="btn btn-outline-success me-2">Guardar</button>
+    <a href="{% url 'lista_proveedores' %}" class="btn btn-outline-secondary me-2">Cancelar</a>
+  </div>
+</form>
+{% endblock content %}
+
+{% block script %}
+<!-- Autocompletado con Google Maps -->
+<script
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDVTr6Wjh_cwhimHwWNuWOSxzKbBrakTf8&libraries=places&callback=initAutocomplete"
+  async defer></script>
+
+<script>
+  function initAutocomplete() {
+    const input1 = document.getElementById('direccion_proveedor');
+    const input2 = document.getElementById('direccion_bodega_proveedor');
+
+    if (input1) {
+      new google.maps.places.Autocomplete(input1, { componentRestrictions: { country: 'cl' } });
+    }
+    if (input2) {
+      new google.maps.places.Autocomplete(input2, { componentRestrictions: { country: 'cl' } });
+    }
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 680px;">
+  <h2 class="h4 mb-3">Enviar observación</h2>
+
+  {% if messages %}
+    {% for m in messages %}
+      <div class="alert alert-{{ m.tags|default:'info' }} mb-2">{{ m }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <form method="post" action="?from={{ from_url|urlencode }}">
+        {% csrf_token %}
+
+        {# Si el form define 'url', inclúyelo (hidden). La vista le pone initial y lo refuerza en POST #}
+        {% if form.url %} {{ form.url }} {% endif %}
+
+        {# Hidden para mantener 'from' en POST también #}
+        <input type="hidden" name="from" id="from-url" value="{{ from_url }}">
+
+        <div class="mb-3">
+          <label class="form-label">Tipo</label>
+          {{ form.tipo }}
+          {% if form.tipo.errors %}<div class="text-danger small">{{ form.tipo.errors }}</div>{% endif %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Observación</label>
+          {{ form.observacion }}
+          <div class="form-text">Indica claramente la mejora, error o pregunta.</div>
+          {% if form.observacion.errors %}<div class="text-danger small">{{ form.observacion.errors }}</div>{% endif %}
+        </div>
+
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <button type="submit" class="btn btn-success">Enviar</button>
+        <a href="javascript:history.back()" class="btn btn-outline-secondary ms-2">Cancelar</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  // Fallback: si 'from_url' viniera vacío por alguna razón, usa document.referrer
+  (function () {
+    var el = document.getElementById('from-url');
+    if (el && !el.value && document.referrer) {
+      el.value = document.referrer;
+    }
+  })();
+</script>
+{% endblock %}

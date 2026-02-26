@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container mt-4">
+  <h1 class="h4 mb-4">Calculadora de Precios</h1>
+
+  <!-- Selector de producto -->
+  <div class="mb-3">
+    <label for="productoSelect" class="form-label">Selecciona un producto:</label>
+    <select id="productoSelect" class="form-select">
+      <option value="" selected disabled>-- Selecciona --</option>
+      {% for producto in productos %}
+        <option value="{{ producto.id }}">{{ producto.nombre_producto }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- Sección de resultado -->
+  <div id="precioSection" class="d-none mt-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+      <label class="form-label me-2">Sugerencias:</label>
+      <button id="btnSugerido10" class="btn btn-sm btn-outline-info">10%</button>
+      <button id="btnSugerido15" class="btn btn-sm btn-outline-info">15%</button>
+      <button id="btnSugerido20" class="btn btn-sm btn-outline-info">20%</button>
+      <button id="btnSugerido25" class="btn btn-sm btn-outline-info">25%</button>
+      <button id="btnSugerido30" class="btn btn-sm btn-outline-info">30%</button>
+      <button id="btnSugerido35" class="btn btn-sm btn-outline-info">35%</button>
+      <button id="btnSugerido40" class="btn btn-sm btn-outline-info">40%</button>
+      <button id="btnSugerido45" class="btn btn-sm btn-outline-info">45%</button>
+      <button id="btnSugerido50" class="btn btn-sm btn-outline-info">50%</button>
+    </div>
+
+    <!-- Control de precio: − [slider] + -->
+    <div class="d-flex align-items-center gap-2">
+      <button id="btnMenos" type="button" class="btn btn-sm btn-outline-secondary" style="position:relative; z-index:2">−</button>
+      <input type="range" class="form-range flex-grow-1" id="precioSlider" style="position:relative; z-index:1">
+      <button id="btnMas" type="button" class="btn btn-sm btn-outline-secondary" style="position:relative; z-index:2">+</button>
+    </div>
+
+    <!-- Barra visual -->
+    <div class="position-relative mt-3" style="height: 20px; background: linear-gradient(to right, red, yellow, green); border-radius: 4px;">
+      <div id="sliderIndicator" class="position-absolute" style="top: -2px; width: 2px; height: 16px; background-color: black;"></div>
+    </div>
+    <div class="d-flex justify-content-between small text-muted mt-1">
+      <span>Precio mínimo</span>
+      <span>Promedio</span>
+      <span>Máximo</span>
+    </div>
+
+    <!-- Resultados -->
+    <table class="table table-bordered mt-4 mx-auto" style="max-width: 700px;">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Por Unidad</th>
+          <th id="headerSecundario">Por Manga/Caja (<span id="labelQtySecundario">-</span>)</th>
+        </tr>
+      </thead>
+      <tbody class="text-end">
+        <tr>
+          <td><i class="bi bi-cash"></i> $<span id="precioValor">0</span></td>
+          <td><i class="bi bi-cash-stack"></i> $<span id="valorSecundario">0</span></td>
+        </tr>
+        <tr>
+          <td><i class="bi bi-receipt"></i> $<span id="precioIVA">0</span> <small>(c/IVA)</small></td>
+          <td><i class="bi bi-receipt-cutoff"></i> $<span id="valorSecundarioIVA">0</span> <small>(c/IVA)</small></td>
+        </tr>
+        <tr>
+          <td><i class="bi bi-graph-up-arrow"></i> $<span id="gananciaNeta">0</span> <small>de ganancia</small></td>
+          <td><i class="bi bi-percent"></i> <span id="gananciaPorcentaje">0</span>% <small>ganancia</small></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Simulador de ganancia -->
+    <div class="mt-4">
+      <label for="cantidadMensual" class="form-label">¿Cuántas unidades planeas vender al mes?</label>
+      <input type="number" id="cantidadMensual" class="form-control mb-2" min="0" value="0">
+      <div class="text-end small text-muted">
+        <span>Ganancia estimada mensual: $<span id="gananciaMensual">0</span></span><br>
+        <span>Ganancia anual proyectada: $<span id="gananciaAnual">0</span></span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block script %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const productoSelect = document.getElementById('productoSelect');
+  const slider = document.getElementById('precioSlider');
+  const precioSection = document.getElementById('precioSection');
+  const precioValor = document.getElementById('precioValor');
+  const precioIVA = document.getElementById('precioIVA');
+  const gananciaNeta = document.getElementById('gananciaNeta');
+  const gananciaPorcentaje = document.getElementById('gananciaPorcentaje');
+  const indicador = document.getElementById('sliderIndicator');
+  const labelQtySecundario = document.getElementById('labelQtySecundario');
+  const valorSecundario = document.getElementById('valorSecundario');
+  const valorSecundarioIVA = document.getElementById('valorSecundarioIVA');
+  const cantidadMensual = document.getElementById('cantidadMensual');
+  const gananciaMensual = document.getElementById('gananciaMensual');
+  const gananciaAnual = document.getElementById('gananciaAnual');
+  const headerSecundario = document.getElementById('headerSecundario');
+
+  const btnMenos = document.getElementById('btnMenos');
+  const btnMas = document.getElementById('btnMas');
+
+  const botonesMargen = {};
+  [10, 15, 20, 25, 30, 35, 40, 45, 50].forEach(margen => {
+    botonesMargen[margen] = document.getElementById(`btnSugerido${margen}`);
+  });
+
+  let precioBase = 0;
+  let qtySecundario = 1;
+  let min = 0, max = 0;
+
+  // Helpers
+  function setRangosYValor(base) {
+    min = base;
+    max = Math.round(base * 2.1);
+    slider.min = min;
+    slider.max = max;
+    slider.step = 1;             // 1 peso
+    slider.value = base;
+  }
+
+  function setValor(nuevo) {
+    const v = Math.min(Math.max(parseInt(nuevo || 0), parseInt(min)), parseInt(max));
+    slider.value = v;
+    actualizarValores(v, min, max);
+  }
+
+  function incremento(delta) {
+    setValor(parseInt(slider.value) + delta);
+  }
+
+  // Carga datos del producto
+  productoSelect.addEventListener('change', function () {
+    const productoId = this.value;
+    fetch(`/ajax/precio_maximo/${productoId}/`)
+      .then(response => {
+        if (!response.ok) throw new Error("Este producto no tiene precios registrados.");
+        return response.json();
+      })
+      .then(data => {
+        precioBase = data.precio_base;
+        qtySecundario = data.qty_secundario || 1;
+        labelQtySecundario.textContent = qtySecundario;
+        headerSecundario.innerHTML = `Por ${data.nombre_empaque_secundario} (${qtySecundario} ${data.nombre_empaque_primario.toLowerCase()})`;
+
+        setRangosYValor(precioBase);
+        actualizarValores(precioBase, min, max);
+        precioSection.classList.remove('d-none');
+      })
+      .catch(error => {
+        alert(error.message);
+        precioSection.classList.add('d-none');
+      });
+  });
+
+  // Slider
+  slider.addEventListener('input', () => setValor(slider.value));
+
+  // Sugerencias de margen
+  Object.entries(botonesMargen).forEach(([margen, btn]) => {
+    btn.addEventListener('click', () => {
+      const sugerido = Math.round(precioBase * (1 + margen / 100));
+      setValor(sugerido);
+    });
+  });
+
+  // --- Botones ± (click y mantener presionado) ---
+  function attachHold(el, delta) {
+    let timer = null;
+
+    const step = () => incremento(delta);
+    const start = (e) => {
+      e.preventDefault();
+      step();                           // un paso inmediato
+      timer = setInterval(step, 60);    // repite mientras se mantenga
+    };
+    const stop = () => { clearInterval(timer); timer = null; };
+
+    // Mouse
+    el.addEventListener('mousedown', start);
+    window.addEventListener('mouseup', stop);
+    el.addEventListener('mouseleave', stop);
+
+    // Touch
+    el.addEventListener('touchstart', start, { passive: false });
+    window.addEventListener('touchend', stop);
+
+    // Click/tap rápido
+    el.addEventListener('click', (e) => { e.preventDefault(); step(); });
+  }
+
+  attachHold(btnMenos, -1);
+  attachHold(btnMas, +1);
+
+  // Atajos de teclado en el slider
+  slider.addEventListener('keydown', (e) => {
+    let delta = 0;
+    if (e.key === 'ArrowLeft') delta = -1;
+    if (e.key === 'ArrowRight') delta = 1;
+    if (delta !== 0) {
+      if (e.shiftKey) delta *= 10;     // ±$10
+      if (e.ctrlKey)  delta *= 100;    // ±$100
+      e.preventDefault();
+      incremento(delta);
+    }
+  });
+
+  // Cálculos y UI
+  function actualizarValores(valor, min, max) {
+    valor = parseInt(valor);
+    const iva = Math.round(valor * 1.19);
+    const ganancia = valor - precioBase;
+    const gananciaPct = precioBase > 0 ? ((ganancia / precioBase) * 100).toFixed(2) : 0;
+
+    precioValor.textContent = valor.toLocaleString('es-CL');
+    precioIVA.textContent = iva.toLocaleString('es-CL');
+    gananciaNeta.textContent = ganancia.toLocaleString('es-CL');
+    gananciaPorcentaje.textContent = gananciaPct;
+
+    const valorSec = valor * qtySecundario;
+    const valorSecIVA = Math.round(valorSec * 1.19);
+    valorSecundario.textContent = valorSec.toLocaleString('es-CL');
+    valorSecundarioIVA.textContent = valorSecIVA.toLocaleString('es-CL');
+
+    const porcentaje = ((valor - min) / (max - min)) * 100;
+    indicador.style.left = `${porcentaje}%`;
+
+    const cantidad = parseInt(cantidadMensual.value) || 0;
+    const totalMensual = cantidad * ganancia;
+    const totalAnual = totalMensual * 12;
+
+    gananciaMensual.textContent = totalMensual.toLocaleString('es-CL');
+    gananciaAnual.textContent = totalAnual.toLocaleString('es-CL');
+  }
+
+  // Recalcular cuando cambia cantidad mensual
+  cantidadMensual.addEventListener('input', () => actualizarValores(slider.value, min, max));
+});
+</script>
+{% endblock script %}

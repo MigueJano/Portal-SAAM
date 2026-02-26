@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-3">
+  <h1 class="h5 mb-3">Editar Subcategoría</h1>
+
+  <form method="post" class="row g-3">
+    {% csrf_token %}
+
+    <!-- Nombre Subcategoría -->
+    <div class="col-12 col-md-6">
+      <label for="subcategoria" class="form-label">Nombre de la subcategoría</label>
+      <input
+        type="text"
+        name="subcategoria"
+        id="subcategoria"
+        class="form-control form-control-sm"
+        value="{{ subcategoria.subcategoria }}"
+        required
+        autofocus
+        maxlength="120"
+        placeholder="Ej: Snacks salados"
+      >
+    </div>
+
+    <!-- Categoría Asociada -->
+    <div class="col-12 col-md-6">
+      <label for="categoria" class="form-label">Categoría asociada</label>
+      <select
+        name="categoria"
+        id="categoria"
+        class="form-select form-select-sm"
+        required
+      >
+        {% for cat in categorias %}
+          <option value="{{ cat.id }}" {% if cat.id == subcategoria.categoria.id %}selected{% endif %}>
+            {{ cat.categoria }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Acciones -->
+    <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+      <button type="submit" class="btn btn-outline-success btn-sm">
+        <i class="fas fa-save me-1"></i> Guardar cambios
+      </button>
+      <a href="{% url 'categorias_y_subcategorias' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-times me-1"></i> Cancelar
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

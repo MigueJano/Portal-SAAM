@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block CSS %} 
+{% endblock CSS %} 
+
+{% block content %} 
+<form method="post">
+  {% csrf_token %}
+  <h1 class="h4 mt-4 mb-3">Editar Recepción</h1>
+
+  <!-- Primera línea: Proveedor -->
+  <div class="form-group mb-3">
+    <label for="id_proveedor">Proveedor</label>
+    <select name="proveedor" id="id_proveedor" class="form-control" required>
+      <option value="">Seleccione un proveedor</option>
+      {% for proveedor in proveedores %}
+        <option value="{{ proveedor.id }}"
+          {% if form.proveedor.value|stringformat:"s" == proveedor.id|stringformat:"s" %}selected{% endif %}>
+          {{ proveedor.nombre_proveedor }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- Segunda línea: Fecha -->
+  <div class="form-group mb-3">
+    <label for="id_fecha_recepcion">Fecha recepción</label>
+    <input type="date" class="form-control" id="id_fecha_recepcion" name="fecha_recepcion" required
+          {% if form.fecha_recepcion.value %}
+            value="{{ form.fecha_recepcion.value|date:'Y-m-d' }}"
+          {% endif %}>
+  </div>
+
+  <!-- Tercera línea: Estado | Tipo Documento | Número Documento -->
+  <div class="form-group mb-3">
+    <div class="row">
+      <div class="col-md-4">
+        <label for="id_estado_recepcion">Estado</label>
+        <select class="form-control" id="id_estado_recepcion" name="estado_recepcion">
+          <option value="">Seleccione...</option>
+          <option value="Pendiente" {% if form.estado_recepcion.value == "Pendiente" %}selected{% endif %}>Pendiente</option>
+          <option value="Recibido" {% if form.estado_recepcion.value == "Recibido" %}selected{% endif %}>Recibido</option>
+          <option value="Parcial" {% if form.estado_recepcion.value == "Parcial" %}selected{% endif %}>Parcial</option>
+          <option value="Rechazado" {% if form.estado_recepcion.value == "Rechazado" %}selected{% endif %}>Rechazado</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label for="id_documento_recepcion">Tipo de documento</label>
+        <select class="form-control" id="id_documento_recepcion" name="documento_recepcion">
+          <option value="">Seleccione...</option>
+          <option value="Factura" {% if form.documento_recepcion.value == "Factura" %}selected{% endif %}>Factura</option>
+          <option value="Guia de Despacho" {% if form.documento_recepcion.value == "Guia de Despacho" %}selected{% endif %}>Guía de Despacho</option>
+          <option value="Boleta" {% if form.documento_recepcion.value == "Boleta" %}selected{% endif %}>Boleta</option>
+          <option value="Crédito" {% if form.documento_recepcion.value == "Crédito" %}selected{% endif %}>Crédito</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label for="id_num_documento_recepcion">Número Documento</label>
+        <input type="text" class="form-control" id="id_num_documento_recepcion" name="num_documento_recepcion" required
+          value="{{ form.num_documento_recepcion.value|default_if_none:'' }}">
+      </div>
+    </div>
+  </div>
+
+  <!-- Cuarta línea: Monto | Moneda | IVA -->
+  <div class="form-group mb-3">
+    <div class="row align-items-end">
+      <div class="col-md-4">
+        <label for="id_total_neto_recepcion">Monto Neto</label>
+        <div class="input-group">
+          <span class="input-group-text">$</span>
+          <input type="text" class="form-control" id="id_total_neto_recepcion" name="total_neto_recepcion"
+            inputmode="decimal" pattern="[0-9,\.]*" step="0.01"
+            value="{{ form.total_neto_recepcion.value|formatear_miles }}">
+        </div>
+      </div>
+      <div class="col-md-4">
+        <label for="id_moneda_recepcion">Moneda</label>
+        <select class="form-control" id="id_moneda_recepcion" name="moneda_recepcion">
+          <option value="">Seleccione...</option>
+          <option value="CLP" {% if form.moneda_recepcion.value == "CLP" %}selected{% endif %}>CLP (Peso Chileno)</option>
+          <option value="UF" {% if form.moneda_recepcion.value == "UF" %}selected{% endif %}>UF (Unidad de Fomento)</option>
+          <option value="UTM" {% if form.moneda_recepcion.value == "UTM" %}selected{% endif %}>UTM (Unidad Tributaria Mensual)</option>
+          <option value="US" {% if form.moneda_recepcion.value == "US" %}selected{% endif %}>US (Dólar)</option>
+          <option value="EUR" {% if form.moneda_recepcion.value == "EUR" %}selected{% endif %}>EUR (Euro)</option>
+        </select>
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="incluir_iva" name="incluir_iva" value="True"
+                style="transform: scale(1.5); margin-right: 8px;"
+                {% if form.incluir_iva.value %}checked{% endif %}>
+          <label class="form-check-label" for="incluir_iva">Valor productos incluye IVA (19%)</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Comentario Recepción -->
+  <div class="col-12">
+    <label for="comentario_recepcion" class="form-label">Comentario</label>
+    <textarea id="comentario_recepcion" name="comentario_recepcion" class="form-control" rows="2" maxlength="500" placeholder="Comentarios adicionales...">{{ form.comentario_recepcion.value }}</textarea>
+  </div>
+
+  <!-- Quinta línea: Botones -->
+  <div class="d-flex justify-content-end gap-2 mt-4">
+    <button type="submit" class="btn btn-outline-success me-2">Guardar</button>
+    <a href="{% url 'lista_recepcion' %}" class="btn btn-outline-secondary me-2">Cancelar</a>
+    <a href="{% url 'eliminar_recepcion' id=recepcion.id %}" class="btn btn-outline-danger me-2">Eliminar Recepción</a>
+  </div>
+</form>
+{% endblock content %}
+
+{% block script %}
+{% endblock script %}

@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+  <h4>Categorías de Empaque</h4>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn btn-outline-success">Guardar</button>
+    <a href="{% url 'home' %}" class="btn btn-outline-secondary">Cerrar</a>
+  </form>
+
+  <hr>
+  <h5 class="mt-4">Empaques registrados</h5>
+  <table class="table table-sm table-bordered mt-2">
+    <thead>
+      <tr>
+        <th>Nombre</th>
+        <th>Nivel</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in empaques %}
+        <tr>
+          <td>{{ e.nombre }}</td>
+          <td>{{ e.get_nivel_display }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="2">No hay empaques registrados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

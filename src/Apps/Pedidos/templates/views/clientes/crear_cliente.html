@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block CSS %} 
+{% endblock CSS %} 
+
+{% block content %} 
+<form method="post" novalidate>
+  {% csrf_token %}
+  <h1 class="h4 mt-4 mb-3">Nuevo Cliente</h1>
+
+  <!-- Nombre -->
+  <div class="mb-3">
+    <label for="nombre_cliente" class="form-label">Nombre del Cliente</label>
+    <input
+      type="text"
+      class="form-control"
+      id="nombre_cliente"
+      name="nombre_cliente"
+      value="{{ form.nombre_cliente.value|default_if_none:'' }}"
+      placeholder="Ej: Comercial Ejemplo Ltda."
+      autocomplete="organization"
+      required
+    >
+  </div>
+
+  <!-- RUT -->
+  <div class="mb-3">
+    <label for="rut_cliente" class="form-label">RUT del Cliente</label>
+    <input
+      type="text"
+      class="form-control"
+      id="rut_cliente"
+      name="rut_cliente"
+      value="{{ form.rut_cliente.value|default_if_none:'' }}"
+      placeholder="11.111.111-1"
+      autocomplete="off"
+      required
+    >
+  </div>
+
+  <!-- Dirección -->
+  <div class="mb-3">
+    <label for="direccion_cliente" class="form-label">Dirección</label>
+    <input
+      type="text"
+      class="form-control"
+      id="direccion_cliente"
+      name="direccion_cliente"
+      value="{{ form.direccion_cliente.value|default_if_none:'' }}"
+      placeholder="Ej: Av. Providencia 1234, Santiago"
+      autocomplete="street-address"
+    >
+  </div>
+
+  <!-- Dirección Bodega -->
+  <div class="mb-3">
+    <label for="direccion_bodega_cliente" class="form-label">Dirección Bodega</label>
+    <input
+      type="text"
+      class="form-control"
+      id="direccion_bodega_cliente"
+      name="direccion_bodega_cliente"
+      value="{{ form.direccion_bodega_cliente.value|default_if_none:'' }}"
+      placeholder="Ej: Camino a Melipilla 4321, Maipú"
+      autocomplete="street-address"
+    >
+  </div>
+
+  <!-- Cliente Activo -->
+  <div class="form-check mb-3">
+    <input
+      class="form-check-input"
+      type="checkbox"
+      id="cliente_activo"
+      name="cliente_activo"
+      value="True" 
+      {% if form.cliente_activo.value %}checked{% endif %}
+    >
+    <label class="form-check-label" for="cliente_activo">Cliente Activo</label>
+  </div>
+
+  <!-- Teléfono -->
+  <div class="mb-3">
+    <label for="telefono_cliente" class="form-label">Teléfono</label>
+    <input
+      type="tel"
+      class="form-control"
+      id="telefono_cliente"
+      name="telefono_cliente"
+      value="{{ form.telefono_cliente.value|default_if_none:'' }}"
+      placeholder="+56 9 1234 5678"
+      autocomplete="tel"
+    >
+  </div>
+
+  <!-- Correo -->
+  <div class="mb-3">
+    <label for="correo_cliente" class="form-label">Correo Electrónico</label>
+    <input
+      type="email"
+      class="form-control"
+      id="correo_cliente"
+      name="correo_cliente"
+      value="{{ form.correo_cliente.value|default_if_none:'' }}"
+      placeholder="contacto@cliente.cl"
+      autocomplete="email"
+    >
+  </div>
+
+  <!-- Categoría -->
+  <div class="mb-3">
+    <label for="categoria" class="form-label">Categoría</label>
+    <select class="form-control" id="categoria" name="categoria" required>
+      <option value="">Seleccione una categoría...</option>
+      {% for key, label in form.fields.categoria.choices %}
+        <option value="{{ key }}" {% if form.categoria.value == key %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- Botones -->
+  <div class="d-flex justify-content-end gap-2 mt-3">
+    <button type="submit" class="btn btn-outline-success me-2">Guardar</button>
+    <a href="{% url 'lista_clientes' %}" class="btn btn-outline-secondary me-2">Cancelar</a>
+  </div>
+</form>
+{% endblock content %} 
+
+{% block script %}
+<script
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDVTr6Wjh_cwhimHwWNuWOSxzKbBrakTf8&libraries=places&callback=initAutocomplete"
+  async defer></script>
+
+<script>
+  function initAutocomplete() {
+    const input1 = document.getElementById('direccion_cliente');
+    const input2 = document.getElementById('direccion_bodega_cliente');
+
+    if (input1) {
+      new google.maps.places.Autocomplete(input1, { componentRestrictions: { country: 'cl' } });
+    }
+    if (input2) {
+      new google.maps.places.Autocomplete(input2, { componentRestrictions: { country: 'cl' } });
+    }
+  }
+</script>
+{% endblock %}

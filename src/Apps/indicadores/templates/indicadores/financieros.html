@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h1 class="h4 mb-0">Dashboard Financiero</h1>
+  </div>
+
+  <form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-sm-3">
+      <label class="form-label mb-1">Fecha desde</label>
+      {{ form.fecha_desde }}
+    </div>
+    <div class="col-sm-3">
+      <label class="form-label mb-1">Fecha hasta</label>
+      {{ form.fecha_hasta }}
+    </div>
+
+    <div class="col-sm-6 d-flex gap-2 align-items-end">
+      <button type="submit" class="btn btn-outline-primary">Aplicar</button>
+      <a href="{% url 'dashboard_financiero_simple' %}" class="btn btn-outline-secondary">Limpiar</a>
+
+      <!-- Rango rápido -->
+      <div class="ms-auto d-flex gap-2 align-items-end">
+        <div class="flex-grow-1">
+          <label class="form-label mb-1">Rango rápido</label>
+          <select id="preset-range" class="form-select">
+            <optgroup label="Quarter (año actual)">
+              <option value="q1">Quarter 1 (Ene–Mar)</option>
+              <option value="q2">Quarter 2 (Abr–Jun)</option>
+              <option value="q3">Quarter 3 (Jul–Sep)</option>
+              <option value="q4">Quarter 4 (Oct–Dic)</option>
+            </optgroup>
+            <optgroup label="Semestre (año actual)">
+              <option value="sem1">Semestre 1 (Ene–Jun)</option>
+              <option value="sem2">Semestre 2 (Jul–Dic)</option>
+            </optgroup>
+            <optgroup label="Año (año actual)">
+              <option value="year">Año (Ene–Dic)</option>
+            </optgroup>
+            <optgroup label="Relativos">
+              <option value="prev_month">Mes pasado</option>
+              <option value="last3">Últimos 3 meses</option>
+              <option value="last6">Últimos 6 meses</option>
+              <option value="last12">Últimos 12 meses</option>
+            </optgroup>
+          </select>
+        </div>
+        <button type="button" class="btn btn-outline-primary" onclick="applyPreset()">Aplicar rango</button>
+      </div>
+    </div>
+
+    </div>
+  </form>
+
+  {% if desde and hasta %}
+  <p class="text-muted">Período: <strong>{{ desde|date:"d-m-Y" }}</strong> a <strong>{{ hasta|date:"d-m-Y" }}</strong></p>
+  {% endif %}
+
+    <!-- Fila 1: Compras, Ventas, Margen Bruto -->
+    <div class="row g-3">
+      <!-- Compras / Recepciones -->
+      <div class="col-md-4 d-flex">
+        <div class="card shadow-sm w-100 h-100">
+          <div class="card-body">
+            <h5 class="card-title mb-3">Total Compras</h5>
+            <div class="d-flex justify-content-between">
+              <span>Neto</span>
+              <strong>${{ compras.neto|formatear_miles }}</strong>
+            </div>
+            <div class="d-flex justify-content-between">
+              <span>IVA</span>
+              <strong>${{ compras.iva|formatear_miles }}</strong>
+            </div>
+            <hr class="my-2">
+            <div class="d-flex justify-content-between">
+              <span>Total</span>
+              <strong class="h5 mb-0">${{ compras.total|formatear_miles }}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ventas -->
+      <div class="col-md-4 d-flex">
+        <div class="card shadow-sm w-100 h-100">
+          <div class="card-body">
+            <h5 class="card-title mb-3">Total Ventas</h5>
+            <div class="d-flex justify-content-between">
+              <span>Neto</span>
+              <strong>${{ ventas.neto|formatear_miles }}</strong>
+            </div>
+            <div class="d-flex justify-content-between">
+              <span>IVA</span>
+              <strong>${{ ventas.iva|formatear_miles }}</strong>
+            </div>
+            <hr class="my-2">
+            <div class="d-flex justify-content-between">
+              <span>Total</span>
+              <strong class="h5 mb-0">${{ ventas.total|formatear_miles }}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Indicadores -->
+      <div class="col-md-4 d-flex">
+        <div class="card shadow-sm w-100 h-100">
+          <div class="card-body">
+            <h5 class="card-title mb-3">Indicadores</h5>
+
+            <!-- Margen Bruto -->
+            <div class="d-flex justify-content-between">
+              <span>Margen Neto</span>
+              <strong class="{% if margen_bruto >= 0 %}text-success{% else %}text-danger{% endif %}">
+                ${{ margen_bruto|formatear_miles }}
+              </strong>
+            </div>
+
+            <!-- Ganancia del Período -->
+            <div class="d-flex justify-content-between">
+              <span>Utilidad $</span>
+              <strong class="{% if ganancia_periodo >= 0 %}text-success{% else %}text-danger{% endif %}">
+                ${{ ganancia_periodo|formatear_miles }}
+              </strong>
+            </div>
+
+            <!-- Ganancia del Período % -->
+            <div class="d-flex justify-content-between">
+              <span>Utilidad %</span>
+                <strong class="{% if ganancia_porcentaje_periodo >= 0 %}text-success{% else %}text-danger{% endif %}">
+                  {{ ganancia_porcentaje_periodo|floatformat:2 }}%
+                </strong>
+            </div>
+
+            <!-- Diferencia de IVA -->
+            <div class="d-flex justify-content-between">
+              <span>Diferencia IVA</span>
+              <strong class="{% if diferencia_iva >= 0 %}text-success{% else %}text-danger{% endif %}">
+                ${{ diferencia_iva|formatear_miles }}
+              </strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABLA -->
+    <div class="card mt-3 shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h5 class="card-title mb-0">Detalle Financiero</h5>
+          {% if desde and hasta %}
+            <small class="text-muted">Período: {{ desde|date:"d-m-Y" }} a {{ hasta|date:"d-m-Y" }}</small>
+          {% endif %}
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle">
+            <thead class="table-light text-center">
+              <tr>
+                <th>Concepto</th>
+                {% for label in meses_labels %}
+                  <th>{{ label }}</th>
+                {% endfor %}
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+
+              <!-- ========================= -->
+              <!--      COMPRAS (NEG)       -->
+              <!-- ========================= -->
+              <tr class="table-secondary">
+                <td colspan="{{ meses_labels|length|add:2 }}"><strong>Compras por Proveedores</strong></td>
+              </tr>
+
+              {% for fila in filas_proveedores %}
+              <!-- Fila TOTAL proveedor -->
+              <tr class="table-warning fw-bold">
+                <td>{{ fila.proveedor }}</td>
+                {% for v in fila.valores %}
+                  <td class="text-end">${{ v.total|formatear_miles }}</td>
+                {% endfor %}
+                <td class="text-end">${{ fila.total.total|formatear_miles }}</td>
+              </tr>
+              <!-- Fila NETO proveedor -->
+              <tr>
+                <td class="text-muted">Neto</td>
+                {% for v in fila.valores %}
+                  <td class="text-end">${{ v.neto|formatear_miles }}</td>
+                {% endfor %}
+                <td class="text-end">${{ fila.total.neto|formatear_miles }}</td>
+              </tr>
+              <!-- Fila IVA proveedor -->
+              <tr>
+                <td class="text-muted">IVA</td>
+                {% for v in fila.valores %}
+                  <td class="text-end">${{ v.iva|formatear_miles }}</td>
+                {% endfor %}
+                <td class="text-end">${{ fila.total.iva|formatear_miles }}</td>
+              </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="{{ meses_labels|length|add:2 }}" class="text-center text-muted">Sin compras en el período.</td>
+                </tr>
+              {% endfor %}
+
+              <!-- Subtotales COMPRAS (Display en POSITIVO) -->
+              <tr class="table-secondary fw-bold">
+                <td>Subtotal Compras</td>
+                {% for t in subtotal_compras_mes_display %}
+                  <td class="text-end">${{ t.total|formatear_miles }}</td>
+                {% endfor %}
+                <td class="text-end">${{ subtotal_compras_total_display.total|formatear_miles }}</td>
+              </tr>
+              <tr class="table-secondary">
+                <td class="text-muted">Subtotal Compras Neto</td>
+                {% for t in subtotal_compras_mes_display %}
+                  <td class="text-end">${{ t.neto|formatear_miles }}</td>
+                {% endfor %}
+                <td class="text-end">${{ subtotal_compras_total_display.neto|formatear_miles }}</td>
+              </tr>
+              <tr class="table-secondary">
+                <td class="text-muted">Subtotal Compras IVA</td>
+                {% for t in subtotal_compras_mes_display %}
+                  <td class="text-end">${{ t.iva|formatear_miles }}</td>
+                {% endfor %}
+                <td class="text-end">${{ subtotal_compras_total_display.iva|formatear_miles }}</td>
+              </tr>
+
+
+              <!-- ========================= -->
+              <!--        VENTAS (POS)      -->
+              <!-- ========================= -->
+              <tr class="table-secondary">
+                <td colspan="{{ meses_labels|length|add:2 }}"><strong>Ventas por Tipo</strong></td>
+              </tr>
+
+              {% for fila in filas_ventas_tipo %}
+                <!-- Fila TOTAL por tipo -->
+                <tr class="table-primary fw-bold">
+                  <td>{{ fila.tipo }}</td>
+                  {% for v in fila.valores %}
+                    <td class="text-end">${{ v.total|formatear_miles }}</td>
+                  {% endfor %}
+                  <td class="text-end">${{ fila.total.total|formatear_miles }}</td>
+                </tr>
+                <!-- Fila NETO por tipo -->
+                <tr>
+                  <td class="text-muted">Neto</td>
+                  {% for v in fila.valores %}
+                    <td class="text-end">${{ v.neto|formatear_miles }}</td>
+                  {% endfor %}
+                  <td class="text-end">${{ fila.total.neto|formatear_miles }}</td>
+                </tr>
+                <!-- Fila IVA por tipo -->
+                <tr>
+                  <td class="text-muted">IVA</td>
+                  {% for v in fila.valores %}
+                    <td class="text-end">${{ v.iva|formatear_miles }}</td>
+                  {% endfor %}
+                  <td class="text-end">${{ fila.total.iva|formatear_miles }}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="{{ meses_labels|length|add:2 }}" class="text-center text-muted">Sin ventas Factura/Boleta en el período.</td>
+                </tr>
+              {% endfor %}
+
+              <!-- Subtotales VENTAS (Display en POSITIVO) -->
+              <tr class="table-secondary fw-bold">
+                <td>Subtotal Ventas</td>
+                {% for t in subtotal_ventas_mes %}
+                  <td class="text-end">${{ t.total|formatear_miles }}</td>
+                {% endfor %}
+                <td class="text-end">${{ subtotal_ventas_total.total|formatear_miles }}</td>
+              </tr>
+              <tr class="table-secondary">
+                <td class="text-muted">Subtotal Ventas Neto</td>
+                {% for t in subtotal_ventas_mes %}
+                  <td class="text-end">${{ t.neto|formatear_miles }}</td>
+                {% endfor %}
+                <td class="text-end">${{ subtotal_ventas_total.neto|formatear_miles }}</td>
+              </tr>
+              <tr class="table-secondary">
+                <td class="text-muted">Subtotal Ventas IVA</td>
+                {% for t in subtotal_ventas_mes %}
+                  <td class="text-end">${{ t.iva|formatear_miles }}</td>
+                {% endfor %}
+                <td class="text-end">${{ subtotal_ventas_total.iva|formatear_miles }}</td>
+              </tr>
+
+
+
+              <!-- ========================= -->
+              <!--        TOTAL GENERAL      -->
+              <!-- ========================= -->
+              <tr class="table-dark fw-bold">
+                <td>TOTAL GENERAL</td>
+                {% for t in total_general_mes %}
+                  <td class="text-end {% if t.total < 0 %}text-danger{% else %}text-success{% endif %}">
+                    ${{ t.total|formatear_miles }}
+                  </td>
+                {% endfor %}
+                <td class="text-end {% if total_general_total.total < 0 %}text-danger{% else %}text-success{% endif %}">
+                  ${{ total_general_total.total|formatear_miles }}
+                </td>
+              </tr>
+              <tr class="table-dark">
+                <td class="text-white bg-dark">TOTAL NETO</td>
+                {% for t in total_general_mes %}
+                  <td class="text-end {% if t.neto < 0 %}text-danger{% else %}text-success{% endif %}">
+                    ${{ t.neto|formatear_miles }}
+                  </td>
+                {% endfor %}
+                <td class="text-end {% if total_general_total.neto < 0 %}text-danger{% else %}text-success{% endif %}">
+                  ${{ total_general_total.neto|formatear_miles }}
+                </td>
+              </tr>
+              <tr class="table-dark">
+                <td class="text-white bg-dark">TOTAL IVA</td>
+                {% for t in total_general_mes %}
+                  <td class="text-end {% if t.iva < 0 %}text-danger{% else %}text-success{% endif %}">
+                    ${{ t.iva|formatear_miles }}
+                  </td>
+                {% endfor %}
+                <td class="text-end {% if total_general_total.iva < 0 %}text-danger{% else %}text-success{% endif %}">
+                  ${{ total_general_total.iva|formatear_miles }}
+                </td>
+              </tr>
+
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+{% endblock content %}
+
+{% block script %}
+<script>
+  function pad2(n){ return String(n).padStart(2,'0'); }
+
+  function monthStart(year, monthIndex){ // monthIndex: 0=Ene
+    return new Date(year, monthIndex, 1);
+  }
+  function monthEnd(year, monthIndex){
+    return new Date(year, monthIndex + 1, 0); // día 0 del mes siguiente = último día del mes actual
+  }
+  function toYMD(d){
+    const y = d.getFullYear();
+    const m = pad2(d.getMonth() + 1);
+    const day = pad2(d.getDate());
+    return `${y}-${m}-${day}`;
+  }
+
+  function setDates(desdeDate, hastaDate){
+    const desdeInput = document.querySelector('[name="fecha_desde"]');
+    const hastaInput = document.querySelector('[name="fecha_hasta"]');
+    desdeInput.value = toYMD(desdeDate);
+    hastaInput.value = toYMD(hastaDate);
+  }
+
+  function applyPreset(){
+    const sel = document.getElementById('preset-range');
+    const val = sel.value;
+    const today = new Date();
+    const year = today.getFullYear();
+
+    let desde, hasta;
+
+    switch(val){
+      // Quarters fijos (año actual)
+      case 'q1':
+        desde = monthStart(year, 0);  // Ene
+        hasta = monthEnd(year, 2);    // Mar
+        break;
+      case 'q2':
+        desde = monthStart(year, 3);  // Abr
+        hasta = monthEnd(year, 5);    // Jun
+        break;
+      case 'q3':
+        desde = monthStart(year, 6);  // Jul
+        hasta = monthEnd(year, 8);    // Sep
+        break;
+      case 'q4':
+        desde = monthStart(year, 9);  // Oct
+        hasta = monthEnd(year, 11);   // Dic
+        break;
+
+      // Semestres fijos (año actual)
+      case 'sem1':
+        desde = monthStart(year, 0);  // Ene
+        hasta = monthEnd(year, 5);    // Jun
+        break;
+      case 'sem2':
+        desde = monthStart(year, 6);  // Jul
+        hasta = monthEnd(year, 11);   // Dic
+        break;
+
+      // Año fijo (año actual)
+      case 'year':
+        desde = monthStart(year, 0);  // Ene
+        hasta = monthEnd(year, 11);   // Dic
+        break;
+
+      // Relativos
+      case 'prev_month': {
+        const pm = new Date(year, today.getMonth() - 1, 1);
+        desde = monthStart(pm.getFullYear(), pm.getMonth());
+        hasta = monthEnd(pm.getFullYear(), pm.getMonth());
+        break;
+      }
+      case 'last3': {
+        // desde el primer día del mes de hace 2 meses (incluye mes actual => 3 meses de ventana)
+        const start = new Date(year, today.getMonth() - 2, 1);
+        desde = monthStart(start.getFullYear(), start.getMonth());
+        hasta = today; // hoy
+        break;
+      }
+      case 'last6': {
+        const start = new Date(year, today.getMonth() - 5, 1);
+        desde = monthStart(start.getFullYear(), start.getMonth());
+        hasta = today;
+        break;
+      }
+      case 'last12': {
+        const start = new Date(year, today.getMonth() - 11, 1);
+        desde = monthStart(start.getFullYear(), start.getMonth());
+        hasta = today;
+        break;
+      }
+      default:
+        return;
+    }
+
+    setDates(desde, hasta);
+    // Envío por GET (no requiere CSRF)
+    sel.closest('form').submit();
+  }
+</script>
+
+{% endblock script %}

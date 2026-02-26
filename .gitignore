@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtualenv
+.venv/
+venv/
+env/
+
+# Django
+*.log
+staticfiles/
+media/
+
+# DB (SQLite)
+db.sqlite3
+*.sqlite3
+database/*.sqlite3
+
+# Postgres / DB dumps / backups
+*.sql
+*.dump
+*.backup
+*.drawio
+
+# Env vars / secrets
+.env
+.env.*
+!.env.example
+inicio_proyecto.py
+
+# Tests / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+*.Identifier
+
+#version documentación
+docs/
+registro_docs.json
+documentacion.py
+update_readme_architecture.py

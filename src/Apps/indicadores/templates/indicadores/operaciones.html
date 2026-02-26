@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<h3 class="mb-4">Indicadores de Operaciones</h3>
+
+<div class="row">
+  <!-- Total pedidos -->
+  <div class="col-md-4">
+    <div class="card shadow-sm p-3 mb-4 border-primary">
+      <h5 class="text-primary">Total de Pedidos</h5>
+      <p class="fs-4">{{ kpis.total_pedidos }}</p>
+    </div>
+  </div>
+
+  <!-- Pedidos cumplidos -->
+  <div class="col-md-4">
+    <div class="card shadow-sm p-3 mb-4 border-success">
+      <h5 class="text-success">Pedidos Cumplidos</h5>
+      <p class="fs-4">{{ kpis.pedidos_cumplidos }}</p>
+    </div>
+  </div>
+
+  <!-- Cumplimiento % -->
+  <div class="col-md-4">
+    <div class="card shadow-sm p-3 mb-4 border-info">
+      <h5 class="text-info">Cumplimiento (%)</h5>
+      <p class="fs-4">{{ kpis.cumplimiento }}%</p>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <!-- Pedidos pendientes -->
+  <div class="col-md-6">
+    <div class="card shadow-sm p-3 mb-4 border-warning">
+      <h5 class="text-warning">Pedidos Pendientes</h5>
+      <p class="fs-4">{{ kpis.pedidos_pendientes }}</p>
+    </div>
+  </div>
+
+  <!-- Tiempo promedio de entrega -->
+  <div class="col-md-6">
+    <div class="card shadow-sm p-3 mb-4 border-secondary">
+      <h5 class="text-secondary">Tiempo Promedio de Entrega</h5>
+      <p class="fs-4">
+        {% if kpis.tiempo_promedio_entrega %}
+          {{ kpis.tiempo_promedio_entrega.days }} días
+        {% else %}
+          No disponible
+        {% endif %}
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

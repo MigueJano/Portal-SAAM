@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block CSS %}
+{% endblock CSS %}
+
+{% block content %}
+<form method="post">
+  {% csrf_token %}
+   <h1 class="h4 mt-4 mb-3">Crear Contacto</h1>
+      <div class="form-group">
+        <label for="nombre_proveedor">Proveedor</label>
+        <div class="d-flex align-items-center">
+          <select name="proveedor" class="form-control">
+            <option value="">Seleccione un proveedor</option>
+            {% for proveedor in proveedores %}
+              <option value="{{ proveedor.id }}">{{ proveedor.nombre_proveedor }}</option>
+            {% endfor %}
+          </select>
+          <a href="{% url 'crear_proveedor' %}" class="btn btn-outline-primary me-2" style="margin-left: 20px; white-space: nowrap;">Crear Proveedor</a>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label for="nombre_contacto" class="form-label">Nombre</label>
+        <input type="text" class="form-control" id="nombre_contacto" name="nombre_contacto" required>
+      </div>
+
+      <div class="mb-3">
+        <label for="apellido_contacto" class="form-label">Apellido</label>
+        <input type="text" class="form-control" id="apellido_contacto" name="apellido_contacto" required>
+      </div>
+
+      <div class="mb-3">
+        <label for="cargo_contacto" class="form-label">Cargo</label>
+        <input type="text" class="form-control" id="cargo_contacto" name="cargo_contacto">
+      </div>
+
+      <div class="mb-3">
+        <label for="telefono_contacto" class="form-label">Teléfono</label>
+        <input
+          type="tel"
+          class="form-control"
+          id="telefono_contacto"
+          name="telefono_contacto"
+          placeholder="celular: +56 9 1234 5678 / fijo: +56 2 1234 5678"
+          pattern="^\+?[\d\s]{7,15}$"
+          required>
+      </div>
+
+      <div class="mb-3">
+        <label for="correo_contacto" class="form-label">Correo electrónico</label>
+        <input
+          type="email"
+          class="form-control"
+          id="correo_contacto"
+          name="correo_contacto"
+          placeholder="nombre@ejemplo.com"
+          required>
+      </div>
+    <div class="d-flex gap-2 mt-4 justify-content-end">
+      <button type="submit" class="btn btn-outline-success me-2">Guardar</button>
+      <a href="{% url 'lista_contacto' %}" class="btn btn-outline-secondary me-2">Cancelar</a>
+    </div>
+</form>
+{% endblock content %}
+
+{% block script %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const telefonoInput = document.getElementById("telefono_contacto");
+    telefonoInput.addEventListener("input", function () {
+      const pattern = /^\+56\s?[2-9]{1,2}\s?\d{3,4}\s?\d{4}$/;
+      if (!pattern.test(this.value)) {
+        this.setCustomValidity("Formato: +56 X XXXX XXXX");
+      } else {
+        this.setCustomValidity("");
+      }
+    });
+  });
+  document.addEventListener('DOMContentLoaded', function () {
+    const correoInput = document.getElementById("correo_contacto");
+    correoInput.addEventListener("input", function () {
+      // Expresión regular básica para validar email
+      const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!pattern.test(this.value)) {
+        this.setCustomValidity("Por favor ingresa un correo electrónico válido.");
+      } else {
+        this.setCustomValidity("");
+      }
+    });
+  });
+</script>
+{% endblock script %}

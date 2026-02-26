@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block CSS %}
+<!-- CSS DataTables -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+{% endblock CSS %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <!-- Título y Botón en la misma línea -->
+      <div class="d-flex justify-content-between align-items-center mt-3">
+        <h1 class="h4 mb-0">Proveedores</h1>
+        <a href="{% url 'crear_proveedor' %}" class="btn btn-outline-primary me-2">Crear Proveedor</a>
+      </div>
+
+      <!-- Tabla -->
+      <div class="table-responsive py-2 margin-5px">
+        <table id="tabla-filtros" class="table table-striped table-bordered table-sm">
+          <thead class="table-light text-center">
+            <tr>
+              <th scope="col">Nombre</th>
+              <th scope="col" style="min-width:75px;">RUT</th>
+              <th scope="col">Dirección</th>
+              <th scope="col">Banco</th>
+              <th scope="col">Tipo de Cuenta</th>
+              <th scope="col">Número de Cuenta</th>
+              <th scope="col">Editar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in proveedores %}
+            <tr>
+              <td>
+                {% if c.empresa_activa %}
+                  <i class="fas fa-circle text-success" title="Activo"></i>
+                {% else %}
+                  <i class="fas fa-circle text-danger" title="Inactivo"></i>
+                {% endif %}
+                {{ c.nombre_proveedor }}
+              </td>
+              <td>{{ c.rut_proveedor }}</td>
+              <td>{{ c.direccion_proveedor }}</td>
+              <td>{{ c.banco_proveedor }}</td>
+              <td>{{ c.cta_proveedor }}</td>
+              <td>{{ c.num_cuenta_proveedor }}</td>
+              <td class="text-center">
+                <div class="d-flex justify-content-center gap-1">
+                  <a href="{% url 'editar_proveedor' id=c.id %}" class="btn btn-outline-primary btn-sm" title="Editar">
+                    <i class="fas fa-pen"></i>
+                  </a>
+                  <a href="{% url 'asociar_contacto' proveedor_id=c.id %}" class="btn btn-outline-success btn-sm" title="Asociar Contacto">
+                    <i class="fas fa-user-plus"></i>
+                  </a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block script %}
+<script>
+  $(document).ready(function() {
+    $('#tabla-filtros').DataTable({
+      "order": [[0, "asc"]],
+      "language": {
+        "decimal": ",",
+        "thousands": ".",
+        "processing": "Procesando...",
+        "search": "Buscar:",
+        "lengthMenu": "Mostrar _MENU_ registros",
+        "info": "Mostrando registros del _START_ al _END_ de un total de _TOTAL_ registros",
+        "infoEmpty": "Mostrando registros del 0 al 0 de un total de 0 registros",
+        "infoFiltered": "(filtrado de un total de _MAX_ registros)",
+        "loadingRecords": "Cargando...",
+        "zeroRecords": "No se encontraron resultados",
+        "emptyTable": "Ningún dato disponible en esta tabla",
+        "paginate": {
+          "first": "Primero",
+          "previous": "Anterior",
+          "next": "Siguiente",
+          "last": "Último"
+        },
+        "aria": {
+          "sortAscending": ": Activar para ordenar ascendente",
+          "sortDescending": ": Activar para ordenar descendente"
+        }
+      },
+      "autoWidth": false,
+      "scrollX": true
+    });
+  });
+</script>
+{% endblock script %}

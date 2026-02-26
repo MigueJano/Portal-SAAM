@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container mt-4 p-4 rounded shadow" style="background-color: #f8f9fa;">
+  <h4 class="mb-3">Agregar Producto</h4>
+  <form method="post" id="form-producto">
+    {% csrf_token %}
+
+    {% if form.errors %}
+      <div class="alert alert-danger">
+        <ul class="mb-0">
+          {% for field in form %}
+            {% for error in field.errors %}
+              <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+          {% for error in form.non_field_errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <!-- Cat / Subcat -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Categoría</label>
+        <select name="categoria_producto" class="form-select" required>
+          <option value="">Seleccione una categoría</option>
+          {% for cat in categorias %}
+            <option value="{{ cat.id }}">{{ cat.categoria }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Subcategoría</label>
+        <select name="subcategoria_producto" id="subcategoria-select" class="form-select" required>
+          <option value="">Seleccione una subcategoría</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Códigos -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Código interno</label>
+        <input type="text" name="codigo_producto_interno" class="form-control" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Nombre del producto</label>
+        <input type="text" name="nombre_producto" class="form-control" required>
+      </div>
+    </div>
+
+    <!-- Repetidor: Códigos de Proveedor (opcional) -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="mb-0">Códigos de proveedor (opcional)</h6>
+          <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-codigo">
+            <i class="bi bi-plus-circle"></i> Agregar código
+          </button>
+        </div>
+
+        <div id="codigos-wrapper" class="vstack gap-2">
+          <!-- Filas dinámicas se agregan aquí -->
+        </div>
+
+        <!-- plantilla oculta -->
+        <template id="tpl-codigo">
+          <div class="row g-2 align-items-end codigo-row">
+            <div class="col-md-5">
+              <label class="form-label mb-1">Proveedor</label>
+              <select class="form-select" name="codigos_proveedor[__idx__][proveedor]">
+                <option value="">-- Seleccione --</option>
+                {% if proveedores %}
+                  {% for prov in proveedores %}
+                    <option value="{{ prov.id }}">{{ prov.nombre_proveedor }}</option>
+                  {% endfor %}
+                {% endif %}
+              </select>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label mb-1">Código del proveedor</label>
+              <input type="text" class="form-control" name="codigos_proveedor[__idx__][codigo_proveedor]" placeholder="Ej: COD-123">
+            </div>
+            <div class="col-md-2 d-grid">
+              <button type="button" class="btn btn-outline-danger btn-remove-codigo">
+                <i class="bi bi-trash3"></i> Quitar
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <small class="text-muted d-block mt-2">
+          Puedes agregar varios códigos (por ejemplo si distintos proveedores usan códigos diferentes para el mismo producto).
+        </small>
+      </div>
+    </div>
+
+    <!-- Cantidades por empaque -->
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">
+          Cantidad por Empaque Terciario
+          <i class="bi bi-info-circle-fill text-primary ms-1" data-bs-toggle="tooltip" title="Unidad de transporte (pallet, contenedor)"></i>
+        </label>
+        <input type="number" name="qty_terciario" class="form-control" min="0" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">
+          Cantidad por Empaque Secundario
+          <i class="bi bi-info-circle-fill text-primary ms-1" data-bs-toggle="tooltip" title="Caja / agrupación intermedia (manga, caja, multipack)"></i>
+        </label>
+        <input type="number" name="qty_secundario" class="form-control" min="0" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">
+          Cantidad por Empaque Primario
+          <i class="bi bi-info-circle-fill text-primary ms-1" data-bs-toggle="tooltip" title="Unidad de venta/consumo (paquete, botella, caja)"></i>
+        </label>
+        <input type="number" name="qty_primario" class="form-control" min="0" required>
+      </div>
+    </div>
+
+    <!-- Selección de empaques -->
+    <div class="row mt-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Empaque Terciario (nombre visible)</label>
+        <select name="empaque_terciario" class="form-select">
+          <option value="">-- Seleccione --</option>
+          {% for empaque in empaques_terciarios %}
+            <option value="{{ empaque.id }}" {% if producto.empaque_terciario.id == empaque.id %}selected{% endif %}>{{ empaque.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Empaque Secundario (nombre visible)</label>
+        <select name="empaque_secundario" class="form-select">
+          <option value="">-- Seleccione --</option>
+          {% for empaque in empaques_secundarios %}
+            <option value="{{ empaque.id }}" {% if producto.empaque_secundario.id == empaque.id %}selected{% endif %}>{{ empaque.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Empaque Primario (nombre visible)</label>
+        <select name="empaque_primario" class="form-select">
+          <option value="">-- Seleccione --</option>
+          {% for empaque in empaques_primarios %}
+            <option value="{{ empaque.id }}" {% if producto.empaque_primario.id == empaque.id %}selected{% endif %}>{{ empaque.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <!-- Unidad / Stock mínimo -->
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Cantidad por Unidad</label>
+        <input type="number" name="qty_unidad" class="form-control" min="0" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Unidad de Medida</label>
+        <select name="medida" class="form-select" required>
+          {% for value, label in medidas %}
+            <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Cantidad Mínima Stock (Empaque PRIMARIO)</label>
+        <input type="number" name="qty_minima" class="form-control" min="0" required>
+      </div>
+    </div>
+
+    <!-- Botones -->
+    <div class="d-flex justify-content-end mt-4 gap-2">
+      <button type="submit" class="btn btn-outline-success">Guardar Producto</button>
+      <a href="{% url 'lista_productos' %}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<!-- Scripts -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Tooltips
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+
+    // Cat -> Subcat
+    const categoriaSelect = document.querySelector('select[name="categoria_producto"]');
+    const subcategoriaSelect = document.querySelector('#subcategoria-select');
+    categoriaSelect.addEventListener('change', function () {
+      const categoriaId = this.value || '';
+      subcategoriaSelect.innerHTML = '<option value="">Cargando...</option>';
+      if (!categoriaId) {
+        subcategoriaSelect.innerHTML = '<option value="">Seleccione una subcategoría</option>';
+        return;
+      }
+      fetch(`/ajax/subcategorias/?categoria_id=${categoriaId}`)
+        .then(r => r.json())
+        .then(data => {
+          subcategoriaSelect.innerHTML = '<option value="">Seleccione una subcategoría</option>';
+          data.forEach(sub => {
+            const opt = document.createElement('option');
+            opt.value = sub.id;
+            opt.textContent = sub.subcategoria;
+            subcategoriaSelect.appendChild(opt);
+          });
+        })
+        .catch(() => subcategoriaSelect.innerHTML = '<option value="">Error al cargar</option>');
+    });
+
+    // Repetidor de Códigos de Proveedor
+    const wrapper = document.getElementById('codigos-wrapper');
+    const btnAdd = document.getElementById('btn-add-codigo');
+    const tpl = document.getElementById('tpl-codigo').innerHTML.trim();
+    let idx = 0;
+
+    function addRow() {
+      const html = tpl.replaceAll('__idx__', String(idx++));
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      wrapper.appendChild(div.firstElementChild);
+    }
+
+    btnAdd?.addEventListener('click', addRow);
+    wrapper.addEventListener('click', function(e) {
+      if (e.target.closest('.btn-remove-codigo')) {
+        const row = e.target.closest('.codigo-row');
+        row?.remove();
+      }
+    });
+
+    // Arrancamos con una fila por defecto (opcional)
+    addRow();
+  });
+</script>
+{% endblock %}

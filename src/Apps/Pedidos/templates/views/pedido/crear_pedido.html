@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container">
+  <h4 class="mt-4 mb-3">Crear Pedido</h4>
+
+  <form method="post" class="row g-3">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    <!-- Cliente -->
+    <div class="col-md-6">
+      <label for="id_nombre_cliente" class="form-label">Cliente</label>
+      <select name="nombre_cliente" id="id_nombre_cliente" class="form-control" required>
+        <option value="">Seleccione un cliente</option>
+        {% for cliente in form.fields.nombre_cliente.queryset %}
+          <option value="{{ cliente.id }}"
+            {% if form.nombre_cliente.value|stringformat:"s" == cliente.id|stringformat:"s" %}
+              selected
+            {% endif %}>
+            {{ cliente.nombre_cliente }}
+          </option>
+        {% endfor %}
+      </select>
+      {{ form.nombre_cliente.errors }}
+    </div>
+
+    <!-- Cotización (opcional) -->
+    <div class="col-md-6">
+      <label for="id_num_cotizacion" class="form-label">Cotización</label>
+      <input 
+        type="text" 
+        name="num_cotizacion" 
+        id="id_num_cotizacion" 
+        class="form-control" 
+        value="{{ form.num_cotizacion.value|default_if_none:'' }}" 
+        placeholder="Número de cotización (opcional)">
+      {{ form.num_cotizacion.errors }}
+    </div>
+
+
+    <!-- Fecha Pedido -->
+    <div class="col-md-6">
+      <label for="id_fecha_pedido" class="form-label">Fecha Pedido</label>
+      <input type="date" class="form-control" name="fecha_pedido" id="id_fecha_pedido"
+        value="{{ form.fecha_pedido.value|date:'Y-m-d' }}" required>
+      {{ form.fecha_pedido.errors }}
+    </div>
+
+    <!-- Estado (solo lectura) -->
+    <div class="col-md-6">
+      <label for="id_estado_pedido" class="form-label">Estado</label>
+      
+      <!-- Campo visible pero deshabilitado -->
+      <select id="id_estado_pedido_display" class="form-control" disabled>
+        <option value="Pendiente" selected>Pendiente</option>
+      </select>
+
+      <!-- Campo oculto que sí se envía -->
+      <input type="hidden" name="estado_pedido" value="Pendiente">
+    </div>
+
+
+    <!-- Comentario (opcional) -->
+    <div class="col-12">
+      <label for="id_comentario_pedido" class="form-label">Comentario</label>
+      <textarea name="comentario_pedido" id="id_comentario_pedido" class="form-control" rows="3" maxlength="550" placeholder="Comentarios adicionales...">{{ form.comentario_pedido.value|default_if_none:"" }}</textarea>
+
+      {{ form.comentario_pedido.errors }}
+    </div>
+
+    <!-- Botones -->
+    <div class="d-flex justify-content-end mt-4 gap-2">
+      <button type="submit" class="btn btn-outline-primary me-2">Guardar Pedido</button>
+      <a href="{% url 'lista_pedidos' %}" class="btn btn-outline-secondary me-2">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
