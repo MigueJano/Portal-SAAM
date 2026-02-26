@@ -237,7 +237,7 @@ def crear_producto(request):
             messages.success(request, "Producto creado correctamente.")
             return redirect('lista_productos')
         else:
-            print(form.errors)  # 👈 DEBUG (opcional)
+            messages.error(request, "No fue posible crear el producto. Revisa los datos ingresados.")
 
     return render(request, 'views/producto/crear_producto.html', {
         'form': form,

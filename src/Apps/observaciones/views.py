@@ -1,5 +1,4 @@
-# Create your views here.
-from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
@@ -62,11 +61,13 @@ def crear_observacion(request):
         form = ObservacionForm(data, request.FILES)
         if form.is_valid():
             obj = form.save(commit=False)
-            # Guarda SIEMPRE el origen real en el modelo dedicado (p.ej. origen_url)
-            obj.origen_url = src
+            obj.url = src
+            obj.usuario = request.user
             obj.save()
             messages.success(request, "Observación enviada correctamente.")
-            return redirect("lista_observaciones")
+            if request.user.is_staff:
+                return redirect("lista_observaciones")
+            return redirect(src)
         else:
             # Muestra errores en página para ver qué está faltando
             messages.error(request, f"Revisa el formulario: {form.errors.as_text()}")
@@ -127,10 +128,6 @@ def marcar_lista_observacion(request, pk):
     messages.success(request, f"La observación #{obs.id} fue marcada como lista.")
     return redirect('resolver_observacion', pk=pk)
 
-from django.contrib.admin.views.decorators import staff_member_required
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
-
 @staff_member_required
 def resolver_observacion(request, pk: int):
     """
@@ -186,4 +183,3 @@ def resolver_observacion(request, pk: int):
         'form': form,
         'observacion': obs,
     })
-

@@ -12,10 +12,8 @@ Fecha de documentación: 2025-08-04
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import FileResponse
-from django.contrib import messages
-
-from django.conf import settings
 from django.utils import timezone
+from django.core.files.base import ContentFile
 
 from Apps.Pedidos.forms import SeleccionarClienteForm
 from Apps.Pedidos.models import Cliente, ListaPrecios, Cotizacion
@@ -31,16 +29,12 @@ def seleccionar_cliente_cotizacion(request):
 
     Redirige a la vista de selección de productos.
     """
-    if request.method == 'POST':
-        form_cliente = SeleccionarClienteForm(request.POST)
-        if form_cliente.is_valid():
-            cliente = form_cliente.cleaned_data['cliente']
-            print(f"[DEBUG] Cliente seleccionado: {cliente} (ID: {cliente.id})")
-            return redirect('seleccionar_productos_cotizacion', cliente_id=cliente.id)
-    else:
-        form = SeleccionarClienteForm()
+    form_cliente = SeleccionarClienteForm(request.POST or None)
+    if request.method == 'POST' and form_cliente.is_valid():
+        cliente = form_cliente.cleaned_data['cliente']
+        return redirect('seleccionar_productos_cotizacion', cliente_id=cliente.id)
 
-    return render(request, './views/cotizacion/crear_cotizacion.html', {'form_cliente': form})
+    return render(request, './views/cotizacion/crear_cotizacion.html', {'form_cliente': form_cliente})
 
 
 def seleccionar_productos_cotizacion(request, cliente_id):
@@ -52,16 +46,6 @@ def seleccionar_productos_cotizacion(request, cliente_id):
     """
     cliente = get_object_or_404(Cliente, id=cliente_id)
     productos = ListaPrecios.objects.filter(nombre_cliente=cliente)
-
-    if request.method == "POST":
-        productos_seleccionados = request.POST.getlist("producto_id")
-        print(f"[DEBUG] Productos seleccionados: {productos_seleccionados}")
-
-        request.session["productos_seleccionados"] = productos_seleccionados
-        request.session["cliente_id"] = cliente.id
-
-        print("[DEBUG] Redirigiendo a vista previa...")
-        return redirect("vista_previa_cotizacion")
 
     return render(request, "./views/cotizacion/seleccionar_productos.html", {
         "cliente": cliente,
@@ -78,9 +62,6 @@ def vista_previa_cotizacion(request):
     Retorna:
         vista_previa_pdf.html con el enlace al PDF generado
     """
-    from Apps.Pedidos.utils_pdf import generar_pdf_cotizacion
-    import os
-
     if request.method == "POST":
         cliente_id = request.POST.get('cliente_id')
         productos_ids = request.POST.getlist('producto_id')
@@ -125,39 +106,26 @@ def vista_previa_cotizacion(request):
             })
 
         # Crear la instancia de Cotización
-        cotizacion = Cotizacion(fecha_cotizacion=timezone.now(), nombre_cliente=cliente)
+        cotizacion = Cotizacion(fecha_cotizacion=timezone.localdate(), nombre_cliente=cliente)
         cotizacion.save()
 
         # Generar el PDF
-        buffer = generar_pdf_cotizacion(request, cliente, items, cotizacion)
-
-        from django.core.files.base import File
-        import os
+        try:
+            from Apps.Pedidos.utils_pdf import generar_pdf_cotizacion
+            buffer = generar_pdf_cotizacion(request, cliente, items, cotizacion)
+        except Exception as e:
+            cotizacion.delete()
+            return render(request, 'views/cotizacion/error.html', {
+                'mensaje': f'No se pudo generar el PDF en este entorno: {e}'
+            })
 
         nombre_archivo = f"cotizacion_{cotizacion.num_cotizacion}.pdf"
-        ruta_relativa = f"cotizaciones_pdfs/{nombre_archivo}"
-        ruta_completa = os.path.join(settings.MEDIA_ROOT, ruta_relativa)
-
-        # ✅ ELIMINA SI YA EXISTE
-        if os.path.exists(ruta_completa):
-            os.remove(ruta_completa)
-
-        # Crea carpeta si no existe
-        os.makedirs(os.path.dirname(ruta_completa), exist_ok=True)
-
-        # Guarda el archivo en disco
-        with open(ruta_completa, 'wb') as f:
-            f.write(buffer.getbuffer())
-
-        # Asigna el archivo al campo archivo_pdf
-        with open(ruta_completa, 'rb') as f:
-            cotizacion.archivo_pdf.save(nombre_archivo, File(f), save=True)
-
-        pdf_url = settings.MEDIA_URL + ruta_relativa
+        cotizacion.archivo_pdf.save(nombre_archivo, ContentFile(buffer.getvalue()), save=True)
+        request.session["ultima_cotizacion_id"] = cotizacion.id
 
         return render(request, 'views/cotizacion/vista_previa_pdf.html', {
             'cliente': cliente,
-            'pdf_url': pdf_url,
+            'pdf_url': cotizacion.archivo_pdf.url,
             'cotizacion': cotizacion,
         })
 
@@ -173,14 +141,19 @@ def descargar_cotizacion_pdf(request):
     Retorna:
         FileResponse con el PDF (hexadecimal desde sesión).
     """
-    from io import BytesIO
+    cotizacion_id = request.GET.get("id") or request.session.get("ultima_cotizacion_id")
+    if not cotizacion_id:
+        return redirect("lista_cotizaciones")
 
-    data = request.session.get("cotizacion_pdf_bytes")
-    if not data:
-        return redirect("home")
+    cotizacion = get_object_or_404(Cotizacion, id=cotizacion_id)
+    if not cotizacion.archivo_pdf:
+        return redirect("lista_cotizaciones")
 
-    buffer = BytesIO(bytes.fromhex(data))
-    return FileResponse(buffer, as_attachment=True, filename="cotizacion.pdf")
+    return FileResponse(
+        cotizacion.archivo_pdf.open("rb"),
+        as_attachment=True,
+        filename=f"cotizacion_{cotizacion.num_cotizacion}.pdf"
+    )
 
 
 def lista_cotizaciones(request):

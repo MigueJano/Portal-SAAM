@@ -14,4 +14,7 @@ urlpatterns = [
 
     # 🔐 Cierre de sesión
     path('logout/', views.logout_view, name='logout'),
+
+    # 🗄️ Descarga de respaldo de BD
+    path('base-datos/', views.base_datos, name='base_datos'),
 ]

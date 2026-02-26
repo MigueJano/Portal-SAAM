@@ -16,7 +16,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 # Modelos importados
 from .models import (
     Producto, Proveedor, Contacto, Recepcion, Stock, Cliente, ListaPrecios,
-    Subcategoria, Pedido, CategoriaEmpaque, Venta
+    Subcategoria, Pedido, Cotizacion, CategoriaEmpaque, Venta
 )
 
 #Constantes
@@ -204,7 +204,8 @@ class CrearRecepcionForm(forms.ModelForm):
             'total_neto_recepcion',
             'moneda_recepcion',
             'incluir_iva',
-            'proveedor'
+            'proveedor',
+            'comentario_recepcion',
         ]
         widgets = {
             'fecha_recepcion': forms.DateInput(
@@ -217,6 +218,7 @@ class CrearRecepcionForm(forms.ModelForm):
             'num_documento_recepcion': forms.TextInput(attrs={'class': 'form-control'}),
             'total_neto_recepcion': forms.TextInput(attrs={'class': 'form-control'}),
             'proveedor': forms.Select(attrs={'class': 'form-control'}),
+            'comentario_recepcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'maxlength': 500}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -235,16 +237,28 @@ class CrearRecepcionForm(forms.ModelForm):
         Limpia y convierte el monto ingresado a Decimal, eliminando caracteres especiales.
         Asegura que el valor sea no negativo y válido según norma del SII.
         """
-        monto_raw = self.data.get('total_neto_recepcion', '')
+        monto_raw = (self.data.get('total_neto_recepcion', '') or '').strip()
+        if not monto_raw:
+            return Decimal('0.00')
+
+        monto_raw = monto_raw.replace("$", "").replace(" ", "")
+        # Soporta "1.234,56" y "1234.56"
+        if "," in monto_raw and "." in monto_raw:
+            monto_raw = monto_raw.replace(".", "").replace(",", ".")
+        elif "," in monto_raw:
+            monto_raw = monto_raw.replace(",", ".")
+
         try:
-            monto_clean = Decimal(
-                monto_raw.replace("$", "").replace(".", "").replace(",", ".")
-            )
+            monto_clean = Decimal(monto_raw)
         except (InvalidOperation, ValueError):
             raise ValidationError("Formato de monto inválido.")
         if monto_clean < 0:
             raise ValidationError("El monto neto no puede ser negativo.")
         return monto_clean.quantize(DOS_DECIMALES, rounding=ROUND_HALF_UP)
+
+    def clean_comentario_recepcion(self):
+        comentario = (self.cleaned_data.get('comentario_recepcion') or '').strip()
+        return comentario
 
     def clean(self):
         """
@@ -524,6 +538,12 @@ class PedidoForm(forms.ModelForm):
     Permite ingresar la fecha, estado actual y comentarios adicionales del pedido.
     """
 
+    num_cotizacion = forms.CharField(
+        required=False,
+        label='Cotización (opcional)',
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Número de cotización (opcional)'})
+    )
+
     class Meta:
         model = Pedido
         fields = ['nombre_cliente', 'fecha_pedido', 'estado_pedido', 'comentario_pedido']
@@ -539,6 +559,47 @@ class PedidoForm(forms.ModelForm):
             'estado_pedido': forms.Select(attrs={'class': 'form-control'}),
             'comentario_pedido': forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._cotizacion_obj = None
+
+        # Mostrar número de cotización actual al editar.
+        if self.instance and self.instance.pk and self.instance.num_cotizacion:
+            self.fields['num_cotizacion'].initial = self.instance.num_cotizacion.num_cotizacion
+
+    def clean_num_cotizacion(self):
+        numero = (self.cleaned_data.get('num_cotizacion') or '').strip()
+        if not numero:
+            self._cotizacion_obj = None
+            return ''
+
+        cotizacion = Cotizacion.objects.filter(num_cotizacion=numero).select_related('nombre_cliente').first()
+        if not cotizacion:
+            raise ValidationError("No existe una cotización con ese número.")
+        self._cotizacion_obj = cotizacion
+        return numero
+
+    def clean(self):
+        cleaned_data = super().clean()
+        cliente = cleaned_data.get('nombre_cliente')
+        cot = getattr(self, '_cotizacion_obj', None)
+
+        if cot and cliente and cot.nombre_cliente_id != cliente.id:
+            self.add_error(
+                'num_cotizacion',
+                "La cotización no corresponde al cliente seleccionado."
+            )
+        return cleaned_data
+
+    def save(self, commit=True):
+        instancia = super().save(commit=False)
+        instancia.num_cotizacion = getattr(self, '_cotizacion_obj', None)
+
+        if commit:
+            instancia.save()
+            self.save_m2m()
+        return instancia
 
 class SeleccionarClienteForm(forms.Form):
     """

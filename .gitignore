@@ -45,6 +45,7 @@ htmlcov/
 .DS_Store
 Thumbs.db
 *.Identifier
+*:Zone.Identifier
 
 #version documentación
 docs/

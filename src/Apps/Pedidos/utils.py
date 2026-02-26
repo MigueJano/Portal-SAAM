@@ -18,7 +18,6 @@ Autor: Miguel Plasencia
 Proyecto: Portal SAAM
 """
 
-from reportlab.lib.pagesizes import letter
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.db import transaction
@@ -151,48 +150,6 @@ def eliminar_generica(request, modelo, id, redirect_name, template='./views/apps
     ]
 
     # Contexto para renderizar el template de confirmación
-    contexto = {
-        'modelo': modelo.__name__,
-        'campos': campos,
-        modelo.__name__.lower(): instancia
-    }
-
-    return render(request, template, contexto)
-
-    """
-    Vista genérica para eliminar objetos de cualquier modelo.
-
-    Args:
-        request (HttpRequest): La solicitud HTTP.
-        modelo (Model): El modelo del objeto a eliminar.
-        id (int): ID del objeto.
-        redirect_name (str): Nombre de la vista a la que se redirige tras eliminar.
-        template (str): Template de confirmación de eliminación.
-
-    Returns:
-        HttpResponse: Página de confirmación o redirección tras eliminar.
-    """
-    instancia = get_object_or_404(modelo, pk=id)
-    logger = obtener_logger()
-
-    if request.method == 'POST':
-        try:
-            datos_eliminados = {
-                f.name: str(getattr(instancia, f.name)) if not isinstance(getattr(instancia, f.name), Decimal)
-                else f"{getattr(instancia, f.name):.2f}"
-                for f in modelo._meta.fields
-            }
-            logger.info(f"Eliminación de {modelo.__name__} ID={id}: {datos_eliminados}")
-            instancia.delete()
-            messages.success(request, f"{modelo.__name__} eliminado correctamente.")
-            return redirect(redirect_name)
-        except Exception as e:
-            logger.error(f"Error al eliminar {modelo.__name__} ID={id}: {e}")
-            messages.error(request, f"No se pudo eliminar: {e}")
-            return redirect(redirect_name)
-
-    campos = [{'nombre': f.verbose_name.title() if f.verbose_name else f.name, 'valor': getattr(instancia, f.name, '')} for f in modelo._meta.fields]
-
     contexto = {
         'modelo': modelo.__name__,
         'campos': campos,

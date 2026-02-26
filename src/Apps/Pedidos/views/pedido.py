@@ -8,20 +8,21 @@ Este módulo incluye funcionalidades para:
 - Exportar pedidos en PDF.
 - Ver pedidos en proceso.
 """
-import base64, uuid
+import base64
+import uuid
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.forms import formset_factory
 from django.views.decorators.http import require_POST
 from django.http import HttpResponse
-from django.db.models import Sum,F, ExpressionWrapper, DecimalField
+from django.db import transaction
+from django.db.models import Sum, F, ExpressionWrapper, DecimalField
 from django.core.files.base import ContentFile
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 
 from Apps.Pedidos.models import Pedido, Stock, Producto, ListaPrecios, EntregaPedido
 from Apps.Pedidos.forms import PedidoForm, ProductoReservaForm
-from Apps.Pedidos.utils_pdf import generar_pdf_pedido, generar_pdf_entrega
 
 # --- Decimal helpers ---
 from decimal import Decimal, ROUND_HALF_UP
@@ -33,7 +34,8 @@ CIEN    = Decimal('100')
 
 def eliminar_pedido(request, id):
     """
-    Elimina un pedido si no está finalizado, junto a sus productos reservados.
+    Elimina un pedido si no está finalizado.
+    Requiere confirmación explícita vía POST.
     """
     pedido = get_object_or_404(Pedido, id=id)
 
@@ -41,10 +43,24 @@ def eliminar_pedido(request, id):
         messages.error(request, "No se puede eliminar un pedido finalizado.")
         return redirect('lista_pedidos')
 
-    Stock.objects.filter(pedido=pedido).delete()
-    pedido.delete()
-    messages.success(request, "Pedido y productos asociados eliminados correctamente.")
-    return redirect('lista_pedidos')
+    if request.method == 'POST':
+        with transaction.atomic():
+            Stock.objects.filter(pedido=pedido).delete()
+            pedido.delete()
+        messages.success(request, "Pedido y productos asociados eliminados correctamente.")
+        return redirect('lista_pedidos')
+
+    campos = [
+        {'nombre': 'Cliente', 'valor': pedido.nombre_cliente},
+        {'nombre': 'Fecha Pedido', 'valor': pedido.fecha_pedido},
+        {'nombre': 'Estado', 'valor': pedido.estado_pedido},
+        {'nombre': 'Cotización', 'valor': pedido.num_cotizacion or 'Sin cotización'},
+    ]
+    return render(request, './views/apps/confirmar_eliminar.html', {
+        'modelo': 'Pedido',
+        'campos': campos,
+        'pedido': pedido,
+    })
 
 
 def crear_pedido(request):
@@ -56,6 +72,7 @@ def crear_pedido(request):
         if form.is_valid():
             pedido = form.save()
             return redirect('agregar_productos_pedido', pedido_id=pedido.id)
+        messages.error(request, "No fue posible crear el pedido. Revisa los datos ingresados.")
     else:
         form = PedidoForm()
 
@@ -282,6 +299,11 @@ def exportar_pdf_pedido(request, pedido_id):
     Genera y devuelve el PDF del pedido con los productos reservados.
     """
     pedido = get_object_or_404(Pedido, id=pedido_id)
+    try:
+        from Apps.Pedidos.utils_pdf import generar_pdf_pedido
+    except Exception as e:
+        messages.error(request, f"No se pudo generar el PDF en este entorno: {e}")
+        return redirect('detalle_pedido', pedido_id=pedido.id)
 
     if pedido.estado_pedido == 'Entregado':
         reservas = Stock.objects.filter(pedido=pedido, tipo_movimiento='DESPACHO')
@@ -360,12 +382,9 @@ def finalizar_pedido(request, pedido_id):
     - Marca el pedido como 'Entregado'.
     - Actualiza Stock de RESERVA -> DESPACHO.
     """
-    print(f"[DEBUG] finalizar_pedido(): pedido_id={pedido_id}")
     pedido = get_object_or_404(Pedido, pk=pedido_id)
-    print(f"[DEBUG] método={request.method}")
 
     if request.method != 'POST':
-        print("[DEBUG] no-POST, redirigiendo")
         return redirect('detalle_pedido', pedido_id=pedido.id)
 
     # --- Datos del formulario ---
@@ -373,14 +392,10 @@ def finalizar_pedido(request, pedido_id):
     rut = (request.POST.get('entrega_rut') or '').strip()
     fecha_str = request.POST.get('entrega_fecha')
     firma_dataurl = request.POST.get('entrega_firma')
-    foto_file = request.FILES.get('entrega_foto')  # opcional (no se incrusta en PDF)
-
-    print(f"[DEBUG] datos form | nombre={nombre} rut={rut} fecha_str={fecha_str} "
-          f"firma={'sí' if firma_dataurl else 'no'} foto={'sí' if foto_file else 'no'}")
+    foto_file = request.FILES.get('entrega_foto')
 
     # Validaciones mínimas
     if not (nombre and rut and fecha_str and firma_dataurl):
-        print("[ERROR] faltan campos obligatorios (nombre/rut/fecha/firma)")
         messages.error(request, "Faltan datos obligatorios o la firma.")
         return redirect('detalle_pedido', pedido_id=pedido.id)
 
@@ -397,72 +412,53 @@ def finalizar_pedido(request, pedido_id):
         if firma_dataurl.startswith('data:image'):
             _, b64data = firma_dataurl.split(',', 1)
             firma_bytes = base64.b64decode(b64data)
-            print(f"[DEBUG] firma decodificada OK | bytes={len(firma_bytes)}")
+        else:
+            raise ValueError("Formato de firma inválido.")
     except Exception as e:
-        print(f"[ERROR] decodificando firma: {e}")
         messages.error(request, f"Error al procesar la firma: {e}")
         return redirect('detalle_pedido', pedido_id=pedido.id)
 
-    # Si en el futuro agregas campo ImageField en EntregaPedido, podrás guardar foto_file allí.
-    if foto_file:
-        try:
-            _ = foto_file.size  # lectura ligera solo para debug
-            print(f"[DEBUG] foto recibida | size={foto_file.size} bytes")
-        except Exception as e:
-            print(f"[WARN] no se pudo leer tamaño de foto: {e}")
+    reservas = Stock.objects.filter(pedido=pedido, tipo_movimiento='RESERVA')
+    if not reservas.exists():
+        messages.warning(request, "El pedido no tiene productos en reserva para entregar.")
+        return redirect('detalle_pedido', pedido_id=pedido.id)
 
     # --- Generar PDF de Recepción (estilo Pedido) ---
     try:
-        reservas = Stock.objects.filter(pedido=pedido, tipo_movimiento='RESERVA')
+        from Apps.Pedidos.utils_pdf import generar_pdf_entrega
+
         receptor = {
             'nombre': nombre,
             'rut': rut,
             'fecha': fecha,
             'comentario': getattr(pedido, 'comentario_pedido', ''),
         }
-        print("[DEBUG] generando PDF de recepción (estilo pedido)...")
         pdf_bytes = generar_pdf_entrega(pedido, reservas, receptor, firma_bytes=firma_bytes)
-        print(f"[DEBUG] PDF generado | bytes={len(pdf_bytes)}")
     except Exception as e:
-        print(f"[ERROR] generar_pdf_entrega: {e}")
         messages.error(request, f"No se pudo generar el PDF: {e}")
         return redirect('detalle_pedido', pedido_id=pedido.id)
 
-    # --- Crear EntregaPedido y adjuntar PDF ---
+    # --- Crear EntregaPedido, marcar estado y mover stock ---
     try:
-        entrega = EntregaPedido.objects.create(
-            pedido=pedido,
-            nombre_receptor=nombre,
-            rut_receptor=rut,
-            fecha_entrega=fecha,
-        )
-        filename = f"entrega_pedido_{pedido.id}_{uuid.uuid4().hex}.pdf"
-        entrega.archivo_pdf.save(filename, ContentFile(pdf_bytes), save=True)
-        print(f"[DEBUG] Entrega creada id={entrega.id} y PDF guardado")
-        if foto_file:
-            entrega.foto = foto_file
-            entrega.save(update_fields=['foto'])
-    except Exception as e:
-        print(f"[ERROR] guardando Entrega/PDF: {e}")
-        messages.error(request, f"Entrega creada, pero falló guardar el PDF: {e}")
+        with transaction.atomic():
+            entrega = EntregaPedido.objects.create(
+                pedido=pedido,
+                nombre_receptor=nombre,
+                rut_receptor=rut,
+                fecha_entrega=fecha,
+                foto=foto_file if foto_file else None,
+            )
+            filename = f"entrega_pedido_{pedido.id}_{uuid.uuid4().hex}.pdf"
+            entrega.archivo_pdf.save(filename, ContentFile(pdf_bytes), save=False)
+            entrega.save(update_fields=['archivo_pdf', 'foto'] if foto_file else ['archivo_pdf'])
 
-    # --- Marcar pedido como Entregado ---
-    try:
-        pedido.estado_pedido = 'Entregado'
-        pedido.save(update_fields=['estado_pedido'])
-        print("[DEBUG] pedido marcado como Entregado")
-    except Exception as e:
-        print(f"[ERROR] actualizando estado pedido: {e}")
-        messages.error(request, f"Entrega registrada, pero no se pudo actualizar el estado del pedido: {e}")
+            pedido.estado_pedido = 'Entregado'
+            pedido.save(update_fields=['estado_pedido'])
 
-    # --- Actualizar Stock: RESERVA -> DESPACHO ---
-    try:
-        movs = Stock.objects.filter(pedido=pedido, tipo_movimiento='RESERVA')
-        updated = movs.update(tipo_movimiento='DESPACHO', fecha_movimiento=timezone.now())
-        print(f"[DEBUG] stock actualizado RESERVA->DESPACHO: {updated}")
+            reservas.update(tipo_movimiento='DESPACHO')
     except Exception as e:
-        print(f"[ERROR] actualizando stock: {e}")
-        messages.warning(request, f"Pedido entregado, pero hubo un problema actualizando el stock: {e}")
+        messages.error(request, f"No se pudo registrar la entrega: {e}")
+        return redirect('detalle_pedido', pedido_id=pedido.id)
 
     messages.success(request, "Entrega registrada, PDF generado y pedido marcado como ENTREGADO.")
     return redirect('detalle_pedido', pedido_id=pedido.id)

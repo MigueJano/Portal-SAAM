@@ -254,10 +254,9 @@ class Stock(models.Model):
     Movimientos de inventario: ingreso, reserva, salida.
     """
     UNIDAD_EMPAQUE = [
-        ('PRIMARIO', 'Unidad'),
-        ('PRIMARIO', 'Paquete'),
-        ('SECUNDARIO', 'Manga'),
-        ('SECUNDARIO', 'Multipack'),
+        ('PRIMARIO', 'Primario'),
+        ('SECUNDARIO', 'Secundario'),
+        ('TERCIARIO', 'Terciario'),
     ]
 
     MOVIMIENTO_CHOICES = [
@@ -432,7 +431,7 @@ class EntregaPedido(models.Model):
     fecha_entrega = models.DateTimeField()
     archivo_pdf = models.FileField(upload_to='entregas_pdf/%Y/%m/', blank=True, null=True)  # único archivo
     creado = models.DateTimeField(auto_now_add=True)
-    foto = models.ImageField(upload_to='entregas_fotos/%Y/%m/', blank=True, null=True)
+    foto = models.FileField(upload_to='entregas_fotos/%Y/%m/', blank=True, null=True)
 
     def __str__(self):
         return f"Entrega {self.id} - Pedido {self.pedido_id}"

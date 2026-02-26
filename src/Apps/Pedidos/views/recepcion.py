@@ -12,9 +12,6 @@ Fecha de generación automática: 2025-08-04
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.db.models import Sum
-from django.http import JsonResponse
-from django.utils import timezone
 from django.views.decorators.http import require_POST
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -40,12 +37,11 @@ def crear_recepcion(request):
     if request.method == 'POST':
         form = CrearRecepcionForm(request.POST)
         if form.is_valid():
-            nueva_recepcion = form.save(commit=False)
-            nueva_recepcion.usuario = request.user
-            nueva_recepcion.save()
+            nueva_recepcion = form.save()
             nueva_recepcion.actualizar_totales()
             messages.success(request, "Recepción creada correctamente.")
             return redirect('lista_recepcion')
+        messages.error(request, "No fue posible crear la recepción. Revisa los datos ingresados.")
     else:
         form = CrearRecepcionForm()
 
@@ -56,34 +52,22 @@ def crear_recepcion(request):
 
 def editar_recepcion(request, id):
     recepcion = get_object_or_404(Recepcion, id=id)
-    proveedores = Proveedor.objects.all()
-    if request.method == 'POST':
-        form = CrearRecepcionForm(request.POST, instance=recepcion)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Recepción actualizada.")
-            return redirect('lista_recepcion')
-    else:
-        form = CrearRecepcionForm(instance=recepcion)
-    return render(request, './views/recepcion/editar_recepcion.html', {'form': form, 'recepcion': recepcion, 'proveedores': proveedores})
-
-
     proveedores = Proveedor.objects.all().order_by('nombre_proveedor')
 
     if request.method == 'POST':
-        form = CrearRecepcionForm(request.POST)
+        form = CrearRecepcionForm(request.POST, instance=recepcion)
         if form.is_valid():
-            nueva_recepcion = form.save(commit=False)
-            nueva_recepcion.usuario = request.user
-            nueva_recepcion.save()
-            nueva_recepcion.actualizar_totales()
-            messages.success(request, "Recepción creada correctamente.")
+            recepcion = form.save()
+            recepcion.actualizar_totales()
+            messages.success(request, "Recepción actualizada.")
             return redirect('lista_recepcion')
+        messages.error(request, "No fue posible actualizar la recepción. Revisa los datos ingresados.")
     else:
-        form = CrearRecepcionForm()
+        form = CrearRecepcionForm(instance=recepcion)
 
-    return render(request, './views/recepcion/crear_recepcion.html', {
+    return render(request, './views/recepcion/editar_recepcion.html', {
         'form': form,
+        'recepcion': recepcion,
         'proveedores': proveedores
     })
 
