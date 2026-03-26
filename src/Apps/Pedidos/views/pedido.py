@@ -23,6 +23,7 @@ from django.utils import timezone
 
 from Apps.Pedidos.models import Pedido, Stock, Producto, ListaPrecios, EntregaPedido
 from Apps.Pedidos.forms import PedidoForm, ProductoReservaForm
+from Apps.Pedidos.services import registrar_movimiento_stock, registrar_movimientos_stock
 
 # --- Decimal helpers ---
 from decimal import Decimal, ROUND_HALF_UP
@@ -114,13 +115,17 @@ def agregar_productos_pedido(request, pedido_id):
 
                     total_neto += Decimal(qty) * precio_unitario
 
-                    Stock.objects.create(
+                    reserva = Stock.objects.create(
                         tipo_movimiento='RESERVA',
                         producto=producto,
                         qty=qty,
                         empaque=empaque_normalizado,
                         precio_unitario=precio_unitario,
                         pedido=pedido
+                    )
+                    registrar_movimiento_stock(
+                        reserva,
+                        responsable=request.user,
                     )
 
             total_neto = total_neto.quantize(DOS_DEC, rounding=ROUND_HALF_UP)
@@ -455,6 +460,13 @@ def finalizar_pedido(request, pedido_id):
             pedido.estado_pedido = 'Entregado'
             pedido.save(update_fields=['estado_pedido'])
 
+            reservas_list = list(reservas)
+            registrar_movimientos_stock(
+                reservas_list,
+                tipo_movimiento='DESPACHO',
+                responsable=request.user,
+                fecha_movimiento=timezone.now(),
+            )
             reservas.update(tipo_movimiento='DESPACHO')
     except Exception as e:
         messages.error(request, f"No se pudo registrar la entrega: {e}")

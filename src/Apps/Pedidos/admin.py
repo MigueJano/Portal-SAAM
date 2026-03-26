@@ -11,7 +11,7 @@ from decimal import Decimal
 from .models import (
     Proveedor, Contacto, Recepcion, Producto, CodigoProveedor, Stock, ListaPrecios, Cliente,
     Pedido, Venta, Categoria, Subcategoria, Cotizacion, CategoriaEmpaque,
-    EntregaPedido, ListaPreciosPredeterminada, ListaPreciosPredItem,
+    EntregaPedido, ListaPreciosPredeterminada, ListaPreciosPredItem, MovimientoStockHistorico,
 )
 
 # ---------- Inlines ----------
@@ -139,6 +139,17 @@ class StockAdmin(admin.ModelAdmin):
     ordering = ('-id',)
     autocomplete_fields = ('producto', 'recepcion', 'pedido')
     list_select_related = ('producto', 'recepcion', 'pedido')
+
+
+@admin.register(MovimientoStockHistorico)
+class MovimientoStockHistoricoAdmin(admin.ModelAdmin):
+    list_display = ('id', 'tipo_movimiento', 'stock', 'qty', 'empaque', 'precio_unitario', 'fecha_movimiento', 'responsable')
+    search_fields = ('stock__producto__nombre_producto', 'stock__recepcion__num_documento_recepcion', 'stock__pedido__id', 'responsable__username')
+    list_filter = ('tipo_movimiento', 'empaque', 'fecha_movimiento')
+    date_hierarchy = 'fecha_movimiento'
+    ordering = ('-id',)
+    autocomplete_fields = ('stock', 'responsable')
+    list_select_related = ('stock__producto', 'stock__recepcion', 'stock__pedido', 'responsable')
 
 
 @admin.register(ListaPrecios)

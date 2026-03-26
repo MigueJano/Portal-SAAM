@@ -17,6 +17,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from Apps.Pedidos.models import Proveedor, Producto, Stock, Recepcion, CategoriaEmpaque, CodigoProveedor
 from Apps.Pedidos.forms import CrearRecepcionForm, CrearRecepcionProductoForm
+from Apps.Pedidos.services import registrar_movimiento_stock
 from Apps.Pedidos.utils import eliminar_generica
 
 # --- Constantes Decimal ---
@@ -97,6 +98,7 @@ def crear_recepcion_productos(request, recepcion_id):
             # linea.codigo_proveedor_usado = (request.POST.get('codigo_proveedor_usado') or '').strip()[:50]
 
             linea.save()
+            registrar_movimiento_stock(linea, responsable=request.user)
 
             # Actualiza neto/iva/total de la recepción
             try:

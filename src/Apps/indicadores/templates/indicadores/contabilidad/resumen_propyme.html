@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mt-3 mb-3">
+    <h1 class="h4 mb-0">Contabilidad Pro Pyme</h1>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'exportar_libro_ventas_propyme' %}?year={{ periodo.year }}&month={{ periodo.month }}">Libro Ventas CSV</a>
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'exportar_libro_compras_propyme' %}?year={{ periodo.year }}&month={{ periodo.month }}">Libro Compras CSV</a>
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'exportar_inventario_propyme' %}?year={{ periodo.year }}&month={{ periodo.month }}">Inventario CSV</a>
+      <a class="btn btn-outline-success btn-sm" href="{% url 'exportar_libros_propyme_zip' %}?year={{ periodo.year }}&month={{ periodo.month }}">Paquete ZIP</a>
+    </div>
+  </div>
+
+  <form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-md-3">
+      <label class="form-label">Mes</label>
+      <select class="form-select" name="month">
+        {% for m, nombre in meses %}
+          <option value="{{ m }}" {% if m == periodo.month %}selected{% endif %}>{{ nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Año</label>
+      <input type="number" class="form-control" name="year" value="{{ periodo.year }}" min="2000" max="2100">
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-outline-secondary w-100">Actualizar</button>
+    </div>
+  </form>
+
+  <div class="row g-2 mb-3">
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Ventas (Neto)</div>
+          <div class="h5 mb-0">$ {{ resumen.ventas_total_neto|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Compras (Neto)</div>
+          <div class="h5 mb-0">$ {{ resumen.compras_total_neto|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Margen Bruto</div>
+          <div class="h5 mb-0">$ {{ resumen.margen_bruto|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Valor Inventario</div>
+          <div class="h5 mb-0">$ {{ total_stock_ref|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-responsive mb-4">
+    <h2 class="h6">Revision de Ventas del Periodo ({{ resumen.ventas_count }})</h2>
+    <table class="table table-striped table-bordered table-sm">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Tipo Doc</th>
+          <th>Folio</th>
+          <th>Fecha</th>
+          <th>RUT Receptor</th>
+          <th>Cliente</th>
+          <th>Neto</th>
+          <th>IVA</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in ventas_rows %}
+          <tr>
+            <td>{{ row.tipo_documento }}</td>
+            <td class="text-center">{{ row.folio }}</td>
+            <td class="text-center">{{ row.fecha_emision }}</td>
+            <td>{{ row.rut_receptor }}</td>
+            <td>{{ row.razon_social_receptor }}</td>
+            <td class="text-end">$ {{ row.monto_neto|formatear_miles }}</td>
+            <td class="text-end">$ {{ row.monto_iva|formatear_miles }}</td>
+            <td class="text-end">$ {{ row.monto_total|formatear_miles }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8" class="text-center text-muted">Sin ventas en el periodo.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-responsive mb-4">
+    <h2 class="h6">Revision de Compras del Periodo ({{ resumen.compras_count }})</h2>
+    <table class="table table-striped table-bordered table-sm">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Tipo Doc</th>
+          <th>Folio</th>
+          <th>Fecha</th>
+          <th>RUT Emisor</th>
+          <th>Proveedor</th>
+          <th>Neto</th>
+          <th>IVA</th>
+          <th>Total</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in compras_rows %}
+          <tr>
+            <td>{{ row.tipo_documento }}</td>
+            <td class="text-center">{{ row.folio }}</td>
+            <td class="text-center">{{ row.fecha_emision }}</td>
+            <td>{{ row.rut_emisor }}</td>
+            <td>{{ row.razon_social_emisor }}</td>
+            <td class="text-end">$ {{ row.monto_neto|formatear_miles }}</td>
+            <td class="text-end">$ {{ row.monto_iva|formatear_miles }}</td>
+            <td class="text-end">$ {{ row.monto_total|formatear_miles }}</td>
+            <td class="text-center">{{ row.estado_dte }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="9" class="text-center text-muted">Sin compras en el periodo.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-responsive">
+    <h2 class="h6">Revision de Stock Contable ({{ stock_rows|length }})</h2>
+    <table class="table table-striped table-bordered table-sm">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Codigo</th>
+          <th>Producto</th>
+          <th>Stock Disponible</th>
+          <th>Despachos</th>
+          <th>Valor Producto Unitario</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in stock_rows %}
+          <tr>
+            <td>{{ row.codigo_interno }}</td>
+            <td>{{ row.producto }}</td>
+            <td class="text-end">{{ row.cantidad_disponible_uprim|formatear_miles }}</td>
+            <td class="text-end">{{ row.cantidad_despachada_uprim|formatear_miles }}</td>
+            <td class="text-end">$ {{ row.valor_producto_unitario|formatear_miles }}</td>
+            <td class="text-end">$ {{ row.total_producto|formatear_miles }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-center text-muted">Sin datos de inventario.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

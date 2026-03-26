@@ -6,10 +6,12 @@ pedidos, ventas, y todos los elementos necesarios para la gestión de stock,
 recepciones y precios.
 """
 
+from django.conf import settings
 from django.db import models
 from decimal import Decimal, ROUND_HALF_UP
 from django.core.validators import MinValueValidator
 from django.db.models.functions import Lower
+from django.utils import timezone
 
 
 IVA_TASA = Decimal('0.19')   # 19% Chile
@@ -277,6 +279,49 @@ class Stock(models.Model):
 
     def __str__(self):
         return f"{self.tipo_movimiento} - {self.producto} - {self.qty} ({self.empaque})"
+
+
+class MovimientoStockHistorico(models.Model):
+    """
+    Conserva el flujo operativo del stock por fila.
+
+    Se usa para no perder trazabilidad cuando un registro de stock cambia
+    de estado, por ejemplo desde RESERVA a DESPACHO.
+    """
+
+    stock = models.ForeignKey(
+        "Stock",
+        on_delete=models.CASCADE,
+        related_name="historial_movimientos",
+    )
+    tipo_movimiento = models.CharField(max_length=10, choices=Stock.MOVIMIENTO_CHOICES)
+    qty = models.IntegerField()
+    empaque = models.CharField(max_length=10)
+    precio_unitario = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    fecha_movimiento = models.DateTimeField(default=timezone.now, db_index=True)
+    responsable = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="movimientos_stock_historicos",
+    )
+
+    class Meta:
+        ordering = ("fecha_movimiento", "id")
+        indexes = [
+            models.Index(fields=["fecha_movimiento"]),
+            models.Index(fields=["tipo_movimiento", "fecha_movimiento"]),
+        ]
+
+    def __str__(self):
+        return f"{self.tipo_movimiento} - Stock {self.stock_id} - {self.qty} ({self.empaque})"
 
 class Cliente(models.Model):
     """

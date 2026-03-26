@@ -97,4 +97,3 @@ urlpatterns = [
     path('ventas/<int:venta_id>/detalle/', views.detalle_venta, name='detalle_venta'),
 
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-

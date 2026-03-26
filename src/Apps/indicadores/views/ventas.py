@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal
 from calendar import monthrange
 
+from django.contrib.auth.decorators import login_required
 from django.db.models import (
     Sum, Case, When, F, DecimalField, Value, ExpressionWrapper
 )
@@ -128,6 +129,7 @@ def _producto_ids_por_proveedor(proveedor_obj: Proveedor | None):
 # ----------------------------
 # Vista principal
 # ----------------------------
+@login_required
 def dashboard_ventas(request):
     """
     Dashboard de ventas a MESES CERRADOS.
@@ -176,7 +178,7 @@ def dashboard_ventas(request):
         )
 
         if not productos_ids:
-            return render(request, './indicadores/ventas.html', {
+            return render(request, 'indicadores/ventas.html', {
                 'form': form,
                 'filas': [],
                 'inicio': inicio,
@@ -185,6 +187,13 @@ def dashboard_ventas(request):
                 'cliente': cliente,
                 'categoria': categoria,
                 'meses_cols': meses_cols,
+                'resumen': {
+                    'productos_total': 0,
+                    'productos_bajo_minimo': 0,
+                    'stock_total': Decimal('0'),
+                    'promedio_total': Decimal('0'),
+                    'ventas_periodo_total': Decimal('0'),
+                },
             })
 
     # ----------------------------
@@ -308,7 +317,17 @@ def dashboard_ventas(request):
 
     filas.sort(key=lambda x: (x["producto"].nombre_producto or "").lower())
 
-    return render(request, './indicadores/ventas.html', {
+    resumen = {
+        'productos_total': len(filas),
+        'productos_bajo_minimo': sum(
+            1 for f in filas if f["stock_actual"] <= Decimal(f["producto"].qty_minima or 0)
+        ),
+        'stock_total': sum((f["stock_actual"] for f in filas), start=Decimal('0')),
+        'promedio_total': sum((f["promedio_mensual_unidades"] for f in filas), start=Decimal('0')),
+        'ventas_periodo_total': sum((f["total_periodo"] for f in filas), start=Decimal('0')),
+    }
+
+    return render(request, 'indicadores/ventas.html', {
         'form': form,
         'filas': filas,
         'inicio': inicio,
@@ -317,4 +336,5 @@ def dashboard_ventas(request):
         'cliente': cliente,
         'categoria': categoria,
         'meses_cols': meses_cols,
+        'resumen': resumen,
     })

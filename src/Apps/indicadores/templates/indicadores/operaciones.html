@@ -2,55 +2,200 @@
 {% load custom_filters %}
 
 {% block content %}
-<h3 class="mb-4">Indicadores de Operaciones</h3>
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mt-3 mb-3">
+    <h1 class="h4 mb-0">Informe de Operaciones</h1>
+    <div class="small text-muted">Período: {{ inicio|date:"d-m-Y" }} al {{ fin|date:"d-m-Y" }}</div>
+  </div>
 
-<div class="row">
-  <!-- Total pedidos -->
-  <div class="col-md-4">
-    <div class="card shadow-sm p-3 mb-4 border-primary">
-      <h5 class="text-primary">Total de Pedidos</h5>
-      <p class="fs-4">{{ kpis.total_pedidos }}</p>
+  <form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-md-3">
+      <label class="form-label">Mes</label>
+      <select class="form-select" name="month">
+        {% for m, nombre in meses %}
+          <option value="{{ m }}" {% if m == periodo.month %}selected{% endif %}>{{ nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Año</label>
+      <input type="number" class="form-control" name="year" value="{{ periodo.year }}" min="2000" max="2100">
+    </div>
+    <div class="col-md-4 d-flex gap-2">
+      <button type="submit" class="btn btn-outline-primary w-100">Actualizar</button>
+      <a href="{% url 'dashboard_operaciones' %}" class="btn btn-outline-secondary w-100">Mes actual</a>
+    </div>
+  </form>
+
+  <div class="row g-2 mb-3">
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Pedidos del período</div>
+          <div class="h5 mb-0">{{ kpis.total_pedidos|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Pedidos con venta</div>
+          <div class="h5 mb-0">{{ kpis.pedidos_cumplidos|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Pendientes</div>
+          <div class="h5 mb-0">{{ kpis.pedidos_pendientes|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Cumplimiento</div>
+          <div class="h5 mb-0">{{ kpis.cumplimiento }}%</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Ciclo promedio</div>
+          <div class="h5 mb-0">
+            {% if kpis.ciclo_promedio_dias is not None %}
+              {{ kpis.ciclo_promedio_dias }} días
+            {% else %}
+              N/D
+            {% endif %}
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Pedidos cumplidos -->
-  <div class="col-md-4">
-    <div class="card shadow-sm p-3 mb-4 border-success">
-      <h5 class="text-success">Pedidos Cumplidos</h5>
-      <p class="fs-4">{{ kpis.pedidos_cumplidos }}</p>
+  <div class="row g-3 mb-2">
+    <div class="col-lg-8">
+      <div class="table-responsive">
+        <h2 class="h6">Revision de Pedidos del Período ({{ pedidos_rows|length }})</h2>
+        <table class="table table-striped table-bordered table-sm">
+          <thead class="table-light text-center">
+            <tr>
+              <th>Pedido</th>
+              <th>Fecha Pedido</th>
+              <th>Cliente</th>
+              <th>Estado</th>
+              <th>Fecha Venta</th>
+              <th>Documento</th>
+              <th>Días Ciclo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in pedidos_rows %}
+              <tr>
+                <td class="text-center">{{ row.id }}</td>
+                <td class="text-center">{{ row.fecha_pedido|date:"d-m-Y" }}</td>
+                <td>{{ row.cliente }}</td>
+                <td class="text-center">{{ row.estado_pedido }}</td>
+                <td class="text-center">
+                  {% if row.fecha_venta %}{{ row.fecha_venta|date:"d-m-Y" }}{% else %}-{% endif %}
+                </td>
+                <td class="text-center">
+                  {% if row.documento_venta %}
+                    {{ row.documento_venta }} {{ row.folio_venta }}
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  {% if row.dias_ciclo is not None %}{{ row.dias_ciclo }}{% else %}-{% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7" class="text-center text-muted">Sin pedidos en el período.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="table-responsive mb-3">
+        <h2 class="h6">Estado de Pedidos</h2>
+        <table class="table table-striped table-bordered table-sm">
+          <thead class="table-light text-center">
+            <tr>
+              <th>Estado</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in resumen_pedidos_estado %}
+              <tr>
+                <td>{{ row.estado_pedido }}</td>
+                <td class="text-end">{{ row.total|formatear_miles }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="2" class="text-center text-muted">Sin datos.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="table-responsive">
+        <h2 class="h6">Estado de Recepciones</h2>
+        <table class="table table-striped table-bordered table-sm">
+          <thead class="table-light text-center">
+            <tr>
+              <th>Estado</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in resumen_recepciones_estado %}
+              <tr>
+                <td>{{ row.estado_recepcion }}</td>
+                <td class="text-end">{{ row.total|formatear_miles }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="2" class="text-center text-muted">Sin datos.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
-  <!-- Cumplimiento % -->
-  <div class="col-md-4">
-    <div class="card shadow-sm p-3 mb-4 border-info">
-      <h5 class="text-info">Cumplimiento (%)</h5>
-      <p class="fs-4">{{ kpis.cumplimiento }}%</p>
-    </div>
-  </div>
-</div>
-
-<div class="row">
-  <!-- Pedidos pendientes -->
-  <div class="col-md-6">
-    <div class="card shadow-sm p-3 mb-4 border-warning">
-      <h5 class="text-warning">Pedidos Pendientes</h5>
-      <p class="fs-4">{{ kpis.pedidos_pendientes }}</p>
-    </div>
-  </div>
-
-  <!-- Tiempo promedio de entrega -->
-  <div class="col-md-6">
-    <div class="card shadow-sm p-3 mb-4 border-secondary">
-      <h5 class="text-secondary">Tiempo Promedio de Entrega</h5>
-      <p class="fs-4">
-        {% if kpis.tiempo_promedio_entrega %}
-          {{ kpis.tiempo_promedio_entrega.days }} días
-        {% else %}
-          No disponible
-        {% endif %}
-      </p>
-    </div>
+  <div class="table-responsive">
+    <h2 class="h6">Revision de Recepciones del Período ({{ recepciones_rows|length }})</h2>
+    <table class="table table-striped table-bordered table-sm">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Recepción</th>
+          <th>Fecha</th>
+          <th>Proveedor</th>
+          <th>Documento</th>
+          <th>Estado</th>
+          <th>Neto</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for recepcion in recepciones_rows %}
+          <tr>
+            <td class="text-center">{{ recepcion.id }}</td>
+            <td class="text-center">{{ recepcion.fecha_recepcion|date:"d-m-Y" }}</td>
+            <td>{{ recepcion.proveedor.nombre_proveedor }}</td>
+            <td class="text-center">{{ recepcion.documento_recepcion }} {{ recepcion.num_documento_recepcion }}</td>
+            <td class="text-center">{{ recepcion.estado_recepcion }}</td>
+            <td class="text-end">$ {{ recepcion.total_neto_recepcion|formatear_miles }}</td>
+            <td class="text-end">$ {{ recepcion.total_recepcion|formatear_miles }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="text-center text-muted">Sin recepciones en el período.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 {% endblock %}

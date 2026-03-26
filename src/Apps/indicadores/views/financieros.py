@@ -1,6 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
+from django.contrib.auth.decorators import login_required
 from django.db.models import ExpressionWrapper, Sum, Avg, Value, DecimalField
 from django.db.models.functions import Coalesce, TruncMonth
 from django.shortcuts import render
@@ -37,6 +38,7 @@ def _label_mes(d: date) -> str:
     return f"{MESES_ES[d.month]}-{str(d.year)[2:]}"  # p.ej. AGO-25
 
 
+@login_required
 def dashboard_financiero_simple(request):
     """
     ÚNICA TABLA:

@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mt-3 mb-3">
+    <div>
+      <h1 class="h4 mb-1">Flujo de Inventario</h1>
+      <div class="text-muted">
+        {{ producto.codigo_producto_interno }} | {{ producto.nombre_producto }}
+      </div>
+    </div>
+    <a
+      href="{% url 'dashboard_inventario' %}?year={{ year }}&month={{ month }}&stock_view={{ stock_view }}"
+      class="btn btn-outline-secondary"
+    >
+      Volver a inventario
+    </a>
+  </div>
+
+  <div class="alert alert-light border mb-3">
+    El flujo se muestra desde la transacción más antigua a la más reciente.
+    Entradas suman al subtotal, despachos restan y las reservas mantienen el subtotal mientras no se finalizan.
+    En movimientos antiguos puede aparecer "Sin responsable registrado" cuando ese dato no existía en el sistema.
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="card border-success h-100">
+        <div class="card-body">
+          <div class="text-muted small">Subtotal Entradas</div>
+          <div class="h5 mb-0 text-success">{{ subtotal_entradas|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-danger h-100">
+        <div class="card-body">
+          <div class="text-muted small">Subtotal Salidas</div>
+          <div class="h5 mb-0 text-danger">{{ subtotal_salidas|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-warning h-100">
+        <div class="card-body">
+          <div class="text-muted small">Reservas Pendientes</div>
+          <div class="h5 mb-0 text-warning">{{ reservas_pendientes|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-primary h-100">
+        <div class="card-body">
+          <div class="text-muted small">Subtotal Final</div>
+          <div class="h5 mb-0 text-primary">{{ subtotal_final|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-striped table-bordered table-sm align-middle">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Fecha</th>
+          <th>Transacción</th>
+          <th>Cantidad</th>
+          <th>Valor</th>
+          <th>Total</th>
+          <th>Subtotal</th>
+          <th>Cliente / Proveedor</th>
+          <th>Responsable</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in movimientos_rows %}
+          <tr>
+            <td class="{{ row.fecha_class }} fw-semibold text-nowrap">
+              {{ row.fecha|date:"d-m-Y H:i" }}
+            </td>
+            <td>{{ row.transaccion }}</td>
+            <td class="text-end">{{ row.cantidad|formatear_miles }}</td>
+            <td class="text-end">$ {{ row.valor|formatear_miles }}</td>
+            <td class="text-end">$ {{ row.total|formatear_miles }}</td>
+            <td class="text-end fw-semibold">{{ row.subtotal|formatear_miles }}</td>
+            <td>{{ row.cliente_proveedor }}</td>
+            <td>{{ row.responsable }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8" class="text-center text-muted">Sin transacciones históricas para este producto.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

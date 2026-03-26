@@ -12,36 +12,71 @@
 
 {% block content %}
 <div class="container-fluid">
-  <div class="d-flex justify-content-between align-items-center mt-3">
-    <h1 class="h4 mb-0">Resumen de Ventas</h1>
-    <div class="small text-muted">Período: {{ inicio|date:"d-m-Y" }} al {{ fin|date:"d-m-Y" }}</div>
+  <div class="d-flex justify-content-between align-items-center mt-3 mb-3">
+    <h1 class="h4 mb-0">Informe de Ventas</h1>
+    <div class="small text-muted">Período cerrado: {{ inicio|date:"d-m-Y" }} al {{ fin|date:"d-m-Y" }}</div>
   </div>
 
-  {# --- Filtros --- #}
-  <form method="get" class="row row-cols-1 row-cols-md-6 align-items-end g-3 mb-3">
+  <form method="get" class="row row-cols-1 row-cols-md-6 align-items-end g-2 mb-3">
     <div class="col">
       <label class="form-label" for="{{ form.cliente.id_for_label }}">{{ form.cliente.label }}</label>
-      {{ form.cliente|add_class:"form-select form-select-sm" }}
+      {{ form.cliente|add_class:"form-select" }}
     </div>
     <div class="col">
       <label class="form-label" for="{{ form.categoria.id_for_label }}">{{ form.categoria.label }}</label>
-      {{ form.categoria|add_class:"form-select form-select-sm" }}
+      {{ form.categoria|add_class:"form-select" }}
     </div>
     <div class="col">
       <label class="form-label" for="{{ form.proveedor.id_for_label }}">{{ form.proveedor.label }}</label>
-      {{ form.proveedor|add_class:"form-select form-select-sm" }}  {# 👈 NUEVO #}
+      {{ form.proveedor|add_class:"form-select" }}
     </div>
     <div class="col">
       <label class="form-label" for="{{ form.meses.id_for_label }}">{{ form.meses.label }}</label>
-      {{ form.meses|add_class:"form-select form-select-sm" }}
+      {{ form.meses|add_class:"form-select" }}
     </div>
-    <div class="col text-end">
-      <button type="submit" class="btn btn-sm btn-primary w-100">Filtrar</button>
+    <div class="col d-flex gap-2">
+      <button type="submit" class="btn btn-outline-primary w-100">Aplicar</button>
+      <a href="{% url 'dashboard_ventas' %}" class="btn btn-outline-secondary w-100">Limpiar</a>
     </div>
   </form>
 
+  <div class="row g-2 mb-3">
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Productos en informe</div>
+          <div class="h5 mb-0">{{ resumen.productos_total|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Productos bajo mínimo</div>
+          <div class="h5 mb-0">{{ resumen.productos_bajo_minimo|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Stock total (U. primaria)</div>
+          <div class="h5 mb-0">{{ resumen.stock_total|floatformat:0|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Ventas unidades período</div>
+          <div class="h5 mb-0">{{ resumen.ventas_periodo_total|floatformat:0|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="table-responsive py-2">
+    <h2 class="h6">Revision de Ventas por Producto ({{ filas|length }})</h2>
     <table id="tabla-filtros" class="table table-striped table-bordered table-sm align-middle tabla-compacta">
       <thead class="table-light text-center">
         <tr>
@@ -49,21 +84,18 @@
           <th>Producto</th>
           <th>Stock (PRIMARIO)</th>
           <th>Prom. mensual (u)</th>
-          {# Meses dinámicos (orden: más reciente → más antiguo) #}
-            {% for m in meses_cols %}
-              <th>{{ m.label }}</th>
-            {% endfor %}
+          {% for m in meses_cols %}
+            <th>{{ m.label }}</th>
+          {% endfor %}
           <th>Total período (u)</th>
         </tr>
       </thead>
       <tbody>
         {% for f in filas %}
-        {# Resaltar bajo mínimo #}
         <tr {% if f.stock_actual <= f.producto.qty_minima %}class="table-danger"{% endif %}>
           <td class="wrap">{{ f.codigo_interno }}</td>
           <td class="wrap">{{ f.producto.nombre_producto }}</td>
 
-          {# Numeric cells con data-order para ordenar correctamente #}
           <td class="text-end" data-order="{{ f.stock_actual|floatformat:0 }}">
             {{ f.stock_actual|floatformat:0|formatear_miles }}
           </td>
@@ -81,6 +113,10 @@
             {{ f.total_periodo|floatformat:0|formatear_miles }}
           </td>
         </tr>
+        {% empty %}
+        <tr>
+          <td colspan="{{ meses_cols|length|add:5 }}" class="text-center text-muted">Sin datos para el filtro seleccionado.</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
@@ -94,6 +130,7 @@
     $('#tabla-filtros').DataTable({
       order: [[1, "asc"]],     // ordenar por "Producto"
       pageLength: 50,
+      columnDefs: [{ targets: [0, 1], orderable: true }],
       language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json" }
     });
   });

@@ -2,6 +2,11 @@
 
 /* Menú principal */
 .navbar {
+  --bs-navbar-color: var(--texto-menu-principal);
+  --bs-navbar-hover-color: var(--texto-menu-hover);
+  --bs-navbar-active-color: var(--texto-menu-principal);
+  --bs-navbar-brand-color: var(--texto-menu-principal);
+  --bs-navbar-brand-hover-color: var(--texto-menu-hover);
   background-color: var(--fondo-menu-principal) !important;
 }
 
@@ -23,11 +28,12 @@
 
 /* Submenú (dropdown) */
 .dropdown-menu {
-  background-color: var(--fondo-submenu);
+  background-color: var(--fondo-submenu) !important;
+  border-color: var(--fondo-submenu) !important;
 }
 
 .dropdown-menu .dropdown-item {
-  color: var(--texto-submenu);
+  color: var(--texto-submenu) !important;
 }
 
 .dropdown-menu .dropdown-item:hover {
@@ -36,14 +42,19 @@
 }
 
 .dropdown-item:focus {
-  background-color: var(--fondo-submenu-focus);
-  color: var(--texto-submenu-focus);
+  background-color: var(--fondo-submenu-focus) !important;
+  color: var(--texto-submenu-focus) !important;
 }
 
 /* Alternativa de hover en submenu */
 .dropdown-menu .dropdown-item:hover {
   background-color: var(--fondo-submenu-hover-alt);
   color: var(--texto-submenu-hover-alt) !important;
+}
+
+.dropdown-menu .dropdown-item:active {
+  background-color: var(--fondo-submenu-focus) !important;
+  color: var(--texto-submenu-focus) !important;
 }
 
 a.dropdown-item.disabled {

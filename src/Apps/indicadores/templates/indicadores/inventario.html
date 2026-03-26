@@ -2,58 +2,203 @@
 {% load custom_filters %}
 
 {% block content %}
-<h3 class="mb-4">Indicadores de Inventario</h3>
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mt-3 mb-3">
+    <h1 class="h4 mb-0">Informe de Inventario</h1>
+    <div class="small text-muted">Período: {{ inicio|date:"d-m-Y" }} al {{ fin|date:"d-m-Y" }}</div>
+  </div>
 
-<div class="row">
-  <!-- Stock total actual -->
-  <div class="col-md-4">
-    <div class="card shadow-sm p-3 mb-4 border-primary">
-      <h5 class="text-primary">Stock Total</h5>
-      <p class="fs-4">{{ kpis.stock_total|floatformat:0 }} unidades</p>
+  <form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-md-3">
+      <label class="form-label">Mes</label>
+      <select class="form-select" name="month">
+        {% for m, nombre in meses %}
+          <option value="{{ m }}" {% if m == periodo.month %}selected{% endif %}>{{ nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Año</label>
+      <input type="number" class="form-control" name="year" value="{{ periodo.year }}" min="2000" max="2100">
+    </div>
+    <input type="hidden" name="stock_view" value="{{ filtro_stock }}">
+    <div class="col-md-4 d-flex gap-2">
+      <button type="submit" class="btn btn-outline-primary w-100">Actualizar</button>
+      <a href="{% url 'dashboard_inventario' %}" class="btn btn-outline-secondary w-100">Mes actual</a>
+    </div>
+  </form>
+
+  <div class="d-flex flex-wrap gap-2 mb-3">
+    <a
+      href="{% url 'dashboard_inventario' %}?year={{ periodo.year }}&month={{ periodo.month }}&stock_view=todos"
+      class="btn {% if filtro_stock == 'todos' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+    >
+      Total productos ({{ productos_total_general|formatear_miles }})
+    </a>
+    <a
+      href="{% url 'dashboard_inventario' %}?year={{ periodo.year }}&month={{ periodo.month }}&stock_view=con_stock"
+      class="btn {% if filtro_stock == 'con_stock' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+    >
+      Solo con stock ({{ productos_con_stock|formatear_miles }})
+    </a>
+  </div>
+
+  <div class="row g-2 mb-3">
+    <div class="col-md">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Productos</div>
+          <div class="h5 mb-0">{{ kpis.productos_total|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Críticos</div>
+          <div class="h5 mb-0 text-danger">{{ kpis.productos_criticos|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Stock Disponible</div>
+          <div class="h5 mb-0">{{ kpis.unidades_disponibles|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Despachos</div>
+          <div class="h5 mb-0">{{ kpis.unidades_despachadas|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md">
+      <div class="card">
+        <div class="card-body">
+          <div class="small text-muted">Valor inventario</div>
+          <div class="h5 mb-0">$ {{ kpis.valor_total_inventario|formatear_miles }}</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Productos con stock crítico -->
-  <div class="col-md-4">
-    <div class="card shadow-sm p-3 mb-4 border-danger">
-      <h5 class="text-danger">Productos Críticos</h5>
-      <p class="fs-4">{{ kpis.productos_criticos }}</p>
+  <div class="table-responsive mb-4">
+    <h2 class="h6">Revision de Stock Contable ({{ stock_rows|length }} de {{ productos_total_general }})</h2>
+    <table class="table table-striped table-bordered table-sm">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Código</th>
+          <th>Producto</th>
+          <th>Stock Disponible</th>
+          <th>Despachos</th>
+          <th>Valor Producto Unitario</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in stock_rows %}
+          <tr>
+            <td>{{ row.codigo_interno }}</td>
+            <td>
+              <a href="{% url 'flujo_inventario_producto' row.producto_id %}?year={{ periodo.year }}&month={{ periodo.month }}&stock_view={{ filtro_stock }}">
+                {{ row.producto }}
+              </a>
+            </td>
+            <td class="text-end">{{ row.cantidad_disponible_uprim|formatear_miles }}</td>
+            <td class="text-end">{{ row.cantidad_despachada_uprim|formatear_miles }}</td>
+            <td class="text-end">$ {{ row.valor_producto_unitario|formatear_miles }}</td>
+            <td class="text-end">$ {{ row.total_producto|formatear_miles }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-center text-muted">Sin datos de inventario.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="table-responsive mb-4">
+        <h2 class="h6">Movimientos del Período</h2>
+        <table class="table table-striped table-bordered table-sm">
+          <thead class="table-light text-center">
+            <tr>
+              <th>Tipo Movimiento</th>
+              <th>Operaciones</th>
+              <th>Unidades UPrim</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in movimientos_tipo %}
+              <tr>
+                <td>{{ row.tipo_label }}</td>
+                <td class="text-end">{{ row.movimientos|formatear_miles }}</td>
+                <td class="text-end">{{ row.unidades|formatear_miles }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="text-center text-muted">Sin movimientos en el período.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="table-responsive mb-4">
+        <h2 class="h6">Productos Críticos</h2>
+        <table class="table table-striped table-bordered table-sm">
+          <thead class="table-light text-center">
+            <tr>
+              <th>Código</th>
+              <th>Producto</th>
+              <th>Stock Disp.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in criticos_rows %}
+              <tr>
+                <td>{{ row.codigo_interno }}</td>
+                <td>{{ row.producto }}</td>
+                <td class="text-end">{{ row.cantidad_disponible_uprim|formatear_miles }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="text-center text-muted">Sin productos críticos.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
-  <!-- Unidades reservadas actualmente -->
-  <div class="col-md-4">
-    <div class="card shadow-sm p-3 mb-4 border-warning">
-      <h5 class="text-warning">Productos Reservados</h5>
-      <p class="fs-4">{{ kpis.productos_reservados|floatformat:0 }} unidades</p>
-    </div>
+  <div class="table-responsive">
+    <h2 class="h6">Revision Detallada de Movimientos ({{ movimientos_rows|length }})</h2>
+    <table class="table table-striped table-bordered table-sm">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Código</th>
+          <th>Producto</th>
+          <th>Tipo</th>
+          <th>Operaciones</th>
+          <th>Unidades UPrim</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in movimientos_rows %}
+          <tr>
+            <td>{{ row.producto__codigo_producto_interno }}</td>
+            <td>{{ row.producto__nombre_producto }}</td>
+            <td>{{ row.tipo_label }}</td>
+            <td class="text-end">{{ row.movimientos|formatear_miles }}</td>
+            <td class="text-end">{{ row.unidades|formatear_miles }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="text-center text-muted">Sin detalle para el período.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
-
-<div class="row">
-  <!-- Rotación estimada (salidas promedio por día) -->
-  <div class="col-md-6">
-    <div class="card shadow-sm p-3 mb-4 border-info">
-      <h5 class="text-info">Rotación Promedio (30 días)</h5>
-      <p class="fs-4">{{ kpis.rotacion_estimada }} unidades/día</p>
-    </div>
-  </div>
-
-  <!-- Cobertura estimada en días -->
-  <div class="col-md-6">
-    <div class="card shadow-sm p-3 mb-4 border-success">
-      <h5 class="text-success">Cobertura Estimada</h5>
-      <p class="fs-4">{{ kpis.cobertura_inventario_dias }} días</p>
-    </div>
-  </div>
-  <div class="card mt-4 shadow-sm">
-    <div class="card-header">
-        <strong>Gráfico: Stock Actual vs Stock Mínimo</strong>
-    </div>
-    <div class="card-body text-center">
-        <img src="data:image/png;base64,{{ grafico }}" class="img-fluid" alt="Gráfico de stock">
-    </div>
-  </div>
-</div>
-
 {% endblock %}
