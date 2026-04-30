@@ -46,8 +46,8 @@ def formatear_miles_punto(num):
     """
     Formatea un número usando punto como separador de miles.
     """
-    num = Decimal(num)
-    return f"{num:,.0f}".replace(",", ".")
+    num = _to_decimal(num).quantize(PESO, rounding=ROUND_HALF_UP)
+    return f"{int(num):,}".replace(",", ".")
 
 # --------------------------
 # Footer / Pie de página

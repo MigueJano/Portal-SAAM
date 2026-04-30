@@ -14,6 +14,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import FileResponse
 from django.utils import timezone
 from django.core.files.base import ContentFile
+from django.db.models.functions import Lower
 
 from Apps.Pedidos.forms import SeleccionarClienteForm
 from Apps.Pedidos.models import Cliente, ListaPrecios, Cotizacion
@@ -21,6 +22,19 @@ from Apps.Pedidos.models import Cliente, ListaPrecios, Cotizacion
 # --- Decimal helpers ---
 from decimal import Decimal, ROUND_HALF_UP
 DOS_DEC = Decimal('0.01')
+
+
+def _productos_cotizacion_qs(cliente):
+    return (
+        ListaPrecios.objects.filter(nombre_cliente=cliente)
+        .select_related(
+            'nombre_producto',
+            'nombre_producto__empaque_primario',
+            'nombre_producto__empaque_secundario',
+            'nombre_producto__empaque_terciario',
+        )
+        .order_by(Lower('nombre_producto__nombre_producto'), 'empaque', 'id')
+    )
 
 
 def seleccionar_cliente_cotizacion(request):
@@ -45,7 +59,7 @@ def seleccionar_productos_cotizacion(request, cliente_id):
         cliente_id (int): ID del cliente al que se hará la cotización.
     """
     cliente = get_object_or_404(Cliente, id=cliente_id)
-    productos = ListaPrecios.objects.filter(nombre_cliente=cliente)
+    productos = _productos_cotizacion_qs(cliente)
 
     return render(request, "./views/cotizacion/seleccionar_productos.html", {
         "cliente": cliente,
@@ -72,14 +86,9 @@ def vista_previa_cotizacion(request):
             })
 
         cliente = get_object_or_404(Cliente, id=cliente_id)
-        precios = ListaPrecios.objects.filter(
+        precios = _productos_cotizacion_qs(cliente).filter(
             nombre_cliente=cliente,
             id__in=productos_ids
-        ).select_related(
-            'nombre_producto',
-            'nombre_producto__empaque_primario',
-            'nombre_producto__empaque_secundario',
-            'nombre_producto__empaque_terciario'
         )
 
         # Armado de ítems con nombres de empaques según nivel

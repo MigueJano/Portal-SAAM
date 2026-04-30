@@ -142,6 +142,13 @@
                 ${{ diferencia_iva|formatear_miles }}
               </strong>
             </div>
+
+            <div class="d-flex justify-content-between">
+              <span>PPM (1%)</span>
+              <strong class="text-danger">
+                ${{ ppm_periodo|formatear_miles }}
+              </strong>
+            </div>
           </div>
         </div>
       </div>
@@ -293,6 +300,16 @@
                 <td class="text-end">${{ subtotal_ventas_total.iva|formatear_miles }}</td>
               </tr>
 
+              <tr class="table-secondary">
+                <td colspan="{{ meses_labels|length|add:2 }}"><strong>Impuestos Proyectados</strong></td>
+              </tr>
+              <tr class="table-danger fw-bold">
+                <td>PPM (1% s/ ventas netas)</td>
+                {% for t in ppm_mes %}
+                  <td class="text-end">${{ t.total|formatear_miles }}</td>
+                {% endfor %}
+                <td class="text-end">${{ ppm_total.total|formatear_miles }}</td>
+              </tr>
 
 
               <!-- ========================= -->

@@ -11,6 +11,8 @@ Incluye utilidades para:
 Fecha de documentación: 2025-08-08
 """
 
+from decimal import Decimal, ROUND_HALF_UP
+
 from django import template
 
 # Registro del sistema de filtros personalizados de Django
@@ -65,8 +67,9 @@ def formatear_miles(value):
         str: número formateado con puntos como separador de miles.
     """
     try:
-        return f"{int(value):,}".replace(",", ".")
-    except (ValueError, TypeError):
+        valor_redondeado = Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return f"{int(valor_redondeado):,}".replace(",", ".")
+    except (ArithmeticError, ValueError, TypeError):
         return value
 
 

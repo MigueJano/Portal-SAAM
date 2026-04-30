@@ -24,6 +24,7 @@ from django.utils import timezone
 from Apps.Pedidos.models import Pedido, Stock, Producto, ListaPrecios, EntregaPedido
 from Apps.Pedidos.forms import PedidoForm, ProductoReservaForm
 from Apps.Pedidos.services import registrar_movimiento_stock, registrar_movimientos_stock
+from Apps.Pedidos.utils import DELETE_CONFIRMATION_TEXT, validacion_doble_check_eliminacion
 
 # --- Decimal helpers ---
 from decimal import Decimal, ROUND_HALF_UP
@@ -44,7 +45,26 @@ def eliminar_pedido(request, id):
         messages.error(request, "No se puede eliminar un pedido finalizado.")
         return redirect('lista_pedidos')
 
+    campos = [
+        {'nombre': 'Cliente', 'valor': pedido.nombre_cliente},
+        {'nombre': 'Fecha Pedido', 'valor': pedido.fecha_pedido},
+        {'nombre': 'Estado', 'valor': pedido.estado_pedido},
+        {'nombre': 'CotizaciÃ³n', 'valor': pedido.num_cotizacion or 'Sin cotizaciÃ³n'},
+    ]
+
     if request.method == 'POST':
+        if not validacion_doble_check_eliminacion(request):
+            messages.error(
+                request,
+                f"Debes marcar la confirmacion y escribir {DELETE_CONFIRMATION_TEXT} para eliminar."
+            )
+            return render(request, './views/apps/confirmar_eliminar.html', {
+                'modelo': 'Pedido',
+                'campos': campos,
+                'pedido': pedido,
+                'texto_confirmacion_requerido': DELETE_CONFIRMATION_TEXT,
+            })
+
         with transaction.atomic():
             Stock.objects.filter(pedido=pedido).delete()
             pedido.delete()
@@ -61,6 +81,7 @@ def eliminar_pedido(request, id):
         'modelo': 'Pedido',
         'campos': campos,
         'pedido': pedido,
+        'texto_confirmacion_requerido': DELETE_CONFIRMATION_TEXT,
     })
 
 

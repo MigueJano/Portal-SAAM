@@ -1,5 +1,5 @@
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.contrib.auth.decorators import login_required
 from django.db.models import ExpressionWrapper, Sum, Avg, Value, DecimalField
@@ -12,6 +12,7 @@ from Apps.indicadores.forms import FiltroFinancieroForm
 # Constantes
 DEC = Decimal('0.00')
 DEC_F = DecimalField(max_digits=12, decimal_places=2)
+PPM_RATE = Decimal("0.01")
 
 MESES_ES = ["", "ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
             "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"]
@@ -36,6 +37,11 @@ def _rango_meses(inicio: date, fin: date):
 
 def _label_mes(d: date) -> str:
     return f"{MESES_ES[d.month]}-{str(d.year)[2:]}"  # p.ej. AGO-25
+
+
+def _ppm_value(monto: Decimal) -> Decimal:
+    base = Decimal(monto or DEC)
+    return (base * PPM_RATE).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
 @login_required
@@ -225,6 +231,19 @@ def dashboard_financiero_simple(request):
         })
 
     # =================
+    # PPM 1% s/ ventas netas
+    # =================
+    ppm_mes = []
+    ppm_total = {'neto': DEC, 'iva': DEC, 'total': DEC}
+    for t in subtotal_ventas_mes:
+        ppm_valor = _ppm_value(t['neto'])
+        ppm_mes.append({'neto': ppm_valor, 'iva': DEC, 'total': ppm_valor})
+        ppm_total['neto'] += ppm_valor
+        ppm_total['total'] += ppm_valor
+
+    ppm_periodo = ppm_total['total']
+
+    # =================
     # TOTAL GENERAL
     # =================
     total_general_mes = []
@@ -232,9 +251,9 @@ def dashboard_financiero_simple(request):
     for i in range(len(meses)):
         tg = {
             # Ventas (pos) + Compras REAL (neg) => suma algebraica correcta
-            'neto':  subtotal_ventas_mes[i]['neto']  + subtotal_compras_mes_real[i]['neto'],
+            'neto':  subtotal_ventas_mes[i]['neto']  + subtotal_compras_mes_real[i]['neto'] - ppm_mes[i]['neto'],
             'iva':   subtotal_ventas_mes[i]['iva']   + subtotal_compras_mes_real[i]['iva'],
-            'total': subtotal_ventas_mes[i]['total'] + subtotal_compras_mes_real[i]['total'],
+            'total': subtotal_ventas_mes[i]['total'] + subtotal_compras_mes_real[i]['total'] - ppm_mes[i]['total'],
         }
         total_general_mes.append(tg)
         total_general_total['neto']  += tg['neto']
@@ -253,6 +272,7 @@ def dashboard_financiero_simple(request):
         'ganancia_periodo': ganancia_periodo,
         'ganancia_porcentaje_periodo':ganancia_porcentaje,
         'diferencia_iva': diferencia_iva,
+        'ppm_periodo': ppm_periodo,
 
         # Compras (mostrar POSITIVO)
         'filas_proveedores': filas_proveedores,
@@ -263,6 +283,8 @@ def dashboard_financiero_simple(request):
         'filas_ventas_tipo': filas_ventas_tipo,
         'subtotal_ventas_mes': subtotal_ventas_mes,
         'subtotal_ventas_total': subtotal_ventas_total,
+        'ppm_mes': ppm_mes,
+        'ppm_total': ppm_total,
 
         # Total general (ventas suman, proveedores restan)
         'total_general_mes': total_general_mes,

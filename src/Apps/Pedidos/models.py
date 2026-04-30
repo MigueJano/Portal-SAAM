@@ -147,15 +147,15 @@ class Recepcion(models.Model):
         """
         Recalcula IVA y Total a partir de total_neto_recepcion.
         NO vuelve a calcular el neto desde Stock.
+
+        El flag incluir_iva solo indica si el valor ingresado originalmente
+        ya incluia IVA y por lo tanto debio ser normalizado a neto antes.
+        Una vez persistido el neto, el IVA del documento siempre se calcula
+        sobre ese valor.
         """
         neto = (self.total_neto_recepcion or Decimal('0.00')).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
-
-        if self.incluir_iva:
-            iva = (neto * IVA_TASA).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
-            total = (neto + iva).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
-        else:
-            iva = Decimal('0.00')
-            total = neto
+        iva = (neto * IVA_TASA).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
+        total = (neto + iva).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
 
         self.iva_recepcion = iva
         self.total_recepcion = total

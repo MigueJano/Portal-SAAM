@@ -17,20 +17,20 @@ def home(request):
     Vista principal del sistema (inicio).
 
     Muestra:
-    - Recepciones pendientes (últimas 3)
-    - Pedidos pendientes (últimos 3 con totales)
+    - Recepciones pendientes
+    - Pedidos pendientes con totales
     - Pedidos entregados no pagados (con totales)
 
     Returns:
         HttpResponse: Renderiza home.html con datos de negocio.
     """
     recepciones_qs = Recepcion.objects.exclude(estado_recepcion='Finalizado').order_by('-fecha_recepcion')
-    recepciones = list(recepciones_qs[:3])
-    cantidad_recepciones = recepciones_qs.count()
+    recepciones = list(recepciones_qs)
+    cantidad_recepciones = len(recepciones)
 
     pedidos_qs = Pedido.objects.filter(estado_pedido='Pendiente').order_by('-fecha_pedido')
-    pedidos = list(pedidos_qs[:3])
-    cantidad_pedidos_pendiente = pedidos_qs.count()
+    pedidos = list(pedidos_qs)
+    cantidad_pedidos_pendiente = len(pedidos)
 
     # Calcular total de cada pedido pendiente
     for pedido in pedidos:
@@ -39,7 +39,7 @@ def home(request):
         total_pedido_iva = Decimal(total_pedido) * Decimal('1.19')
         pedido.total_pedido_pendiente = total_pedido_iva.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-    pedidos_no_pagados = Pedido.objects.filter(estado_pedido='Entregado').order_by('-fecha_pedido')
+    pedidos_no_pagados = list(Pedido.objects.filter(estado_pedido='Entregado').order_by('-fecha_pedido'))
 
     # Calcular total de cada pedido entregado no pagado
     for pedido in pedidos_no_pagados:
@@ -48,7 +48,7 @@ def home(request):
         total_pedido_no_pagado_iva = Decimal(total_pedido_no_pagado) * Decimal('1.19')
         pedido.total_pedido_no_pagado = total_pedido_no_pagado_iva.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-    cantidad_pedidos_no_pagados = pedidos_no_pagados.count()
+    cantidad_pedidos_no_pagados = len(pedidos_no_pagados)
 
     return render(request, './views/dashboard/home.html', {
         'recepciones': recepciones,

@@ -3,9 +3,15 @@
 
 {% block content %}
 <div class="container-fluid">
-  <div class="d-flex justify-content-between align-items-center mt-3 mb-3">
-    <h1 class="h4 mb-0">Informe Estratégico</h1>
-    <div class="small text-muted">Período: {{ inicio|date:"d-m-Y" }} al {{ fin|date:"d-m-Y" }}</div>
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-3">
+    <div>
+      <h1 class="h4 mb-1">Informe Estrategico</h1>
+      <div class="small text-muted">Periodo: {{ inicio|date:"d-m-Y" }} al {{ fin|date:"d-m-Y" }}</div>
+    </div>
+    <div class="btn-group" role="group" aria-label="Secciones de estrategia">
+      <a href="{% url 'dashboard_estrategia' %}" class="btn btn-primary">Informe</a>
+      <a href="{% url 'dashboard_estrategia_precios' %}" class="btn btn-outline-primary">Precios</a>
+    </div>
   </div>
 
   <form method="get" class="row g-2 align-items-end mb-3">
@@ -18,7 +24,7 @@
       </select>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Año</label>
+      <label class="form-label">Ano</label>
       <input type="number" class="form-control" name="year" value="{{ periodo.year }}" min="2000" max="2100">
     </div>
     <div class="col-md-4 d-flex gap-2">
@@ -29,7 +35,7 @@
 
   <div class="row g-2 mb-3">
     <div class="col-md-3">
-      <div class="card">
+      <div class="card h-100">
         <div class="card-body">
           <div class="small text-muted">Ventas Totales</div>
           <div class="h5 mb-0">$ {{ kpis.ingresos|formatear_miles }}</div>
@@ -37,23 +43,23 @@
       </div>
     </div>
     <div class="col-md-3">
-      <div class="card">
+      <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Utilidad del Período</div>
+          <div class="small text-muted">Utilidad del Periodo</div>
           <div class="h5 mb-0">$ {{ kpis.ganancia_bruta|formatear_miles }}</div>
         </div>
       </div>
     </div>
     <div class="col-md-2">
-      <div class="card">
+      <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Margen Utilidad</div>
+          <div class="small text-muted">Margen</div>
           <div class="h5 mb-0">{{ kpis.margen_utilidad }}%</div>
         </div>
       </div>
     </div>
     <div class="col-md-2">
-      <div class="card">
+      <div class="card h-100">
         <div class="card-body">
           <div class="small text-muted">Ticket Promedio</div>
           <div class="h5 mb-0">$ {{ kpis.ticket_promedio|formatear_miles }}</div>
@@ -61,11 +67,56 @@
       </div>
     </div>
     <div class="col-md-2">
-      <div class="card">
+      <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Crecimiento vs mes anterior</div>
+          <div class="small text-muted">Crecimiento</div>
           <div class="h5 mb-0 {% if kpis.crecimiento_ventas < 0 %}text-danger{% else %}text-success{% endif %}">
             {{ kpis.crecimiento_ventas }}%
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h2 class="h6 mb-1">Lectura Rapida</h2>
+          <div class="small text-muted">Resumen ejecutivo del periodo para detectar clientes tractores, productos lideres y presion de compras.</div>
+        </div>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="small text-muted mb-1">Cliente lider</div>
+            {% if cliente_lider %}
+              <div class="fw-semibold">{{ cliente_lider.pedidoid__nombre_cliente__nombre_cliente }}</div>
+              <div class="small">$ {{ cliente_lider.total|formatear_miles }} en el periodo</div>
+            {% else %}
+              <div class="text-muted small">Sin ventas en el periodo.</div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="small text-muted mb-1">Producto tractor</div>
+            {% if producto_lider %}
+              <div class="fw-semibold">{{ producto_lider.producto__nombre_producto }}</div>
+              <div class="small">{{ producto_lider.unidades|formatear_miles }} unidades y $ {{ producto_lider.utilidad_total|formatear_miles }} de utilidad</div>
+            {% else %}
+              <div class="text-muted small">Sin productos vendidos en el periodo.</div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="small text-muted mb-1">Presion de compras</div>
+            <div class="fw-semibold">{{ presion_compra }}%</div>
+            <div class="small">Compras netas sobre ventas totales del periodo.</div>
+            {% if mejor_mes %}
+              <div class="small text-muted mt-2">Mejor mes reciente: {{ mejor_mes.mes_label }} con $ {{ mejor_mes.ventas_total|formatear_miles }}</div>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -90,7 +141,7 @@
                 <td class="text-end">$ {{ row.total|formatear_miles }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="2" class="text-center text-muted">Sin ventas para el período.</td></tr>
+              <tr><td colspan="2" class="text-center text-muted">Sin ventas para el periodo.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -98,11 +149,11 @@
     </div>
     <div class="col-lg-6">
       <div class="table-responsive mb-4">
-        <h2 class="h6">Top Productos (Unidades / Utilidad)</h2>
+        <h2 class="h6">Top Productos</h2>
         <table class="table table-striped table-bordered table-sm">
           <thead class="table-light text-center">
             <tr>
-              <th>Código</th>
+              <th>Codigo</th>
               <th>Producto</th>
               <th>Unidades</th>
               <th>Utilidad</th>
@@ -117,7 +168,7 @@
                 <td class="text-end">$ {{ row.utilidad_total|formatear_miles }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="4" class="text-center text-muted">Sin utilidades registradas para el período.</td></tr>
+              <tr><td colspan="4" class="text-center text-muted">Sin utilidades registradas para el periodo.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -126,7 +177,7 @@
   </div>
 
   <div class="table-responsive">
-    <h2 class="h6">Comparativo Últimos 6 Meses</h2>
+    <h2 class="h6">Comparativo Ultimos 6 Meses</h2>
     <table class="table table-striped table-bordered table-sm">
       <thead class="table-light text-center">
         <tr>
@@ -147,10 +198,11 @@
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="4" class="text-center text-muted">Sin datos históricos.</td></tr>
+          <tr><td colspan="4" class="text-center text-muted">Sin datos historicos.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
 {% endblock %}

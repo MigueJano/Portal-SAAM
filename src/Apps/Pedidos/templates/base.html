@@ -8,28 +8,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %} {% endblock %}</title>
-    <link rel="icon" type="image/png" href="{% static 'ico/bruja.ico' %}">
+    <link rel="icon" type="image/png" href="{% static_version 'ico/bruja.ico' %}">
 
     <!-- CDN Font Awesome 5 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
     <!-- Bootstrap CSS (local para evitar dependencia de red) -->
-    <link rel="stylesheet" href="{% static 'vendor/bootstrap/css/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static_version 'vendor/bootstrap/css/bootstrap.min.css' %}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <!-- CSS DataTables -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 
     <!-- CSS -->
-    <link rel="stylesheet" href="{% static 'css/colors.css' %}">
-    <link rel="stylesheet" href="{% static 'css/style_base.css' %}">
-    <link rel="stylesheet" href="{% static 'css/margin.css' %}">
+    <link rel="stylesheet" href="{% static_version 'css/colors.css' %}">
+    <link rel="stylesheet" href="{% static_version 'css/style_base.css' %}">
+    <link rel="stylesheet" href="{% static_version 'css/margin.css' %}">
     {% block CSS %}
     {% endblock CSS %}
 
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg">
+  <nav class="navbar navbar-expand-lg saam-navbar" data-bs-theme="dark">
     <div class="container-fluid">
-      <a class="navbar-brand" href="{% url 'home' %}"><img src="{% static 'img/texto.png' %}" alt="Logo" height="40" class="d-inline-block align-text-top"></a>
+      <a class="navbar-brand" href="{% url 'home' %}"><img src="{% static_version 'img/texto.png' %}" alt="Logo" height="40" class="d-inline-block align-text-top"></a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarScroll" aria-controls="navbarScroll" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
@@ -44,7 +44,8 @@
               <!--<li><a class="dropdown-item" href="{% url 'dashboard_ventas' %}">Ventas</a></li> // INFO EN INVENTARIO-->
               <li><a class="dropdown-item" href="{% url 'dashboard_inventario' %}">Inventario</a></li>
               <li><a class="dropdown-item" href="{% url 'dashboard_operaciones' %}">Operaciones</a></li>
-              <li><a class="dropdown-item" href="{% url 'dashboard_estrategia' %}">Estrategia</a></li>
+              <li><a class="dropdown-item" href="{% url 'dashboard_estrategia' %}">Informe Estrategico</a></li>
+              <li><a class="dropdown-item" href="{% url 'dashboard_estrategia_precios' %}">Estrategia de Precios</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="{% url 'resumen_contable_propyme' %}">Contabilidad Pro Pyme</a></li>
             </ul>
@@ -199,7 +200,7 @@
     </main>
   </div>
   <!--SCRIPTS-->
-  <script src="{% static 'vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+  <script src="{% static_version 'vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
   <!-- jQuery -->
   <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
   <!-- JS DataTables -->

@@ -288,7 +288,14 @@ class CrearRecepcionProductoForm(forms.ModelForm):
         fields = ['producto', 'qty', 'empaque', 'precio_unitario']
         widgets = {
             'producto': forms.Select(attrs={'class': 'form-select form-select-sm'}),
-            'qty': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'min': 1}),
+            'qty': forms.NumberInput(
+                attrs={
+                    'class': 'form-control form-control-sm',
+                    'min': 1,
+                    'step': 1,
+                    'inputmode': 'numeric',
+                }
+            ),
             'empaque': forms.Select(attrs={'class': 'form-select form-select-sm'}),
             'precio_unitario': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'step': '0.01', 'min': 0}),
         }
