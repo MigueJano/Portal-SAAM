@@ -292,6 +292,15 @@ class EstrategiaPreciosTests(TestCase):
         self.assertContains(resp, "Estrategia de Precios")
         self.assertContains(resp, "P-001")
         self.assertContains(resp, reverse("detalle_precios_estrategia", args=[self.producto.id]))
+        self.assertContains(resp, 'id="tabla-alertas-margen"')
+        self.assertContains(resp, 'id="tabla-oportunidades-comerciales"')
+        self.assertContains(resp, 'id="tabla-historico-precios"')
+        self.assertContains(resp, "Haz clic en el encabezado de una columna para ordenar cada tabla.")
+        self.assertContains(
+            resp,
+            f'{reverse("detalle_precios_estrategia", args=[self.producto.id])}?range_months=6',
+            count=3,
+        )
         self.assertEqual(len(resp.context["pricing_rows"]), 1)
         row = resp.context["pricing_rows"][0]
         self.assertEqual(row["precio_minimo_compra"], Decimal("100.00"))
@@ -312,6 +321,9 @@ class EstrategiaPreciosTests(TestCase):
         self.assertContains(resp, "Cliente Estrategia")
         self.assertContains(resp, "Factura #5001")
         self.assertContains(resp, "Factura #7001")
+        self.assertContains(resp, 'id="tabla-compras-detalle"')
+        self.assertContains(resp, 'id="tabla-ventas-detalle"')
+        self.assertContains(resp, "Haz clic en el encabezado de una columna para ordenar cada tabla.")
         self.assertEqual(len(resp.context["compras_detalle"]), 2)
         self.assertEqual(len(resp.context["ventas_detalle"]), 2)
         self.assertEqual(resp.context["compras_detalle"][0]["precio_unitario"], Decimal("150.00"))

@@ -19,9 +19,9 @@
   </div>
 
   <div class="alert alert-light border mb-3">
-    El flujo se muestra desde la transacción más antigua a la más reciente.
+    El flujo se muestra desde la transacci&oacute;n m&aacute;s antigua a la m&aacute;s reciente.
     Entradas suman al subtotal, despachos restan y las reservas mantienen el subtotal mientras no se finalizan.
-    En movimientos antiguos puede aparecer "Sin responsable registrado" cuando ese dato no existía en el sistema.
+    En movimientos antiguos puede aparecer "Sin responsable registrado" cuando ese dato no exist&iacute;a en el sistema.
   </div>
 
   <div class="row g-3 mb-3">
@@ -64,13 +64,12 @@
       <thead class="table-light text-center">
         <tr>
           <th>Fecha</th>
-          <th>Transacción</th>
+          <th>Transacci&oacute;n</th>
           <th>Cantidad</th>
           <th>Valor</th>
           <th>Total</th>
           <th>Subtotal</th>
           <th>Cliente / Proveedor</th>
-          <th>Responsable</th>
         </tr>
       </thead>
       <tbody>
@@ -85,11 +84,10 @@
             <td class="text-end">$ {{ row.total|formatear_miles }}</td>
             <td class="text-end fw-semibold">{{ row.subtotal|formatear_miles }}</td>
             <td>{{ row.cliente_proveedor }}</td>
-            <td>{{ row.responsable }}</td>
           </tr>
         {% empty %}
           <tr>
-            <td colspan="8" class="text-center text-muted">Sin transacciones históricas para este producto.</td>
+            <td colspan="7" class="text-center text-muted">Sin transacciones hist&oacute;ricas para este producto.</td>
           </tr>
         {% endfor %}
       </tbody>
