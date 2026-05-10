@@ -29,6 +29,7 @@ from Apps.Pedidos.models import (
 )
 from Apps.Pedidos.templatetags.custom_filters import formatear_miles
 from Apps.Pedidos.utils_pdf import formatear_miles_punto
+from Apps.Pedidos.views.producto import _parse_codigos_proveedor
 from Apps.indicadores.services.contabilidad import Periodo, filas_stock_contable
 
 
@@ -65,6 +66,106 @@ class ClonarDbSqliteCommandTests(SimpleTestCase):
                     source=str(source),
                     target=str(target),
                 )
+
+
+class CodigoProveedorParserTests(SimpleTestCase):
+    def test_parse_codigos_proveedor_ignora_fila_totalmente_vacia(self):
+        codigos, errores = _parse_codigos_proveedor({
+            "codigos_proveedor[0][proveedor]": "",
+            "codigos_proveedor[0][codigo_proveedor]": "",
+        })
+
+        self.assertEqual(codigos, [])
+        self.assertEqual(errores, [])
+
+    def test_parse_codigos_proveedor_exige_proveedor_si_hay_codigo(self):
+        codigos, errores = _parse_codigos_proveedor({
+            "codigos_proveedor[0][proveedor]": "",
+            "codigos_proveedor[0][codigo_proveedor]": "EXT-01",
+        })
+
+        self.assertEqual(codigos, [])
+        self.assertEqual(errores, ["Fila 0: debes seleccionar un proveedor."])
+
+
+class CrearProductoCodigosProveedorTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("producto_crear", password="test123")
+        self.client.force_login(self.user)
+
+        self.categoria = Categoria.objects.create(categoria="Categoria Producto")
+        self.subcategoria = Subcategoria.objects.create(
+            categoria=self.categoria,
+            subcategoria="Subcategoria Producto",
+        )
+        self.empaque_primario = CategoriaEmpaque.objects.create(nombre="Unidad Producto", nivel="PRIMARIO")
+        self.empaque_secundario = CategoriaEmpaque.objects.create(nombre="Caja Producto", nivel="SECUNDARIO")
+        self.empaque_terciario = CategoriaEmpaque.objects.create(nombre="Pallet Producto", nivel="TERCIARIO")
+
+    def _producto_payload(self, codigo="PADE01"):
+        return {
+            "categoria_producto": self.categoria.id,
+            "subcategoria_producto": self.subcategoria.id,
+            "codigo_producto_interno": codigo,
+            "nombre_producto": f"Producto {codigo}",
+            "qty_terciario": "1",
+            "qty_secundario": "6",
+            "qty_primario": "12",
+            "qty_unidad": "1",
+            "medida": "und",
+            "qty_minima": "3",
+            "empaque_primario": self.empaque_primario.id,
+            "empaque_secundario": self.empaque_secundario.id,
+            "empaque_terciario": self.empaque_terciario.id,
+        }
+
+    def _crear_producto(self, codigo="PADE01"):
+        return Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno=codigo,
+            nombre_producto=f"Producto {codigo}",
+            qty_terciario=1,
+            qty_secundario=6,
+            qty_primario=12,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=3,
+            empaque_primario=self.empaque_primario,
+            empaque_secundario=self.empaque_secundario,
+            empaque_terciario=self.empaque_terciario,
+        )
+
+    def test_crear_producto_no_renderiza_fila_de_codigo_por_defecto(self):
+        resp = self.client.get(reverse("crear_producto"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'name="codigos_proveedor[0][codigo_proveedor]"', html=False)
+
+    def test_editar_producto_sin_codigos_no_renderiza_fila_de_codigo_por_defecto(self):
+        producto = self._crear_producto(codigo="PADE02")
+
+        resp = self.client.get(reverse("editar_producto", args=[producto.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'name="codigos_proveedor[0][codigo_proveedor]"', html=False)
+
+    def test_crear_producto_permite_repetidor_opcional_vacio(self):
+        resp = self.client.post(
+            reverse("crear_producto"),
+            data={
+                **self._producto_payload(),
+                "codigos_proveedor[0][proveedor]": "",
+                "codigos_proveedor[0][codigo_proveedor]": "",
+            },
+        )
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse("lista_productos"))
+
+        producto = Producto.objects.get(codigo_producto_interno="PADE01")
+        self.assertEqual(producto.nombre_producto, "Producto PADE01")
+        self.assertEqual(producto.codigos_proveedor.count(), 0)
 
 
 class RedondeoSiiFormattingTests(SimpleTestCase):

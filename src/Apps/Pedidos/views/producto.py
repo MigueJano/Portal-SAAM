@@ -54,6 +54,9 @@ def _parse_codigos_proveedor(post_data):
     for idx, d in items.items():
         prov_raw = (d.get('proveedor') or '').strip()
         cod = (d.get('codigo_proveedor') or '').strip()
+        if not prov_raw and not cod:
+            # La fila vacia equivale a no informar codigos del proveedor.
+            continue
         if not cod:
             errores.append(f"Fila {idx}: el código es obligatorio.")
             continue
