@@ -17,7 +17,9 @@ class Observacion(models.Model):
     lista = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"[{self.tipo}] {self.usuario} - {self.url}"
+        usuario = self.usuario.username if self.usuario else "anonimo"
+        referencia = f"Obs #{self.pk}" if self.pk else "Obs"
+        return f"{referencia} - [{self.tipo}] - {usuario} - {self.creado_en:%Y-%m-%d}"
 
 class VersionRegistro(models.Model):
     """
@@ -52,7 +54,9 @@ class VersionRegistro(models.Model):
         ordering = ['-creado_en']
 
     def __str__(self):
-        return f"v{self.version_mayor}.{self.version_menor}.{self.version_patch} - {self.get_impacto_display()}"
+        referencia = f"Version #{self.pk}" if self.pk else "Version"
+        origen = f" - Obs #{self.observacion_id}" if self.observacion_id else ""
+        return f"{referencia} - v{self.version_mayor}.{self.version_menor}.{self.version_patch} - {self.get_impacto_display()}{origen}"
 
     @property
     def version_str(self) -> str:

@@ -17,6 +17,8 @@ from Apps.Pedidos.models import (
     Categoria,
     CategoriaEmpaque,
     Cliente,
+    Cotizacion,
+    EntregaPedido,
     ListaPrecios,
     MovimientoStockHistorico,
     Pedido,
@@ -1066,3 +1068,99 @@ class InventarioPeriodoTests(TestCase):
         self.assertEqual(movimientos[1]["responsable"], self.user.username)
         self.assertEqual(movimientos[1]["transaccion"], "Reserva pendiente")
         self.assertEqual(movimientos[1]["subtotal"], 10)
+
+
+class ModelStrTrazabilidadTests(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create(
+            nombre_cliente="Cliente Traza",
+            rut_cliente="76123456-7",
+            direccion_cliente="Av. Uno 123",
+            direccion_bodega_cliente="Bodega Uno 123",
+            cliente_activo=True,
+            telefono_cliente="+56911111111",
+            correo_cliente="cliente.traza@example.com",
+            categoria="PYME",
+        )
+        self.cotizacion = Cotizacion.objects.create(
+            fecha_cotizacion=datetime(2026, 2, 1).date(),
+            num_cotizacion="COT-100",
+            nombre_cliente=self.cliente,
+        )
+        self.producto = Producto.objects.create(
+            codigo_producto_interno="TRAZA1",
+            nombre_producto="Producto Traza",
+            qty_terciario=1,
+            qty_secundario=10,
+            qty_primario=20,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+
+    def test_pedido_venta_y_entrega_priorizan_numero_de_pedido(self):
+        pedido = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            num_cotizacion=self.cotizacion,
+            fecha_pedido=datetime(2026, 2, 3).date(),
+            estado_pedido="Pendiente",
+        )
+        venta = Venta.objects.create(
+            pedidoid=pedido,
+            fecha_venta=datetime(2026, 2, 4).date(),
+            documento_pedido="Factura",
+            num_documento=2001,
+            venta_neto_pedido=Decimal("1000.00"),
+            venta_iva_pedido=Decimal("190.00"),
+            venta_total_pedido=Decimal("1190.00"),
+        )
+        entrega = EntregaPedido.objects.create(
+            pedido=pedido,
+            nombre_receptor="Ana Perez",
+            rut_receptor="11111111-1",
+            fecha_entrega=timezone.make_aware(datetime(2026, 2, 5, 10, 0, 0)),
+        )
+
+        self.assertEqual(
+            str(pedido),
+            f"Pedido #{pedido.id} - Cliente Traza (76123456-7) - 2026-02-03 - Cot. COT-100",
+        )
+        self.assertEqual(
+            str(venta),
+            f"Venta #{venta.id} - Pedido #{pedido.id} - Cliente Traza (76123456-7) - Factura #2001",
+        )
+        self.assertEqual(
+            str(entrega),
+            f"Entrega #{entrega.id} - Pedido #{pedido.id} - Cliente Traza (76123456-7)",
+        )
+
+    def test_stock_y_historial_muestran_referencia_de_pedido(self):
+        pedido = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=datetime(2026, 2, 6).date(),
+            estado_pedido="Pendiente",
+        )
+        stock = Stock.objects.create(
+            tipo_movimiento="RESERVA",
+            producto=self.producto,
+            qty=5,
+            empaque="SECUNDARIO",
+            precio_unitario=Decimal("2500.00"),
+            pedido=pedido,
+        )
+        movimiento = MovimientoStockHistorico.objects.create(
+            stock=stock,
+            tipo_movimiento="RESERVA",
+            qty=5,
+            empaque="SECUNDARIO",
+            precio_unitario=Decimal("2500.00"),
+        )
+
+        self.assertEqual(
+            str(stock),
+            f"RESERVA - TRAZA1 - Producto Traza (1 und) - 5 (SECUNDARIO) - Pedido #{pedido.id}",
+        )
+        self.assertEqual(
+            str(movimiento),
+            f"RESERVA - Stock #{stock.id} - 5 (SECUNDARIO) - Pedido #{pedido.id}",
+        )

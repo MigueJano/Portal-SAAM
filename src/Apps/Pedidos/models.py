@@ -67,7 +67,7 @@ class Proveedor(models.Model):
     num_cuenta_proveedor = models.CharField(max_length=20)
 
     def __str__(self):
-        return self.nombre_proveedor
+        return f"{self.nombre_proveedor} ({self.rut_proveedor})"
 
 class Contacto(models.Model):
     """
@@ -181,7 +181,7 @@ class Subcategoria(models.Model):
     subcategoria = models.CharField(max_length=30)
 
     def __str__(self):
-        return self.subcategoria
+        return f"{self.subcategoria} - {self.categoria}"
 
 class Producto(models.Model):
     """
@@ -214,7 +214,7 @@ class Producto(models.Model):
     empaque_terciario = models.ForeignKey('CategoriaEmpaque', on_delete=models.SET_NULL, null=True, blank=True, related_name='productos_terciarios')
 
     def __str__(self):
-        return f"{self.nombre_producto} ({self.qty_unidad} {self.medida})"
+        return f"{self.codigo_producto_interno} - {self.nombre_producto} ({self.qty_unidad} {self.medida})"
 
 class CodigoProveedor(models.Model):
     """
@@ -278,7 +278,14 @@ class Stock(models.Model):
     pedido = models.ForeignKey('Pedido', null=True, blank=True, on_delete=models.SET_NULL)
 
     def __str__(self):
-        return f"{self.tipo_movimiento} - {self.producto} - {self.qty} ({self.empaque})"
+        referencia = None
+        if self.pedido_id:
+            referencia = f"Pedido #{self.pedido_id}"
+        elif self.recepcion_id:
+            referencia = f"Recepcion #{self.recepcion_id}"
+
+        detalle = f"{self.tipo_movimiento} - {self.producto} - {self.qty} ({self.empaque})"
+        return f"{detalle} - {referencia}" if referencia else detalle
 
 
 class MovimientoStockHistorico(models.Model):
@@ -321,7 +328,14 @@ class MovimientoStockHistorico(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.tipo_movimiento} - Stock {self.stock_id} - {self.qty} ({self.empaque})"
+        referencia = None
+        if self.stock and self.stock.pedido_id:
+            referencia = f"Pedido #{self.stock.pedido_id}"
+        elif self.stock and self.stock.recepcion_id:
+            referencia = f"Recepcion #{self.stock.recepcion_id}"
+
+        detalle = f"{self.tipo_movimiento} - Stock #{self.stock_id} - {self.qty} ({self.empaque})"
+        return f"{detalle} - {referencia}" if referencia else detalle
 
 class Cliente(models.Model):
     """
@@ -344,7 +358,7 @@ class Cliente(models.Model):
     categoria = models.CharField(max_length=20, choices=CATEGORIA)
 
     def __str__(self):
-        return self.nombre_cliente
+        return f"{self.nombre_cliente} ({self.rut_cliente})"
 
 class ListaPrecios(models.Model):
     """
@@ -361,7 +375,7 @@ class ListaPrecios(models.Model):
     vigencia = models.DateField()
 
     def __str__(self):
-        return f"{self.nombre_cliente} - {self.nombre_producto} - {self.precio_total} - {self.vigencia}"
+        return f"{self.nombre_cliente} - {self.nombre_producto} - {self.empaque} - {self.vigencia}"
 
 class Cotizacion(models.Model):
     """
@@ -386,7 +400,7 @@ class Cotizacion(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.num_cotizacion} - {self.nombre_cliente}"
+        return f"Cotizacion {self.num_cotizacion} - {self.nombre_cliente} - {self.fecha_cotizacion}"
 
 class Pedido(models.Model):
     """
@@ -405,9 +419,18 @@ class Pedido(models.Model):
     estado_pedido = models.CharField(max_length=10, choices=ESTADO_PEDIDO_CHOICES)
     comentario_pedido = models.TextField(blank=True, null=True)
 
+    def referencia_pedido(self):
+        return f"Pedido #{self.pk}" if self.pk else "Pedido sin ID"
+
     def __str__(self):
-        cotizacion = self.num_cotizacion if self.num_cotizacion else "Sin Cotización"
-        return f"Pedido #{cotizacion} - {self.nombre_cliente}"
+        partes = [self.referencia_pedido()]
+        if self.nombre_cliente_id:
+            partes.append(str(self.nombre_cliente))
+        if self.fecha_pedido:
+            partes.append(str(self.fecha_pedido))
+        if self.num_cotizacion_id:
+            partes.append(f"Cot. {self.num_cotizacion.num_cotizacion}")
+        return " - ".join(partes)
 
 class Venta(models.Model):
     """
@@ -432,7 +455,13 @@ class Venta(models.Model):
 
 
     def __str__(self):
-        return f"Venta #{self.pedidoid} - {self.documento_pedido} - {self.venta_total_pedido}"
+        partes = [f"Venta #{self.pk}" if self.pk else "Venta"]
+        if self.pedidoid_id:
+            partes.append(self.pedidoid.referencia_pedido())
+            if self.pedidoid.nombre_cliente_id:
+                partes.append(str(self.pedidoid.nombre_cliente))
+        partes.append(f"{self.documento_pedido} #{self.num_documento}")
+        return " - ".join(partes)
 
 class UtilidadProducto(models.Model):
     # Enlace directo a la venta (muy conveniente para reportes)
@@ -467,7 +496,12 @@ class UtilidadProducto(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.producto} x{self.cantidad} ({self.empaque})"
+        detalle = f"{self.producto} x{self.cantidad} ({self.empaque})"
+        if self.venta_id and self.venta and self.venta.pedidoid_id:
+            referencia = f"Utilidad #{self.pk}" if self.pk else "Utilidad"
+            return f"{referencia} - {self.venta.pedidoid.referencia_pedido()} - {detalle}"
+        referencia = f"Utilidad #{self.pk}" if self.pk else "Utilidad"
+        return f"{referencia} - {detalle}"
 
 class EntregaPedido(models.Model):
     pedido = models.ForeignKey('Pedido', on_delete=models.CASCADE, related_name='entregas')
@@ -479,7 +513,12 @@ class EntregaPedido(models.Model):
     foto = models.FileField(upload_to='entregas_fotos/%Y/%m/', blank=True, null=True)
 
     def __str__(self):
-        return f"Entrega {self.id} - Pedido {self.pedido_id}"
+        partes = [f"Entrega #{self.id}" if self.id else "Entrega sin ID"]
+        if self.pedido_id:
+            partes.append(f"Pedido #{self.pedido_id}")
+            if self.pedido and self.pedido.nombre_cliente_id:
+                partes.append(str(self.pedido.nombre_cliente))
+        return " - ".join(partes)
 
 # --- Listas de Precios Predeterminadas ---------------------------------------
 
@@ -502,7 +541,7 @@ class ListaPreciosPredeterminada(models.Model):
         verbose_name_plural = "Listas de Precios (Predeterminadas)"
 
     def __str__(self):
-        return self.nombre_listaprecios
+        return f"LP #{self.pk} - {self.nombre_listaprecios}" if self.pk else self.nombre_listaprecios
 
 
 class ListaPreciosPredItem(models.Model):
@@ -562,7 +601,8 @@ class ListaPreciosPredItem(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.listaprecios} - {self.nombre_producto} - {self.empaque} - $ {self.precio_total}"
+        referencia = f"LP Item #{self.pk}" if self.pk else "LP Item"
+        return f"{referencia} - {self.listaprecios} - {self.nombre_producto} - {self.empaque} - {self.vigencia}"
 
     # -----------------------------
     # Helpers de negocio / display

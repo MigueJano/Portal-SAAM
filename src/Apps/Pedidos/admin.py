@@ -12,6 +12,7 @@ from .models import (
     Proveedor, Contacto, Recepcion, Producto, CodigoProveedor, Stock, ListaPrecios, Cliente,
     Pedido, Venta, Categoria, Subcategoria, Cotizacion, CategoriaEmpaque,
     EntregaPedido, ListaPreciosPredeterminada, ListaPreciosPredItem, MovimientoStockHistorico,
+    UtilidadProducto,
 )
 
 # ---------- Inlines ----------
@@ -227,6 +228,21 @@ class EntregaPedidoAdmin(admin.ModelAdmin):
 # =========================
 # Inlines (ítems en cabecera)
 # =========================
+@admin.register(UtilidadProducto)
+class UtilidadProductoAdmin(admin.ModelAdmin):
+    list_display = (
+        'id', 'venta', 'producto', 'empaque', 'cantidad',
+        'precio_compra_unitario', 'precio_venta_unitario',
+        'utilidad', 'utilidad_porcentaje', 'fecha',
+    )
+    search_fields = ('venta__pedidoid__id', 'venta__num_documento', 'producto__nombre_producto')
+    list_filter = ('empaque', 'fecha')
+    date_hierarchy = 'fecha'
+    ordering = ('-fecha', '-id')
+    autocomplete_fields = ('venta', 'producto')
+    list_select_related = ('venta', 'venta__pedidoid', 'producto')
+
+
 class ListaPreciosPredItemInline(admin.TabularInline):
     model = ListaPreciosPredItem
     extra = 0
