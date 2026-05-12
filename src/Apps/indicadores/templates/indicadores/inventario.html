@@ -88,7 +88,7 @@
 
   <div class="table-responsive mb-4">
     <h2 class="h6">Revision de Stock Contable ({{ stock_rows|length }} de {{ productos_total_general }})</h2>
-    <table class="table table-striped table-bordered table-sm">
+    <table class="table table-striped table-bordered table-sm js-sortable-report-table">
       <thead class="table-light text-center">
         <tr>
           <th>Código</th>
@@ -108,10 +108,10 @@
                 {{ row.producto }}
               </a>
             </td>
-            <td class="text-end">{{ row.cantidad_disponible_uprim|formatear_miles }}</td>
-            <td class="text-end">{{ row.cantidad_despachada_uprim|formatear_miles }}</td>
-            <td class="text-end">$ {{ row.valor_producto_unitario|formatear_miles }}</td>
-            <td class="text-end">$ {{ row.total_producto|formatear_miles }}</td>
+            <td class="text-end" data-order="{{ row.cantidad_disponible_uprim }}">{{ row.cantidad_disponible_uprim|formatear_miles }}</td>
+            <td class="text-end" data-order="{{ row.cantidad_despachada_uprim }}">{{ row.cantidad_despachada_uprim|formatear_miles }}</td>
+            <td class="text-end" data-order="{{ row.valor_producto_unitario|floatformat:'2u' }}">$ {{ row.valor_producto_unitario|formatear_miles }}</td>
+            <td class="text-end" data-order="{{ row.total_producto|floatformat:'2u' }}">$ {{ row.total_producto|formatear_miles }}</td>
           </tr>
         {% empty %}
           <tr><td colspan="6" class="text-center text-muted">Sin datos de inventario.</td></tr>
@@ -124,7 +124,7 @@
     <div class="col-lg-7">
       <div class="table-responsive mb-4">
         <h2 class="h6">Movimientos del Período</h2>
-        <table class="table table-striped table-bordered table-sm">
+        <table class="table table-striped table-bordered table-sm js-sortable-report-table">
           <thead class="table-light text-center">
             <tr>
               <th>Tipo Movimiento</th>
@@ -136,8 +136,8 @@
             {% for row in movimientos_tipo %}
               <tr>
                 <td>{{ row.tipo_label }}</td>
-                <td class="text-end">{{ row.movimientos|formatear_miles }}</td>
-                <td class="text-end">{{ row.unidades|formatear_miles }}</td>
+                <td class="text-end" data-order="{{ row.movimientos }}">{{ row.movimientos|formatear_miles }}</td>
+                <td class="text-end" data-order="{{ row.unidades }}">{{ row.unidades|formatear_miles }}</td>
               </tr>
             {% empty %}
               <tr><td colspan="3" class="text-center text-muted">Sin movimientos en el período.</td></tr>
@@ -149,7 +149,7 @@
     <div class="col-lg-5">
       <div class="table-responsive mb-4">
         <h2 class="h6">Productos Críticos</h2>
-        <table class="table table-striped table-bordered table-sm">
+        <table class="table table-striped table-bordered table-sm js-sortable-report-table">
           <thead class="table-light text-center">
             <tr>
               <th>Código</th>
@@ -162,7 +162,7 @@
               <tr>
                 <td>{{ row.codigo_interno }}</td>
                 <td>{{ row.producto }}</td>
-                <td class="text-end">{{ row.cantidad_disponible_uprim|formatear_miles }}</td>
+                <td class="text-end" data-order="{{ row.cantidad_disponible_uprim }}">{{ row.cantidad_disponible_uprim|formatear_miles }}</td>
               </tr>
             {% empty %}
               <tr><td colspan="3" class="text-center text-muted">Sin productos críticos.</td></tr>
@@ -175,7 +175,7 @@
 
   <div class="table-responsive">
     <h2 class="h6">Revision Detallada de Movimientos ({{ movimientos_rows|length }})</h2>
-    <table class="table table-striped table-bordered table-sm">
+    <table class="table table-striped table-bordered table-sm js-sortable-report-table">
       <thead class="table-light text-center">
         <tr>
           <th>Código</th>
@@ -191,8 +191,8 @@
             <td>{{ row.producto__codigo_producto_interno }}</td>
             <td>{{ row.producto__nombre_producto }}</td>
             <td>{{ row.tipo_label }}</td>
-            <td class="text-end">{{ row.movimientos|formatear_miles }}</td>
-            <td class="text-end">{{ row.unidades|formatear_miles }}</td>
+            <td class="text-end" data-order="{{ row.movimientos }}">{{ row.movimientos|formatear_miles }}</td>
+            <td class="text-end" data-order="{{ row.unidades }}">{{ row.unidades|formatear_miles }}</td>
           </tr>
         {% empty %}
           <tr><td colspan="5" class="text-center text-muted">Sin detalle para el período.</td></tr>
@@ -201,4 +201,29 @@
     </table>
   </div>
 </div>
+{% endblock %}
+
+{% block script %}
+<script>
+  $(function () {
+    $(".js-sortable-report-table").each(function () {
+      const $table = $(this);
+      const hasDataRows = $table.find("tbody tr").length > 0 && $table.find("tbody td[colspan]").length === 0;
+
+      if (!hasDataRows) {
+        return;
+      }
+
+      $table.DataTable({
+        paging: false,
+        searching: false,
+        info: false,
+        lengthChange: false,
+        order: [],
+        autoWidth: false,
+        dom: "t",
+      });
+    });
+  });
+</script>
 {% endblock %}

@@ -2,7 +2,13 @@ from .financieros import dashboard_financiero_simple
 from .ventas import dashboard_ventas
 from .inventario import dashboard_inventario, flujo_inventario_producto
 from .operaciones import dashboard_operaciones
-from .estrategia import dashboard_estrategia, dashboard_estrategia_precios, detalle_precios_estrategia
+from .estrategia import (
+    dashboard_estrategia,
+    dashboard_precios_cliente,
+    dashboard_estrategia_precios,
+    dashboard_lista_precios_vigentes,
+    detalle_precios_estrategia,
+)
 from .contabilidad import (
     exportar_inventario_propyme,
     exportar_libro_compras_propyme,

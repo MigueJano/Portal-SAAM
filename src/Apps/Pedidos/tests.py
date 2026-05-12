@@ -1,3 +1,4 @@
+import base64
 import csv
 from datetime import datetime
 from decimal import Decimal
@@ -1008,6 +1009,15 @@ class InventarioPeriodoTests(TestCase):
             f'{reverse("flujo_inventario_producto", args=[self.producto.id])}?year=2026&month=3&stock_view=todos',
         )
 
+    def test_dashboard_inventario_renderice_tablas_ordenables(self):
+        resp = self.client.get(
+            reverse("dashboard_inventario"),
+            data={"year": 2026, "month": 3, "stock_view": "todos"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "js-sortable-report-table", count=5)
+        self.assertContains(resp, '$(".js-sortable-report-table").each(function () {')
+
     def test_flujo_inventario_producto_muestre_historial_ordenado(self):
         resp = self.client.get(
             reverse("flujo_inventario_producto", args=[self.producto.id]),
@@ -1068,6 +1078,190 @@ class InventarioPeriodoTests(TestCase):
         self.assertEqual(movimientos[1]["responsable"], self.user.username)
         self.assertEqual(movimientos[1]["transaccion"], "Reserva pendiente")
         self.assertEqual(movimientos[1]["subtotal"], 10)
+
+    def test_flujo_inventario_producto_prioriza_fechas_de_documento(self):
+        self._actualizar_fecha_movimiento(self.ingreso_enero, datetime(2026, 1, 18, 12, 0, 0))
+
+        cliente = Cliente.objects.create(
+            nombre_cliente="Cliente Flujo",
+            rut_cliente="76000000-1",
+            direccion_cliente="Dir Cliente Flujo",
+            direccion_bodega_cliente="Bodega Cliente Flujo",
+            cliente_activo=True,
+            telefono_cliente="+56911112222",
+            correo_cliente="flujo@test.local",
+            categoria="PYME",
+        )
+        pedido = Pedido.objects.create(
+            nombre_cliente=cliente,
+            fecha_pedido=datetime(2026, 3, 1).date(),
+            estado_pedido="Entregado",
+        )
+        despacho_documentado = Stock.objects.create(
+            tipo_movimiento="DESPACHO",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("180.00"),
+            pedido=pedido,
+        )
+        self._actualizar_fecha_movimiento(despacho_documentado, datetime(2026, 3, 20, 15, 30, 0))
+        venta = Venta.objects.create(
+            pedidoid=pedido,
+            fecha_venta=datetime(2026, 3, 8).date(),
+            documento_pedido="Factura",
+            num_documento=2008,
+            venta_neto_pedido=Decimal("180.00"),
+            venta_iva_pedido=Decimal("34.20"),
+            venta_total_pedido=Decimal("214.20"),
+        )
+
+        resp = self.client.get(
+            reverse("flujo_inventario_producto", args=[self.producto.id]),
+            data={"year": 2026, "month": 3, "stock_view": "todos"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(
+            resp,
+            "La columna Fecha prioriza la fecha del documento de recepci&oacute;n y la fecha de cierre de venta",
+        )
+
+        movimientos = resp.context["movimientos_rows"]
+        ingreso_row = next(row for row in movimientos if row["movimiento_id"] == self.ingreso_enero.id)
+        despacho_row = next(row for row in movimientos if row["movimiento_id"] == despacho_documentado.id)
+
+        self.assertEqual(ingreso_row["fecha"], self.recepcion_enero.fecha_recepcion)
+        self.assertEqual(despacho_row["fecha"], venta.fecha_venta)
+        self.assertContains(resp, "10-01-2026")
+        self.assertContains(resp, "08-03-2026")
+        self.assertNotContains(resp, "18-01-2026")
+        self.assertNotContains(resp, "20-03-2026")
+
+class EntregaPedidoFirmaCompatTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("entrega_firma", password="test123")
+        self.client.force_login(self.user)
+
+        self.emp_p = CategoriaEmpaque.objects.create(nombre="Unidad Entrega", nivel="PRIMARIO")
+        self.emp_s = CategoriaEmpaque.objects.create(nombre="Caja Entrega", nivel="SECUNDARIO")
+        self.emp_t = CategoriaEmpaque.objects.create(nombre="Pallet Entrega", nivel="TERCIARIO")
+
+        self.categoria = Categoria.objects.create(categoria="Categoria Entrega")
+        self.subcategoria = Subcategoria.objects.create(
+            categoria=self.categoria,
+            subcategoria="Subcategoria Entrega",
+        )
+        self.cliente_obj = Cliente.objects.create(
+            nombre_cliente="Cliente Entrega",
+            rut_cliente="76012345-6",
+            direccion_cliente="Direccion Cliente 123",
+            direccion_bodega_cliente="Bodega Cliente 123",
+            cliente_activo=True,
+            telefono_cliente="+56912345678",
+            correo_cliente="cliente.entrega@example.com",
+            categoria="PYME",
+        )
+        self.producto = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="ENTREGA1",
+            nombre_producto="Producto Entrega",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+            empaque_primario=self.emp_p,
+            empaque_secundario=self.emp_s,
+            empaque_terciario=self.emp_t,
+        )
+        self.pedido = Pedido.objects.create(
+            nombre_cliente=self.cliente_obj,
+            fecha_pedido=datetime(2026, 3, 1).date(),
+            estado_pedido="Pendiente",
+            comentario_pedido="Entrega con firma",
+        )
+        self.stock = Stock.objects.create(
+            tipo_movimiento="RESERVA",
+            producto=self.producto,
+            qty=3,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("2500.00"),
+            pedido=self.pedido,
+        )
+
+    def test_detalle_pedido_renderiza_canvas_compatible_con_ios_y_pc(self):
+        resp = self.client.get(reverse("detalle_pedido", args=[self.pedido.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "touch-action:none")
+        self.assertContains(resp, "pointerdown")
+        self.assertContains(resp, "shown.bs.modal")
+        self.assertContains(resp, "canvas.toDataURL('image/png')")
+
+    def test_finalizar_pedido_acepta_firma_dataurl_y_mueve_stock(self):
+        firma_b64 = base64.b64encode(b"firma-prueba").decode("ascii")
+
+        with TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root):
+                with patch("Apps.Pedidos.utils_pdf.generar_pdf_entrega", return_value=b"%PDF-1.4 prueba"):
+                    resp = self.client.post(
+                        reverse("finalizar_pedido", args=[self.pedido.id]),
+                        data={
+                            "entrega_nombre": "Ana Perez",
+                            "entrega_rut": "11111111-1",
+                            "entrega_fecha": "2026-03-05T10:30",
+                            "entrega_firma": f"data:image/png;base64,{firma_b64}",
+                        },
+                    )
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse("detalle_pedido", args=[self.pedido.id]))
+
+        self.pedido.refresh_from_db()
+        self.stock.refresh_from_db()
+
+        self.assertEqual(self.pedido.estado_pedido, "Entregado")
+        self.assertEqual(self.stock.tipo_movimiento, "DESPACHO")
+
+        entrega = EntregaPedido.objects.get(pedido=self.pedido)
+        self.assertEqual(entrega.nombre_receptor, "Ana Perez")
+        self.assertTrue(entrega.archivo_pdf.name.endswith(".pdf"))
+
+        historial = MovimientoStockHistorico.objects.get(stock=self.stock)
+        self.assertEqual(historial.tipo_movimiento, "DESPACHO")
+        self.assertEqual(historial.responsable, self.user)
+
+    def test_finalizar_pedido_soporta_usuario_anonimo_sin_romper_historial(self):
+        firma_b64 = base64.b64encode(b"firma-prueba").decode("ascii")
+        self.client.logout()
+
+        with TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root):
+                with patch("Apps.Pedidos.utils_pdf.generar_pdf_entrega", return_value=b"%PDF-1.4 prueba"):
+                    resp = self.client.post(
+                        reverse("finalizar_pedido", args=[self.pedido.id]),
+                        data={
+                            "entrega_nombre": "Ana Perez",
+                            "entrega_rut": "11111111-1",
+                            "entrega_fecha": "2026-03-05T10:30",
+                            "entrega_firma": f"data:image/png;base64,{firma_b64}",
+                        },
+                    )
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse("detalle_pedido", args=[self.pedido.id]))
+
+        self.pedido.refresh_from_db()
+        self.stock.refresh_from_db()
+
+        self.assertEqual(self.pedido.estado_pedido, "Entregado")
+        self.assertEqual(self.stock.tipo_movimiento, "DESPACHO")
+
+        historial = MovimientoStockHistorico.objects.get(stock=self.stock)
+        self.assertEqual(historial.tipo_movimiento, "DESPACHO")
+        self.assertIsNone(historial.responsable)
 
 
 class ModelStrTrazabilidadTests(TestCase):

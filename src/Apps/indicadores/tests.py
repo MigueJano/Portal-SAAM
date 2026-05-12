@@ -9,6 +9,9 @@ from django.utils import timezone
 from Apps.Pedidos.models import (
     Categoria,
     Cliente,
+    ListaPrecios,
+    ListaPreciosPredItem,
+    ListaPreciosPredeterminada,
     Pedido,
     Producto,
     Proveedor,
@@ -30,6 +33,8 @@ class IndicadoresViewsTests(TestCase):
             reverse("dashboard_operaciones"),
             reverse("dashboard_estrategia"),
             reverse("dashboard_estrategia_precios"),
+            reverse("dashboard_lista_precios_vigentes"),
+            reverse("dashboard_precios_cliente"),
         ]
 
     def test_dashboards_requieren_autenticacion(self):
@@ -49,6 +54,8 @@ class IndicadoresViewsTests(TestCase):
         resp = self.client.get(reverse("home"))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Contabilidad Pro Pyme", count=1)
+        self.assertContains(resp, "Listas de Precios Vigentes", count=1)
+        self.assertContains(resp, "Precios por Cliente", count=1)
         self.assertContains(resp, "css/style_base.css?v=")
         self.assertContains(resp, "css/colors.css?v=")
 
@@ -93,7 +100,7 @@ class DashboardFinancieroPpmTests(TestCase):
             ganancia_porcentaje=Decimal("30.00"),
         )
 
-    def test_dashboard_financiero_calcula_ppm_al_uno_por_ciento(self):
+    def test_dashboard_financiero_calcula_ppm_al_uno_y_medio_por_ciento(self):
         fecha = timezone.localdate().isoformat()
         resp = self.client.get(
             reverse("dashboard_financiero_simple"),
@@ -101,13 +108,13 @@ class DashboardFinancieroPpmTests(TestCase):
         )
 
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.context["ppm_periodo"], Decimal("10.00"))
-        self.assertEqual(resp.context["ppm_total"]["total"], Decimal("10.00"))
-        self.assertEqual(resp.context["total_general_total"]["neto"], Decimal("990.00"))
+        self.assertEqual(resp.context["ppm_periodo"], Decimal("15.00"))
+        self.assertEqual(resp.context["ppm_total"]["total"], Decimal("15.00"))
+        self.assertEqual(resp.context["total_general_total"]["neto"], Decimal("985.00"))
         self.assertEqual(resp.context["total_general_total"]["iva"], Decimal("190.00"))
-        self.assertEqual(resp.context["total_general_total"]["total"], Decimal("1180.00"))
-        self.assertContains(resp, "PPM (1%)")
-        self.assertContains(resp, "PPM (1% s/ ventas netas)")
+        self.assertEqual(resp.context["total_general_total"]["total"], Decimal("1175.00"))
+        self.assertContains(resp, "PPM (1,5%)")
+        self.assertContains(resp, "PPM (1,5% s/ ventas netas)")
 
     def test_dashboard_financiero_redondea_ppm_como_sii_al_peso_entero(self):
         self.venta.venta_neto_pedido = Decimal("1050.00")
@@ -124,10 +131,10 @@ class DashboardFinancieroPpmTests(TestCase):
         )
 
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.context["ppm_periodo"], Decimal("11.00"))
-        self.assertEqual(resp.context["ppm_total"]["total"], Decimal("11.00"))
-        self.assertEqual(resp.context["total_general_total"]["neto"], Decimal("1039.00"))
-        self.assertEqual(resp.context["total_general_total"]["total"], Decimal("1238.50"))
+        self.assertEqual(resp.context["ppm_periodo"], Decimal("16.00"))
+        self.assertEqual(resp.context["ppm_total"]["total"], Decimal("16.00"))
+        self.assertEqual(resp.context["total_general_total"]["neto"], Decimal("1034.00"))
+        self.assertEqual(resp.context["total_general_total"]["total"], Decimal("1233.50"))
 
 
 class EstrategiaPreciosTests(TestCase):
@@ -376,3 +383,316 @@ class EstrategiaPreciosTests(TestCase):
         self.assertContains(resp, "Jugo Mango")
         self.assertNotContains(resp, "Detergente")
         self.assertEqual(len(resp.context["pricing_rows"]), 1)
+
+
+class DashboardListasPreciosVigentesTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("listas_vigentes", password="test123")
+        self.client.force_login(self.user)
+        self.hoy = timezone.localdate()
+
+        self.categoria = Categoria.objects.create(categoria="Bebidas")
+        self.subcategoria = Subcategoria.objects.create(
+            categoria=self.categoria,
+            subcategoria="Jugos",
+        )
+        self.producto = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="LP-001",
+            nombre_producto="Jugo Pina",
+            qty_terciario=2,
+            qty_secundario=6,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        self.otro_producto = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="LP-002",
+            nombre_producto="Jugo Naranja",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        self.proveedor = Proveedor.objects.create(
+            nombre_proveedor="Proveedor Lista",
+            rut_proveedor="76123456-7",
+            direccion_proveedor="Dir Lista",
+            direccion_bodega_proveedor="Bodega Lista",
+            empresa_activa=True,
+            banco_proveedor="Banco Lista",
+            cta_proveedor="Corriente",
+            num_cuenta_proveedor="1234567",
+        )
+        recepcion_1 = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=self.hoy,
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=8001,
+            total_neto_recepcion=Decimal("600.00"),
+            iva_recepcion=Decimal("114.00"),
+            total_recepcion=Decimal("714.00"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        recepcion_2 = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=self.hoy,
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=8002,
+            total_neto_recepcion=Decimal("150.00"),
+            iva_recepcion=Decimal("28.50"),
+            total_recepcion=Decimal("178.50"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto,
+            qty=1,
+            empaque="SECUNDARIO",
+            precio_unitario=Decimal("600.00"),
+            recepcion=recepcion_1,
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("150.00"),
+            recepcion=recepcion_2,
+        )
+
+        self.lista_a = ListaPreciosPredeterminada.objects.create(
+            nombre_listaprecios="Mayoristas",
+            descripcion_listaprecios="Lista principal",
+            activa=True,
+        )
+        self.lista_b = ListaPreciosPredeterminada.objects.create(
+            nombre_listaprecios="Minoristas",
+            descripcion_listaprecios="Lista secundaria",
+            activa=True,
+        )
+        ListaPreciosPredItem.objects.create(
+            listaprecios=self.lista_a,
+            nombre_producto=self.producto,
+            empaque="SECUNDARIO",
+            precio_venta=Decimal("1200.00"),
+            precio_iva=Decimal("228.00"),
+            precio_total=Decimal("1428.00"),
+            vigencia=self.hoy,
+        )
+        ListaPreciosPredItem.objects.create(
+            listaprecios=self.lista_b,
+            nombre_producto=self.otro_producto,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("300.00"),
+            precio_iva=Decimal("57.00"),
+            precio_total=Decimal("357.00"),
+            vigencia=self.hoy,
+        )
+
+    def test_dashboard_lista_precios_vigentes_muestra_comparativo_normalizado(self):
+        resp = self.client.get(
+            reverse("dashboard_lista_precios_vigentes"),
+            data={"lista": self.lista_a.id},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Listas de Precios Vigentes")
+        self.assertContains(resp, self.lista_a.nombre_listaprecios)
+        self.assertContains(resp, 'id="tabla-listas-precios-vigentes"')
+        self.assertContains(resp, "Precios normalizados a unidad primaria")
+        self.assertContains(resp, "Haz clic en el encabezado de una columna para ordenar la tabla.")
+        self.assertContains(resp, "Utilidad")
+        self.assertContains(resp, "% Ganancia")
+        self.assertEqual(len(resp.context["pricing_rows"]), 1)
+
+        row = resp.context["pricing_rows"][0]
+        self.assertEqual(row["producto"], "Jugo Pina")
+        self.assertEqual(row["precio_venta"], Decimal("200.00"))
+        self.assertEqual(row["precio_compra"], Decimal("150.00"))
+        self.assertEqual(row["diferencia"], Decimal("50.00"))
+        self.assertEqual(row["utilidad"], Decimal("50.00"))
+        self.assertEqual(row["ganancia_pct"], Decimal("33.33"))
+
+    def test_dashboard_lista_precios_vigentes_filtra_por_lista(self):
+        resp = self.client.get(
+            reverse("dashboard_lista_precios_vigentes"),
+            data={"lista": self.lista_b.id},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["selected_lista"].id, self.lista_b.id)
+        self.assertEqual(len(resp.context["pricing_rows"]), 1)
+        self.assertEqual(resp.context["pricing_rows"][0]["producto"], "Jugo Naranja")
+        self.assertNotContains(resp, "Jugo Pina")
+
+
+class DashboardPreciosClienteTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("precios_cliente", password="test123")
+        self.client.force_login(self.user)
+        self.hoy = timezone.localdate()
+
+        self.categoria = Categoria.objects.create(categoria="Bebidas")
+        self.subcategoria = Subcategoria.objects.create(
+            categoria=self.categoria,
+            subcategoria="Jugos",
+        )
+        self.producto = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="CLI-001",
+            nombre_producto="Jugo Cliente",
+            qty_terciario=2,
+            qty_secundario=6,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        self.otro_producto = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="CLI-002",
+            nombre_producto="Jugo Otro Cliente",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        self.proveedor = Proveedor.objects.create(
+            nombre_proveedor="Proveedor Cliente",
+            rut_proveedor="76999999-1",
+            direccion_proveedor="Dir Cliente",
+            direccion_bodega_proveedor="Bodega Cliente",
+            empresa_activa=True,
+            banco_proveedor="Banco Cliente",
+            cta_proveedor="Corriente",
+            num_cuenta_proveedor="9876543",
+        )
+        recepcion_1 = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=self.hoy,
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=8101,
+            total_neto_recepcion=Decimal("600.00"),
+            iva_recepcion=Decimal("114.00"),
+            total_recepcion=Decimal("714.00"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        recepcion_2 = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=self.hoy,
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=8102,
+            total_neto_recepcion=Decimal("150.00"),
+            iva_recepcion=Decimal("28.50"),
+            total_recepcion=Decimal("178.50"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto,
+            qty=1,
+            empaque="SECUNDARIO",
+            precio_unitario=Decimal("600.00"),
+            recepcion=recepcion_1,
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("150.00"),
+            recepcion=recepcion_2,
+        )
+
+        self.cliente_a = Cliente.objects.create(
+            nombre_cliente="Cliente A",
+            rut_cliente="76111111-2",
+            direccion_cliente="Dir A",
+            direccion_bodega_cliente="Bodega A",
+            cliente_activo=True,
+            telefono_cliente="+56911111111",
+            correo_cliente="clientea@test.local",
+            categoria="PYME",
+        )
+        self.cliente_b = Cliente.objects.create(
+            nombre_cliente="Cliente B",
+            rut_cliente="76222222-3",
+            direccion_cliente="Dir B",
+            direccion_bodega_cliente="Bodega B",
+            cliente_activo=True,
+            telefono_cliente="+56922222222",
+            correo_cliente="clienteb@test.local",
+            categoria="PYME",
+        )
+        ListaPrecios.objects.create(
+            nombre_cliente=self.cliente_a,
+            nombre_producto=self.producto,
+            empaque="SECUNDARIO",
+            precio_venta=Decimal("1200.00"),
+            precio_iva=Decimal("228.00"),
+            precio_total=Decimal("1428.00"),
+            vigencia=self.hoy,
+        )
+        ListaPrecios.objects.create(
+            nombre_cliente=self.cliente_b,
+            nombre_producto=self.otro_producto,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("300.00"),
+            precio_iva=Decimal("57.00"),
+            precio_total=Decimal("357.00"),
+            vigencia=self.hoy,
+        )
+
+    def test_dashboard_precios_cliente_muestra_comparativo_por_cliente(self):
+        resp = self.client.get(
+            reverse("dashboard_precios_cliente"),
+            data={"cliente": self.cliente_a.id},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Precios por Cliente")
+        self.assertContains(resp, self.cliente_a.nombre_cliente)
+        self.assertContains(resp, 'id="tabla-precios-cliente"')
+        self.assertContains(resp, "Precio Max. Compra")
+        self.assertContains(resp, "Precios normalizados a unidad primaria")
+        self.assertContains(resp, "Haz clic en el encabezado de una columna para ordenar la tabla.")
+        self.assertEqual(len(resp.context["pricing_rows"]), 1)
+
+        row = resp.context["pricing_rows"][0]
+        self.assertEqual(row["producto"], "Jugo Cliente")
+        self.assertEqual(row["precio_venta"], Decimal("200.00"))
+        self.assertEqual(row["precio_compra"], Decimal("150.00"))
+        self.assertEqual(row["diferencia"], Decimal("50.00"))
+        self.assertEqual(row["utilidad"], Decimal("50.00"))
+        self.assertEqual(row["ganancia_pct"], Decimal("33.33"))
+
+    def test_dashboard_precios_cliente_filtra_por_cliente(self):
+        resp = self.client.get(
+            reverse("dashboard_precios_cliente"),
+            data={"cliente": self.cliente_b.id},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["selected_cliente"].id, self.cliente_b.id)
+        self.assertEqual(len(resp.context["pricing_rows"]), 1)
+        self.assertEqual(resp.context["pricing_rows"][0]["producto"], "Jugo Otro Cliente")
+        self.assertNotContains(resp, "Jugo Cliente")

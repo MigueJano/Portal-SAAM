@@ -19,7 +19,8 @@
   </div>
 
   <div class="alert alert-light border mb-3">
-    El flujo se muestra desde la transacci&oacute;n m&aacute;s antigua a la m&aacute;s reciente.
+    La columna Fecha prioriza la fecha del documento de recepci&oacute;n y la fecha de cierre de venta; si no existe ese respaldo, usa la fecha del movimiento.
+    El flujo se muestra desde el registro m&aacute;s antiguo al m&aacute;s reciente seg&uacute;n esa referencia.
     Entradas suman al subtotal, despachos restan y las reservas mantienen el subtotal mientras no se finalizan.
     En movimientos antiguos puede aparecer "Sin responsable registrado" cuando ese dato no exist&iacute;a en el sistema.
   </div>
@@ -75,8 +76,8 @@
       <tbody>
         {% for row in movimientos_rows %}
           <tr>
-            <td class="{{ row.fecha_class }} fw-semibold text-nowrap">
-              {{ row.fecha|date:"d-m-Y H:i" }}
+            <td class="{{ row.fecha_class }} fw-semibold text-nowrap" data-order="{{ row.fecha|date:'Ymd' }}">
+              {{ row.fecha|date:"d-m-Y" }}
             </td>
             <td>{{ row.transaccion }}</td>
             <td class="text-end">{{ row.cantidad|formatear_miles }}</td>

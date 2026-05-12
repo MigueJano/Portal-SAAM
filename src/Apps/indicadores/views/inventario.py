@@ -4,8 +4,9 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Case, Count, F, IntegerField, Sum, Value, When
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
 
-from Apps.Pedidos.models import MovimientoStockHistorico, Producto, Stock
+from Apps.Pedidos.models import MovimientoStockHistorico, Producto, Stock, Venta
 from Apps.indicadores.services.contabilidad import _normalizar_precio_unidad_primaria, filas_stock_contable
 from .common import periodo_desde_request
 
@@ -94,6 +95,38 @@ def _responsable_label(movimiento) -> str:
     if not responsable:
         return "Sin responsable registrado"
     return responsable.get_full_name().strip() or responsable.username
+
+
+def _ventas_por_pedido_ids(pedido_ids):
+    if not pedido_ids:
+        return {}
+
+    ventas = (
+        Venta.objects.filter(pedidoid_id__in=pedido_ids)
+        .select_related("pedidoid")
+        .order_by("pedidoid_id", "-fecha_venta", "-id")
+    )
+
+    ventas_por_pedido = {}
+    for venta in ventas:
+        ventas_por_pedido.setdefault(venta.pedidoid_id, venta)
+    return ventas_por_pedido
+
+
+def _fecha_referencia_movimiento(movimiento, ventas_por_pedido):
+    base_rel = _stock_relacion(movimiento)
+    fecha_movimiento = getattr(movimiento, "fecha_movimiento", None)
+
+    if getattr(base_rel, "recepcion_id", None) and base_rel.recepcion and base_rel.recepcion.fecha_recepcion:
+        return base_rel.recepcion.fecha_recepcion, fecha_movimiento
+
+    pedido_id = getattr(base_rel, "pedido_id", None)
+    venta = ventas_por_pedido.get(pedido_id) if pedido_id else None
+    if venta and venta.fecha_venta:
+        return venta.fecha_venta, fecha_movimiento
+
+    fecha_fallback = timezone.localdate(fecha_movimiento) if fecha_movimiento else None
+    return fecha_fallback, fecha_movimiento
 
 
 def _delta_subtotal(tipo_movimiento: str, cantidad: int, *, es_legado: bool = False) -> int:
@@ -215,25 +248,50 @@ def flujo_inventario_producto(request, producto_id):
         .order_by("fecha_movimiento", "id")
     )
 
-    fuentes = [
-        {
-            "obj": movimiento,
-            "fecha": movimiento.fecha_movimiento,
-            "sort_id": movimiento.id,
-            "es_legado": False,
-        }
-        for movimiento in historico
-    ]
-    fuentes.extend(
-        {
-            "obj": movimiento,
-            "fecha": movimiento.fecha_movimiento,
-            "sort_id": movimiento.id,
-            "es_legado": True,
-        }
-        for movimiento in legacy
+    pedido_ids = {
+        pedido_id
+        for pedido_id in [
+            *(
+                getattr(_stock_relacion(movimiento), "pedido_id", None)
+                for movimiento in historico
+            ),
+            *(getattr(movimiento, "pedido_id", None) for movimiento in legacy),
+        ]
+        if pedido_id
+    }
+    ventas_por_pedido = _ventas_por_pedido_ids(pedido_ids)
+
+    fuentes = []
+    for movimiento in historico:
+        fecha_referencia, fecha_movimiento = _fecha_referencia_movimiento(movimiento, ventas_por_pedido)
+        fuentes.append(
+            {
+                "obj": movimiento,
+                "fecha": fecha_referencia,
+                "fecha_movimiento": fecha_movimiento,
+                "sort_id": movimiento.id,
+                "es_legado": False,
+            }
+        )
+    for movimiento in legacy:
+        fecha_referencia, fecha_movimiento = _fecha_referencia_movimiento(movimiento, ventas_por_pedido)
+        fuentes.append(
+            {
+                "obj": movimiento,
+                "fecha": fecha_referencia,
+                "fecha_movimiento": fecha_movimiento,
+                "sort_id": movimiento.id,
+                "es_legado": True,
+            }
+        )
+
+    fuentes.sort(
+        key=lambda item: (
+            item["fecha"] or timezone.localdate(item["fecha_movimiento"]),
+            item["fecha_movimiento"],
+            item["sort_id"],
+        )
     )
-    fuentes.sort(key=lambda item: (item["fecha"], item["sort_id"]))
 
     movimientos_rows = []
     subtotal = 0

@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-3">
+    <div>
+      <h1 class="h4 mb-1">Listas de Precios Vigentes</h1>
+      {% if selected_lista %}
+        <div class="small text-muted">
+          Lista seleccionada: {{ selected_lista.nombre_listaprecios }}
+          {% if selected_lista.activa %}
+            <span class="badge text-bg-success">Activa</span>
+          {% else %}
+            <span class="badge text-bg-secondary">Inactiva</span>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="small text-muted">No hay listas de precios registradas.</div>
+      {% endif %}
+    </div>
+    <div class="btn-group" role="group" aria-label="Secciones de estrategia">
+      <a href="{% url 'dashboard_estrategia' %}" class="btn btn-outline-primary">Informe</a>
+      <a href="{% url 'dashboard_estrategia_precios' %}" class="btn btn-outline-primary">Precios</a>
+      <a href="{% url 'dashboard_lista_precios_vigentes' %}" class="btn btn-primary">Listas Vigentes</a>
+      <a href="{% url 'dashboard_precios_cliente' %}" class="btn btn-outline-primary">Precios Cliente</a>
+    </div>
+  </div>
+
+  <form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-md-6 col-lg-4">
+      <label class="form-label">Lista de precios</label>
+      <select class="form-select" name="lista">
+        {% if not listas %}
+          <option value="">Sin listas disponibles</option>
+        {% endif %}
+        {% for lista in listas %}
+          <option value="{{ lista.id }}" {% if lista.id == lista_id %}selected{% endif %}>
+            {{ lista.nombre_listaprecios }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-6 col-lg-4 d-flex gap-2">
+      <button type="submit" class="btn btn-outline-primary w-100" {% if not listas %}disabled{% endif %}>Revisar</button>
+      <a href="{% url 'dashboard_lista_precios_vigentes' %}" class="btn btn-outline-secondary w-100">Limpiar</a>
+    </div>
+  </form>
+
+  <div class="row g-2 mb-3">
+    <div class="col-md-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="small text-muted">Items evaluados</div>
+          <div class="h5 mb-0">{{ items_evaluados|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="small text-muted">Con precio compra</div>
+          <div class="h5 mb-0">{{ items_con_compra|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="small text-muted">Items en riesgo</div>
+          <div class="h5 mb-0 {% if items_en_riesgo %}text-danger{% else %}text-success{% endif %}">
+            {{ items_en_riesgo|formatear_miles }}
+          </div>
+          <div class="small text-muted">Venta menor o igual al maximo de compra.</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="small text-muted">Diferencia promedio</div>
+          <div class="h5 mb-0">$ {{ diferencia_promedio|formatear_miles }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="small text-muted mb-3">
+    Precios normalizados a unidad primaria para comparar venta vs. compra maxima. Haz clic en el encabezado de una columna para ordenar la tabla.
+  </div>
+
+  <div class="table-responsive">
+    <table id="tabla-listas-precios-vigentes" class="table table-striped table-bordered table-sm js-sortable-report-table">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Producto</th>
+          <th>Precio Venta</th>
+          <th>Precio Compra</th>
+          <th>Diferencia</th>
+          <th>Utilidad</th>
+          <th>% Ganancia</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pricing_rows %}
+          <tr>
+            <td data-order="{{ row.producto }} {{ row.empaque_label }}">
+              <div>{{ row.producto }}</div>
+              <div class="small text-muted">{{ row.codigo_interno }} | {{ row.empaque_label }}</div>
+            </td>
+            <td class="text-end" data-order="{{ row.precio_venta|floatformat:'2u' }}">
+              $ {{ row.precio_venta|formatear_miles }}
+            </td>
+            <td class="text-end" data-order="{% if row.precio_compra is not None %}{{ row.precio_compra|floatformat:'2u' }}{% endif %}">
+              {% if row.precio_compra is not None %}
+                $ {{ row.precio_compra|formatear_miles }}
+              {% else %}
+                <span class="text-muted">Sin compra</span>
+              {% endif %}
+            </td>
+            <td class="text-end {% if row.diferencia is not None and row.diferencia <= 0 %}text-danger{% elif row.diferencia is not None %}text-success{% endif %}" data-order="{% if row.diferencia is not None %}{{ row.diferencia|floatformat:'2u' }}{% endif %}">
+              {% if row.diferencia is not None %}
+                $ {{ row.diferencia|formatear_miles }}
+              {% else %}
+                <span class="text-muted">Sin diferencia</span>
+              {% endif %}
+            </td>
+            <td class="text-end {% if row.utilidad is not None and row.utilidad <= 0 %}text-danger{% elif row.utilidad is not None %}text-success{% endif %}" data-order="{% if row.utilidad is not None %}{{ row.utilidad|floatformat:'2u' }}{% endif %}">
+              {% if row.utilidad is not None %}
+                $ {{ row.utilidad|formatear_miles }}
+              {% else %}
+                <span class="text-muted">Sin utilidad</span>
+              {% endif %}
+            </td>
+            <td class="text-end {% if row.ganancia_pct is not None and row.ganancia_pct <= 0 %}text-danger{% elif row.ganancia_pct is not None %}text-success{% endif %}" data-order="{% if row.ganancia_pct is not None %}{{ row.ganancia_pct|floatformat:'2u' }}{% endif %}">
+              {% if row.ganancia_pct is not None %}
+                {{ row.ganancia_pct|floatformat:2 }}%
+              {% else %}
+                <span class="text-muted">Sin %</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="text-center text-muted">Sin items para la lista seleccionada.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  $(function () {
+    $(".js-sortable-report-table").each(function () {
+      const $table = $(this);
+      const hasDataRows = $table.find("tbody tr").length > 0 && $table.find("tbody td[colspan]").length === 0;
+
+      if (!hasDataRows) {
+        return;
+      }
+
+      $table.DataTable({
+        paging: false,
+        searching: false,
+        info: false,
+        lengthChange: false,
+        order: [],
+        autoWidth: false,
+        dom: "t",
+      });
+    });
+  });
+</script>
+{% endblock %}

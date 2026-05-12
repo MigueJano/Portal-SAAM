@@ -12,7 +12,7 @@ from Apps.indicadores.forms import FiltroFinancieroForm
 # Constantes
 DEC = Decimal('0.00')
 DEC_F = DecimalField(max_digits=12, decimal_places=2)
-PPM_RATE = Decimal("0.01")
+PPM_RATE = Decimal("0.015")
 
 MESES_ES = ["", "ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
             "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"]
@@ -231,7 +231,7 @@ def dashboard_financiero_simple(request):
         })
 
     # =================
-    # PPM 1% s/ ventas netas
+    # PPM 1,5% s/ ventas netas
     # =================
     ppm_mes = []
     ppm_total = {'neto': DEC, 'iva': DEC, 'total': DEC}

@@ -8,7 +8,19 @@ from django.db.models.functions import Coalesce, TruncMonth
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 
-from Apps.Pedidos.models import Categoria, Producto, Recepcion, Stock, Subcategoria, UtilidadProducto, Venta
+from Apps.Pedidos.models import (
+    Categoria,
+    Cliente,
+    ListaPrecios,
+    ListaPreciosPredItem,
+    ListaPreciosPredeterminada,
+    Producto,
+    Recepcion,
+    Stock,
+    Subcategoria,
+    UtilidadProducto,
+    Venta,
+)
 from Apps.indicadores.services.contabilidad import _normalizar_precio_unidad_primaria
 from .common import periodo_desde_request
 
@@ -362,6 +374,159 @@ def _resumen_estrategia_precios(pricing_rows):
     }
 
 
+def _normalizar_precio_producto(producto: Producto, empaque: str, precio) -> Decimal:
+    base = type(
+        "PrecioProducto",
+        (),
+        {
+            "producto": producto,
+            "empaque": empaque,
+            "precio_unitario": precio,
+        },
+    )()
+    return _normalizar_precio_unidad_primaria(base)
+
+
+def _nombre_empaque_producto(producto: Producto, empaque: str) -> str:
+    nivel = (empaque or "").upper().strip()
+    if nivel == "PRIMARIO" and producto.empaque_primario:
+        return producto.empaque_primario.nombre
+    if nivel == "SECUNDARIO" and producto.empaque_secundario:
+        return producto.empaque_secundario.nombre
+    if nivel == "TERCIARIO" and producto.empaque_terciario:
+        return producto.empaque_terciario.nombre
+    return nivel.title() if nivel else "-"
+
+
+def _maximos_compra_por_producto(product_ids):
+    if not product_ids:
+        return {}
+
+    compras_qs = (
+        Stock.objects.filter(
+            producto_id__in=product_ids,
+            recepcion__isnull=False,
+            recepcion__estado_recepcion="Finalizado",
+            tipo_movimiento="DISPONIBLE",
+            precio_unitario__isnull=False,
+        )
+        .select_related("producto")
+        .order_by("producto__nombre_producto", "id")
+    )
+
+    maximos = {}
+    for stock in compras_qs:
+        precio = _normalizar_precio_producto(stock.producto, stock.empaque, stock.precio_unitario)
+        actual = maximos.get(stock.producto_id)
+        if actual is None or precio > actual:
+            maximos[stock.producto_id] = precio
+    return maximos
+
+
+def _filas_lista_precios_vigentes(lista):
+    if not lista:
+        return []
+
+    items = list(
+        ListaPreciosPredItem.objects.filter(listaprecios=lista)
+        .select_related(
+            "nombre_producto__categoria_producto",
+            "nombre_producto__subcategoria_producto",
+            "nombre_producto__empaque_primario",
+            "nombre_producto__empaque_secundario",
+            "nombre_producto__empaque_terciario",
+        )
+        .order_by("nombre_producto__nombre_producto", "empaque")
+    )
+    maximos_compra = _maximos_compra_por_producto({item.nombre_producto_id for item in items})
+
+    rows = []
+    for item in items:
+        producto = item.nombre_producto
+        precio_venta = _normalizar_precio_producto(producto, item.empaque, item.precio_venta)
+        precio_compra = maximos_compra.get(producto.id)
+        diferencia = _q2(precio_venta - precio_compra) if precio_compra is not None else None
+        utilidad = diferencia
+        ganancia_pct = _q2((utilidad / precio_compra) * Decimal("100")) if precio_compra and precio_compra > 0 else None
+
+        rows.append(
+            {
+                "producto_id": producto.id,
+                "codigo_interno": producto.codigo_producto_interno,
+                "producto": producto.nombre_producto,
+                "empaque": item.empaque,
+                "empaque_label": _nombre_empaque_producto(producto, item.empaque),
+                "vigencia": item.vigencia,
+                "precio_venta": precio_venta,
+                "precio_compra": precio_compra,
+                "diferencia": diferencia,
+                "utilidad": utilidad,
+                "ganancia_pct": ganancia_pct,
+            }
+        )
+
+    return rows
+
+
+def _resumen_lista_precios_vigentes(rows):
+    rows_con_compra = [row for row in rows if row["precio_compra"] is not None]
+    rows_en_riesgo = [row for row in rows_con_compra if row["diferencia"] is not None and row["diferencia"] <= 0]
+
+    return {
+        "items_evaluados": len(rows),
+        "items_con_compra": len(rows_con_compra),
+        "items_en_riesgo": len(rows_en_riesgo),
+        "diferencia_promedio": _promedio(
+            [row["diferencia"] for row in rows_con_compra if row["diferencia"] is not None]
+        ),
+    }
+
+
+def _filas_precios_cliente(cliente):
+    if not cliente:
+        return []
+
+    items = list(
+        ListaPrecios.objects.filter(nombre_cliente=cliente)
+        .select_related(
+            "nombre_producto__categoria_producto",
+            "nombre_producto__subcategoria_producto",
+            "nombre_producto__empaque_primario",
+            "nombre_producto__empaque_secundario",
+            "nombre_producto__empaque_terciario",
+        )
+        .order_by("nombre_producto__nombre_producto", "empaque")
+    )
+    maximos_compra = _maximos_compra_por_producto({item.nombre_producto_id for item in items})
+
+    rows = []
+    for item in items:
+        producto = item.nombre_producto
+        precio_venta = _normalizar_precio_producto(producto, item.empaque, item.precio_venta)
+        precio_compra = maximos_compra.get(producto.id)
+        diferencia = _q2(precio_venta - precio_compra) if precio_compra is not None else None
+        utilidad = diferencia
+        ganancia_pct = _q2((utilidad / precio_compra) * Decimal("100")) if precio_compra and precio_compra > 0 else None
+
+        rows.append(
+            {
+                "producto_id": producto.id,
+                "codigo_interno": producto.codigo_producto_interno,
+                "producto": producto.nombre_producto,
+                "empaque": item.empaque,
+                "empaque_label": _nombre_empaque_producto(producto, item.empaque),
+                "vigencia": item.vigencia,
+                "precio_venta": precio_venta,
+                "precio_compra": precio_compra,
+                "diferencia": diferencia,
+                "utilidad": utilidad,
+                "ganancia_pct": ganancia_pct,
+            }
+        )
+
+    return rows
+
+
 @login_required
 def dashboard_estrategia(request):
     periodo, inicio, fin, meses = periodo_desde_request(request)
@@ -470,6 +635,64 @@ def dashboard_estrategia_precios(request):
             "window_choices": WINDOW_CHOICES,
             "pricing_rows": pricing_rows,
             **filtros_categoria,
+            **resumen,
+        },
+    )
+
+
+@login_required
+def dashboard_lista_precios_vigentes(request):
+    listas = ListaPreciosPredeterminada.objects.all().order_by("nombre_listaprecios")
+
+    try:
+        lista_id = int(request.GET.get("lista", "") or 0) or None
+    except (TypeError, ValueError):
+        lista_id = None
+
+    selected_lista = listas.filter(pk=lista_id).first() if lista_id else None
+    if not selected_lista:
+        selected_lista = listas.filter(activa=True).first() or listas.first()
+
+    pricing_rows = _filas_lista_precios_vigentes(selected_lista)
+    resumen = _resumen_lista_precios_vigentes(pricing_rows)
+
+    return render(
+        request,
+        "indicadores/listas_precios_vigentes.html",
+        {
+            "listas": listas,
+            "lista_id": selected_lista.id if selected_lista else None,
+            "selected_lista": selected_lista,
+            "pricing_rows": pricing_rows,
+            **resumen,
+        },
+    )
+
+
+@login_required
+def dashboard_precios_cliente(request):
+    clientes = Cliente.objects.all().order_by("nombre_cliente")
+
+    try:
+        cliente_id = int(request.GET.get("cliente", "") or 0) or None
+    except (TypeError, ValueError):
+        cliente_id = None
+
+    selected_cliente = clientes.filter(pk=cliente_id).first() if cliente_id else None
+    if not selected_cliente:
+        selected_cliente = clientes.filter(cliente_activo=True).first() or clientes.first()
+
+    pricing_rows = _filas_precios_cliente(selected_cliente)
+    resumen = _resumen_lista_precios_vigentes(pricing_rows)
+
+    return render(
+        request,
+        "indicadores/precios_cliente.html",
+        {
+            "clientes": clientes,
+            "cliente_id": selected_cliente.id if selected_cliente else None,
+            "selected_cliente": selected_cliente,
+            "pricing_rows": pricing_rows,
             **resumen,
         },
     )

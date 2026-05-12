@@ -24,7 +24,6 @@
     </div>
 
     <div>
-      {# Agregar Productos solo si NO está Entregado #}
       {% if pedido.estado_pedido != "Entregado" %}
         <a href="{% url 'agregar_productos_pedido' pedido.id %}" class="btn btn-outline-primary me-2">
           <i class="fas fa-box-open"></i> Agregar Productos
@@ -35,13 +34,11 @@
         <i class="fas fa-file-pdf"></i>
       </a>
 
-      {# Botón principal cambia según estado #}
       {% if pedido.estado_pedido == "Entregado" %}
         <a href="{% url 'finalizar_venta' pedido.id %}" class="btn btn-outline-success me-2">
           <i class="fas fa-check"></i> Finalizar Venta
         </a>
       {% else %}
-        <!-- Botón que abre el modal de entrega -->
         <button type="button" class="btn btn-outline-success me-2" data-bs-toggle="modal" data-bs-target="#modalEntrega">
           <i class="fas fa-check"></i> Entregar Pedido
         </button>
@@ -57,7 +54,6 @@
     </div>
   {% endif %}
 
-  <!-- Tabla productos -->
   <div class="table-responsive mb-4">
     <table class="table table-striped table-hover align-middle">
       <thead class="table-light text-center">
@@ -67,7 +63,7 @@
           <th class="text-center">Empaque</th>
           <th class="text-center">Precio Unitario</th>
           <th class="text-center">Subtotal</th>
-          <th class="text-center">Utilidad ($ | %) </th>
+          <th class="text-center">Utilidad ($ | %)</th>
           <th>Eliminar</th>
         </tr>
       </thead>
@@ -112,7 +108,6 @@
     <p class="mb-1"><strong>Ganancia total:</strong> ${{ ganancia_total|formatear_miles }}</p>
   </div>
 
-  <!-- ENTREGAS REGISTRADAS (PDFs + Foto) -->
   {% with entregas=pedido.entregas.all %}
   {% if entregas %}
     <div class="card mt-3">
@@ -125,13 +120,13 @@
           <div class="d-flex gap-2 align-items-center mb-2">
             {% if e.archivo_pdf %}
               <a class="btn btn-outline-danger btn-sm" href="{{ e.archivo_pdf.url }}" target="_blank">
-                <i class="fas fa-file-pdf"></i> Ver Recepcción (PDF)
+                <i class="fas fa-file-pdf"></i> Ver Recepcion (PDF)
               </a>
             {% endif %}
 
             {% if e.foto %}
               <a class="btn btn-outline-primary btn-sm" href="{{ e.foto.url }}" target="_blank">
-                <i class="fas fa-image"></i>  Ver Foto
+                <i class="fas fa-image"></i> Ver Foto
               </a>
             {% endif %}
           </div>
@@ -142,8 +137,6 @@
   {% endif %}
   {% endwith %}
 
-
-{# ===================== Modal Registro de Entrega (solo si NO está entregado) ===================== #}
 {% if pedido.estado_pedido != "Entregado" %}
 <div class="modal fade" id="modalEntrega" tabindex="-1" aria-labelledby="modalEntregaLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -177,7 +170,7 @@
             <div class="col-12">
               <label class="form-label d-block mb-2">Firma del receptor</label>
               <div class="border rounded p-2">
-                <canvas id="firmaCanvas" width="800" height="200" style="width:100%; height:200px; display:block;"></canvas>
+                <canvas id="firmaCanvas" width="800" height="200" style="width:100%; height:200px; display:block; background-color:#fff; touch-action:none; cursor:crosshair;"></canvas>
                 <div class="mt-2 d-flex gap-2">
                   <button type="button" class="btn btn-sm btn-outline-secondary" id="btnLimpiarFirma">Limpiar firma</button>
                 </div>
@@ -196,97 +189,223 @@
   </div>
 </div>
 {% endif %}
+</div>
 {% endblock %}
 
 {% block script %}
 <script>
-  // Fecha ahora por defecto
   (function setNow() {
     const input = document.getElementById('entrega_fecha');
-    if (!input) return; // si no hay modal (estado entregado)
+    if (!input) return;
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    input.value = now.toISOString().slice(0,16);
+    input.value = now.toISOString().slice(0, 16);
   })();
 
-  // Firma en canvas (solo si no está entregado)
   (function firma() {
+    const modal = document.getElementById('modalEntrega');
     const canvas = document.getElementById('firmaCanvas');
-    if (!canvas) return;
+    const form = document.getElementById('formEntrega');
+    const btn = document.getElementById('btnSubmitEntrega');
+    const hiddenInput = document.getElementById('entrega_firma');
+    const clearButton = document.getElementById('btnLimpiarFirma');
+    if (!modal || !canvas || !form || !btn || !hiddenInput || !clearButton) return;
 
     const ctx = canvas.getContext('2d');
-    let dibujando = false, lastX = 0, lastY = 0, hayTrazo = false;
+    let dibujando = false;
+    let hayTrazo = false;
+    let ultimoPunto = null;
+    let pointerIdActivo = null;
 
-    function resizeCanvas() {
-      const displayWidth = canvas.clientWidth;
-      const displayHeight = 200;
-      const ratio = window.devicePixelRatio || 1;
-      canvas.width = displayWidth * ratio;
-      canvas.height = displayHeight * ratio;
-      canvas.style.height = displayHeight + 'px';
-      ctx.setTransform(1,0,0,1,0,0);
-      ctx.scale(ratio, ratio);
+    function configurarContexto() {
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.strokeStyle = '#000';
-      limpiar();
+      ctx.fillStyle = '#000';
     }
-    function limpiar() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      hayTrazo = false;
-    }
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
 
-    function comenzar(x, y) { dibujando = true; [lastX, lastY] = [x, y]; }
-    function trazar(x, y) {
-      if (!dibujando) return;
+    function limpiarSuperficie() {
+      const ratio = Math.max(window.devicePixelRatio || 1, 1);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      configurarContexto();
+    }
+
+    function limpiarFirma() {
+      limpiarSuperficie();
+      dibujando = false;
+      hayTrazo = false;
+      ultimoPunto = null;
+      pointerIdActivo = null;
+      hiddenInput.value = '';
+    }
+
+    function redimensionarCanvas(preservarTrazo) {
+      const snapshot = preservarTrazo && hayTrazo && canvas.width > 0 && canvas.height > 0
+        ? canvas.toDataURL('image/png')
+        : null;
+      const ratio = Math.max(window.devicePixelRatio || 1, 1);
+      const displayWidth = Math.max(Math.floor(canvas.getBoundingClientRect().width), 1);
+      const displayHeight = 200;
+
+      canvas.width = Math.floor(displayWidth * ratio);
+      canvas.height = Math.floor(displayHeight * ratio);
+      canvas.style.height = displayHeight + 'px';
+
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      configurarContexto();
+      limpiarSuperficie();
+
+      if (snapshot) {
+        const image = new Image();
+        image.onload = function() {
+          ctx.drawImage(image, 0, 0, displayWidth, displayHeight);
+          configurarContexto();
+        };
+        image.src = snapshot;
+        return;
+      }
+
+      hayTrazo = false;
+      hiddenInput.value = '';
+    }
+
+    function obtenerPunto(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: clientX - rect.left,
+        y: clientY - rect.top,
+      };
+    }
+
+    function marcarPunto(x, y) {
       ctx.beginPath();
-      ctx.moveTo(lastX, lastY);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      [lastX, lastY] = [x, y];
+      ctx.arc(x, y, Math.max(ctx.lineWidth / 2, 1), 0, Math.PI * 2);
+      ctx.fill();
       hayTrazo = true;
     }
-    function terminar() { dibujando = false; }
 
-    // Mouse
-    canvas.addEventListener('mousedown', e => comenzar(e.offsetX, e.offsetY));
-    canvas.addEventListener('mousemove', e => trazar(e.offsetX, e.offsetY));
-    canvas.addEventListener('mouseup', terminar);
-    canvas.addEventListener('mouseleave', terminar);
+    function comenzar(x, y, pointerId) {
+      dibujando = true;
+      ultimoPunto = { x, y };
+      pointerIdActivo = pointerId ?? null;
+      marcarPunto(x, y);
+    }
 
-    // Touch
-    canvas.addEventListener('touchstart', e => {
-      e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      const t = e.touches[0];
-      comenzar(t.clientX - rect.left, t.clientY - rect.top);
-    }, {passive:false});
-    canvas.addEventListener('touchmove', e => {
-      e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      const t = e.touches[0];
-      trazar(t.clientX - rect.left, t.clientY - rect.top);
-    }, {passive:false});
-    canvas.addEventListener('touchend', terminar);
+    function trazar(x, y) {
+      if (!dibujando || !ultimoPunto) return;
+      ctx.beginPath();
+      ctx.moveTo(ultimoPunto.x, ultimoPunto.y);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ultimoPunto = { x, y };
+      hayTrazo = true;
+    }
 
-    // Botón limpiar
-    document.getElementById('btnLimpiarFirma')?.addEventListener('click', limpiar);
+    function terminar(pointerId) {
+      if (pointerIdActivo !== null && pointerId !== undefined && pointerIdActivo !== pointerId) {
+        return;
+      }
+      dibujando = false;
+      ultimoPunto = null;
+      pointerIdActivo = null;
+    }
 
-    // Antes de enviar: firma base64 y prevenir doble submit
-    const form = document.getElementById('formEntrega');
-    const btn = document.getElementById('btnSubmitEntrega');
+    function manejarPointerDown(event) {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      event.preventDefault();
+      const punto = obtenerPunto(event.clientX, event.clientY);
+      canvas.setPointerCapture?.(event.pointerId);
+      comenzar(punto.x, punto.y, event.pointerId);
+    }
 
-    form.addEventListener('submit', function(e){
+    function manejarPointerMove(event) {
+      if (!dibujando) return;
+      if (pointerIdActivo !== null && event.pointerId !== pointerIdActivo) return;
+      event.preventDefault();
+      const punto = obtenerPunto(event.clientX, event.clientY);
+      trazar(punto.x, punto.y);
+    }
+
+    function manejarPointerUp(event) {
+      if (pointerIdActivo !== null && event.pointerId !== pointerIdActivo) return;
+      event.preventDefault();
+      canvas.releasePointerCapture?.(event.pointerId);
+      terminar(event.pointerId);
+    }
+
+    if (window.PointerEvent) {
+      canvas.addEventListener('pointerdown', manejarPointerDown);
+      canvas.addEventListener('pointermove', manejarPointerMove);
+      canvas.addEventListener('pointerup', manejarPointerUp);
+      canvas.addEventListener('pointercancel', manejarPointerUp);
+      canvas.addEventListener('lostpointercapture', function() {
+        terminar(pointerIdActivo);
+      });
+    } else {
+      canvas.addEventListener('mousedown', function(event) {
+        const punto = obtenerPunto(event.clientX, event.clientY);
+        comenzar(punto.x, punto.y);
+      });
+      canvas.addEventListener('mousemove', function(event) {
+        const punto = obtenerPunto(event.clientX, event.clientY);
+        trazar(punto.x, punto.y);
+      });
+      canvas.addEventListener('mouseup', function() {
+        terminar();
+      });
+      canvas.addEventListener('mouseleave', function() {
+        terminar();
+      });
+      canvas.addEventListener('touchstart', function(event) {
+        event.preventDefault();
+        const touch = event.touches[0];
+        if (!touch) return;
+        const punto = obtenerPunto(touch.clientX, touch.clientY);
+        comenzar(punto.x, punto.y);
+      }, { passive: false });
+      canvas.addEventListener('touchmove', function(event) {
+        event.preventDefault();
+        const touch = event.touches[0];
+        if (!touch) return;
+        const punto = obtenerPunto(touch.clientX, touch.clientY);
+        trazar(punto.x, punto.y);
+      }, { passive: false });
+      canvas.addEventListener('touchend', function() {
+        terminar();
+      });
+      canvas.addEventListener('touchcancel', function() {
+        terminar();
+      });
+    }
+
+    modal.addEventListener('shown.bs.modal', function() {
+      redimensionarCanvas(true);
+    });
+
+    window.addEventListener('resize', function() {
+      if (modal.classList.contains('show')) {
+        redimensionarCanvas(true);
+      }
+    });
+
+    clearButton.addEventListener('click', limpiarFirma);
+
+    if (modal.classList.contains('show')) {
+      redimensionarCanvas(true);
+    }
+
+    form.addEventListener('submit', function(event) {
       if (!hayTrazo) {
-        e.preventDefault();
+        event.preventDefault();
         alert('Por favor, registre la firma del receptor.');
         return;
       }
-      const dataUrl = canvas.toDataURL('image/png');
-      document.getElementById('entrega_firma').value = dataUrl;
+      hiddenInput.value = canvas.toDataURL('image/png');
       btn.disabled = true;
       btn.innerText = 'Guardando...';
     });

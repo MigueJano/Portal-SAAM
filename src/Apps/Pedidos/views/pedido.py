@@ -34,6 +34,11 @@ IVA_RATE = Decimal('0.19')
 CIEN    = Decimal('100')
 
 
+def _responsable_desde_request(request):
+    user = getattr(request, "user", None)
+    return user if getattr(user, "is_authenticated", False) else None
+
+
 def eliminar_pedido(request, id):
     """
     Elimina un pedido si no está finalizado.
@@ -146,7 +151,7 @@ def agregar_productos_pedido(request, pedido_id):
                     )
                     registrar_movimiento_stock(
                         reserva,
-                        responsable=request.user,
+                        responsable=_responsable_desde_request(request),
                     )
 
             total_neto = total_neto.quantize(DOS_DEC, rounding=ROUND_HALF_UP)
@@ -485,7 +490,7 @@ def finalizar_pedido(request, pedido_id):
             registrar_movimientos_stock(
                 reservas_list,
                 tipo_movimiento='DESPACHO',
-                responsable=request.user,
+                responsable=_responsable_desde_request(request),
                 fecha_movimiento=timezone.now(),
             )
             reservas.update(tipo_movimiento='DESPACHO')
