@@ -12,6 +12,7 @@ from Apps.Pedidos.models import (
     ListaPrecios,
     ListaPreciosPredItem,
     ListaPreciosPredeterminada,
+    PackComponente,
     Pedido,
     Producto,
     Proveedor,
@@ -512,7 +513,7 @@ class DashboardListasPreciosVigentesTests(TestCase):
         self.assertContains(resp, 'id="tabla-listas-precios-vigentes"')
         self.assertContains(resp, "Precios normalizados a unidad primaria")
         self.assertContains(resp, "Haz clic en el encabezado de una columna para ordenar la tabla.")
-        self.assertContains(resp, "Utilidad")
+        self.assertContains(resp, "Margen")
         self.assertContains(resp, "% Ganancia")
         self.assertEqual(len(resp.context["pricing_rows"]), 1)
 
@@ -696,3 +697,110 @@ class DashboardPreciosClienteTests(TestCase):
         self.assertEqual(len(resp.context["pricing_rows"]), 1)
         self.assertEqual(resp.context["pricing_rows"][0]["producto"], "Jugo Otro Cliente")
         self.assertNotContains(resp, "Jugo Cliente")
+
+    def test_dashboard_precios_cliente_calcula_pack_desde_componentes(self):
+        componente_a = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            tipo_producto="SIMPLE",
+            codigo_producto_interno="CLI-PK-01",
+            nombre_producto="Componente A",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        componente_b = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            tipo_producto="SIMPLE",
+            codigo_producto_interno="CLI-PK-02",
+            nombre_producto="Componente B",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        recepcion_a = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=self.hoy,
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=8103,
+            total_neto_recepcion=Decimal("100.00"),
+            iva_recepcion=Decimal("19.00"),
+            total_recepcion=Decimal("119.00"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        recepcion_b = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=self.hoy,
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=8104,
+            total_neto_recepcion=Decimal("250.00"),
+            iva_recepcion=Decimal("47.50"),
+            total_recepcion=Decimal("297.50"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=componente_a,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("100.00"),
+            recepcion=recepcion_a,
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=componente_b,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("250.00"),
+            recepcion=recepcion_b,
+        )
+
+        pack = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            tipo_producto="PACK",
+            codigo_producto_interno="CLI-PACK",
+            nombre_producto="Pack Cliente",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=0,
+        )
+        PackComponente.objects.create(pack=pack, producto=componente_a, empaque="PRIMARIO", cantidad=1, orden=0)
+        PackComponente.objects.create(pack=pack, producto=componente_b, empaque="PRIMARIO", cantidad=1, orden=1)
+
+        ListaPrecios.objects.create(
+            nombre_cliente=self.cliente_a,
+            nombre_producto=pack,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("500.00"),
+            precio_iva=Decimal("95.00"),
+            precio_total=Decimal("595.00"),
+            vigencia=self.hoy,
+        )
+
+        resp = self.client.get(
+            reverse("dashboard_precios_cliente"),
+            data={"cliente": self.cliente_a.id},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        row = next(item for item in resp.context["pricing_rows"] if item["codigo_interno"] == "CLI-PACK")
+        self.assertEqual(row["precio_compra"], Decimal("350.00"))
+        self.assertEqual(row["precio_venta"], Decimal("500.00"))
+        self.assertEqual(row["diferencia"], Decimal("150.00"))
+        self.assertEqual(row["utilidad"], Decimal("150.00"))
+        self.assertEqual(row["ganancia_pct"], Decimal("42.86"))

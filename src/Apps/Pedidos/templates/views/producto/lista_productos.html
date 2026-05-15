@@ -13,7 +13,10 @@
       <!-- Título y Botón en la misma línea, uno a cada lado -->
       <div class="d-flex justify-content-between align-items-center mt-3">
         <h1 class="h4 mb-0">Listado de Productos</h1>
-          <a href="{% url 'crear_producto' %}" class="btn btn-outline-primary me-2">Crear Producto</a>
+        <div class="d-flex gap-2">
+          <a href="{% url 'crear_producto' %}" class="btn btn-outline-primary">Crear Producto</a>
+          <a href="{% url 'crear_pack' %}" class="btn btn-outline-success">Crear Pack</a>
+        </div>
       </div>
 
       <!-- Tabla ocupando todo el ancho -->
@@ -23,6 +26,7 @@
             <tr>
               <th scope="col">Categoría</th>
               <th scope="col">Subcategoría</th>
+              <th scope="col">Tipo</th>
               <th scope="col">Nombre</th>
               <th scope="col">Cantidad por Secundario</th>
               <th scope="col">Cantidad por Primario</th>
@@ -36,13 +40,20 @@
               <tr>
                 <td>{{ producto.categoria_producto.categoria }}</td>
                 <td>{{ producto.subcategoria_producto.subcategoria }}</td>
+                <td class="text-center">
+                  {% if producto.tipo_producto == 'PACK' %}
+                    <span class="badge bg-success">PACK</span>
+                  {% else %}
+                    <span class="badge bg-secondary">SIMPLE</span>
+                  {% endif %}
+                </td>
                 <td>{{ producto.nombre_producto }}</td>
                 <td class="text-center">{{ producto.qty_secundario }}</td>
                 <td class="text-center">{{ producto.qty_primario }}</td>
                 <td class="text-center">{{ producto.qty_unidad }}</td>
                 <td class="text-center">{{ producto.medida }}</td>
                 <td class="text-center">
-                  <a href="{% url 'editar_producto' producto.id %}" class="btn btn-outline-primary btn-sm" title="Editar">
+                  <a href="{% if producto.tipo_producto == 'PACK' %}{% url 'editar_pack' producto.id %}{% else %}{% url 'editar_producto' producto.id %}{% endif %}" class="btn btn-outline-primary btn-sm" title="Editar">
                     <i class="fas fa-pen"></i>
                   </a>
                   <a href="{% url 'eliminar_producto' producto.id %}" class="btn btn-outline-danger btn-sm" title="Eliminar">

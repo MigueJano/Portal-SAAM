@@ -22,8 +22,9 @@
           <thead class="table-light text-center">
             <tr>
               <th style="width:20%;">Nombre</th>
-              <th style="width:40%;">Descripción</th>
-              <th style="width:10%;">Acciones</th>
+              <th style="width:35%;">Descripción</th>
+              <th style="width:15%;">Clientes Asociados</th>
+              <th style="width:15%;">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -31,6 +32,7 @@
             <tr>
               <td>{{ lp.nombre_listaprecios }}</td>
               <td>{{ lp.descripcion_listaprecios }}</td>
+              <td class="text-center">{{ lp.clientes_asociados.count }}</td>
               <td class="text-center align-middle">
                 <a href="{% url 'editar_listaprecios' lp.id %}" class="btn btn-outline-primary btn-sm" title="Editar">
                   <i class="fas fa-edit"></i>
@@ -38,6 +40,12 @@
                 <a href="{% url 'asignar_precios_listaprecios' lp.id %}" class="btn btn-outline-secondary btn-sm" title="Asignar Productos">
                   <i class="fas fa-boxes"></i>
                 </a>
+                <form method="post" action="{% url 'sincronizar_clientes_listaprecios' lp.id %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-success btn-sm" title="Sincronizar clientes asociados">
+                    <i class="fas fa-sync-alt"></i>
+                  </button>
+                </form>
               </td>
             </tr>
             {% endfor %}

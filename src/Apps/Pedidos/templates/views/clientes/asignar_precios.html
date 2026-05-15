@@ -5,8 +5,27 @@
 {% block content %}
 <h3>Asignar productos y precios a {{ cliente.nombre_cliente }}</h3>
 
+{% if precio_en_edicion %}
+  <div class="alert alert-warning py-2">
+    Editando precio de <strong>{{ precio_en_edicion.nombre_producto.nombre_producto }}</strong>.
+  </div>
+{% endif %}
+
+{% if lista_predeterminada_actual %}
+  <div class="alert alert-info py-2">
+    Lista asociada actualmente: <strong>{{ lista_predeterminada_actual.nombre_listaprecios }}</strong>
+  </div>
+{% else %}
+  <div class="alert alert-secondary py-2">
+    Este cliente no tiene una lista predeterminada asociada.
+  </div>
+{% endif %}
+
 <form method="post" class="row g-3">
   {% csrf_token %}
+  {% if precio_en_edicion %}
+    <input type="hidden" name="precio_id" value="{{ precio_en_edicion.id }}">
+  {% endif %}
 
   <!-- Producto -->
   <div class="col-md-5">
@@ -14,7 +33,9 @@
     <select name="nombre_producto" id="producto" class="form-select form-select-sm" required>
       <option value="" disabled selected>Seleccione un producto</option>
       {% for prod in productos %}
-        <option value="{{ prod.id }}">{{ prod.nombre_producto }}</option>
+        <option value="{{ prod.id }}" {% if precio_en_edicion and precio_en_edicion.nombre_producto_id == prod.id %}selected{% endif %}>
+          {% if prod.tipo_producto == 'PACK' %}[PACK] {% endif %}{{ prod.nombre_producto }}
+        </option>
       {% endfor %}
     </select>
   </div>
@@ -22,7 +43,7 @@
   <!-- Empaque -->
   <div class="col-md-2">
     <label for="empaque" class="form-label">Empaque</label>
-    <select name="empaque" id="empaque" class="form-select form-select-sm" required>
+    <select name="empaque" id="empaque" class="form-select form-select-sm" required data-selected="{% if precio_en_edicion %}{{ precio_en_edicion.empaque }}{% endif %}">
       <option value="" disabled selected>Seleccione</option>
     </select>
   </div>
@@ -30,7 +51,7 @@
   <!-- Precio Venta -->
   <div class="col-md-3">
     <label for="precio_venta" class="form-label">Precio Neto</label>
-    <input type="number" name="precio_venta" id="precio_venta" class="form-control form-control-sm" required min="0" step="0.01">
+    <input type="number" name="precio_venta" id="precio_venta" class="form-control form-control-sm" required min="0" step="0.01" value="{% if precio_en_edicion %}{{ precio_en_edicion.precio_venta }}{% endif %}">
     <div class="form-text text-danger small">
       Precio de compra (sin IVA): $<span id="precio_minimo">-</span>
     </div>
@@ -39,14 +60,17 @@
   <!-- Vigencia -->
   <div class="col-md-2">
     <label for="vigencia" class="form-label">Vigencia</label>
-    <input type="date" name="vigencia" id="vigencia" class="form-control form-control-sm" required>
+    <input type="date" name="vigencia" id="vigencia" class="form-control form-control-sm" required value="{% if precio_en_edicion %}{{ precio_en_edicion.vigencia|date:'Y-m-d' }}{% endif %}">
   </div>
 
   <!-- Botones (guardar uno) -->
   <div class="col-12 d-flex justify-content-end gap-2 mt-2">
     <button type="submit" name="accion" value="guardar_uno" class="btn btn-outline-success btn-sm">
-      Guardar Precio
+      {% if precio_en_edicion %}Actualizar Precio{% else %}Guardar Precio{% endif %}
     </button>
+    {% if precio_en_edicion %}
+      <a href="{% url 'asignar_precios' cliente.id %}" class="btn btn-outline-secondary btn-sm">Cancelar edición</a>
+    {% endif %}
     <a href="{% url 'lista_clientes' %}" class="btn btn-outline-secondary btn-sm">Cerrar</a>
   </div>
 
@@ -54,14 +78,14 @@
 
   <!-- Importar desde Lista Predeterminada -->
   <div class="col-md-6">
-    <label for="lista_predeterminada_id" class="form-label">Importar desde Lista Predeterminada</label>
+    <label for="lista_predeterminada_id" class="form-label">Importar y asociar Lista Predeterminada</label>
     <select name="lista_predeterminada_id" id="lista_predeterminada_id" class="form-select form-select-sm">
       <option value="" selected>Seleccione una lista</option>
       {% for lp in listas_predeterminadas %}
-        <option value="{{ lp.id }}">{{ lp.nombre_listaprecios }}</option>
+        <option value="{{ lp.id }}" {% if lista_predeterminada_actual and lp.id == lista_predeterminada_actual.id %}selected{% endif %}>{{ lp.nombre_listaprecios }}</option>
       {% endfor %}
     </select>
-    <div class="form-text">Se copiarán todos los ítems (producto/empaque/precios/vigencia) a este cliente.</div>
+    <div class="form-text">Se copiarán todos los ítems al cliente y quedará vinculado para futuras sincronizaciones masivas.</div>
   </div>
   <div class="col-md-3">
     <label for="vigencia_import" class="form-label">Sobrescribir vigencia (opcional)</label>
@@ -75,7 +99,7 @@
       class="btn btn-outline-primary btn-sm"
       formnovalidate
     >
-      Importar Lista
+      Importar y Asociar
     </button>
   </div>
 
@@ -99,7 +123,14 @@
   <tbody>
     {% for item in precios %}
     <tr>
-      <td>{{ item.nombre_producto.nombre_producto }}</td>
+      <td>
+        {% if item.nombre_producto.tipo_producto == 'PACK' %}
+          <span class="badge bg-success me-1">PACK</span>
+        {% endif %}
+        <a href="{% url 'asignar_precios' cliente.id %}?precio_id={{ item.id }}" class="text-decoration-none">
+          {{ item.nombre_producto.nombre_producto }}
+        </a>
+      </td>
       <td class="text-center">
         {% if item.empaque == 'PRIMARIO' and item.nombre_producto.empaque_primario %}
           {{ item.nombre_producto.empaque_primario.nombre }}
@@ -135,17 +166,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectProducto = document.getElementById('producto');
   const selectEmpaque  = document.getElementById('empaque');
   const precioSpan     = document.getElementById('precio_minimo');
+  let empaqueSeleccionadoInicial = selectEmpaque.dataset.selected || '';
 
   let precioPorUnidad = 0;
   let qtySecundario   = 1;
   let qtyTerciario    = 1;
 
-  // Cambia producto -> carga empaques y precio base compra
-  selectProducto.addEventListener('change', async () => {
-    const productoId = selectProducto.value;
+  async function cargarEmpaques(productoId) {
     if (!productoId) return;
 
-    // Empaques
     try {
       const res = await fetch(`/ajax/empaques-producto/${productoId}/`);
       const data = await res.json();
@@ -153,17 +182,22 @@ document.addEventListener('DOMContentLoaded', () => {
         selectEmpaque.innerHTML = '<option value="" selected disabled>Seleccione</option>';
         data.empaques.forEach(e => {
           const o = document.createElement('option');
-          o.value = e.nivel;   // 'PRIMARIO' | 'SECUNDARIO' | 'TERCIARIO'
+          o.value = e.nivel;
           o.textContent = e.nombre;
+          if (empaqueSeleccionadoInicial && e.nivel === empaqueSeleccionadoInicial) {
+            o.selected = true;
+          }
           selectEmpaque.appendChild(o);
         });
-        precioSpan.textContent = '-';
       }
     } catch (e) {
       console.error('Error cargando empaques', e);
     }
+  }
 
-    // Precio base por unidad + factores
+  async function cargarPrecioBase(productoId) {
+    if (!productoId) return;
+
     try {
       const res2 = await fetch(`/ajax/precio-base-compra/${productoId}/`);
       const data2 = await res2.json();
@@ -171,7 +205,8 @@ document.addEventListener('DOMContentLoaded', () => {
         precioPorUnidad = Number(data2.precio_unitario) || 0;
         qtySecundario   = Number(data2.qty_secundario) || 1;
         qtyTerciario    = Number(data2.qty_terciario)  || 1;
-        calcularPrecioSugerido(selectEmpaque.value);
+        calcularPrecioSugerido(selectEmpaque.value || empaqueSeleccionadoInicial);
+        empaqueSeleccionadoInicial = '';
       } else {
         precioPorUnidad = 0;
         precioSpan.textContent = '-';
@@ -181,6 +216,15 @@ document.addEventListener('DOMContentLoaded', () => {
       precioPorUnidad = 0;
       precioSpan.textContent = '-';
     }
+  }
+
+  // Cambia producto -> carga empaques y precio base compra
+  selectProducto.addEventListener('change', async () => {
+    const productoId = selectProducto.value;
+    if (!productoId) return;
+
+    await cargarEmpaques(productoId);
+    await cargarPrecioBase(productoId);
   });
 
   // Cambia empaque -> recalcula sugerido
@@ -208,6 +252,10 @@ document.addEventListener('DOMContentLoaded', () => {
     autoWidth: false,
     scrollX: true
   });
+
+  if (selectProducto.value) {
+    cargarEmpaques(selectProducto.value).then(() => cargarPrecioBase(selectProducto.value));
+  }
 });
 </script>
 {% endblock script %}

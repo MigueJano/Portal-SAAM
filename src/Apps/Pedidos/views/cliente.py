@@ -19,6 +19,11 @@ from django.http import JsonResponse
 
 from Apps.Pedidos.models import Cliente, Producto, ListaPrecios, Stock
 from Apps.Pedidos.forms import ClienteForm, ListaPreciosForm
+from Apps.Pedidos.services import (
+    costo_maximo_unitario,
+    es_pack,
+    sincronizar_lista_predeterminada_a_cliente,
+)
 
 # --- Decimal helpers para dinero ---
 from decimal import Decimal, ROUND_HALF_UP
@@ -126,6 +131,15 @@ def asignar_precios(request, cliente_id):
     - Importar todos los precios desde una Lista de Precios Predeterminada.
     """
     cliente = get_object_or_404(Cliente, pk=cliente_id)
+    precio_id = request.GET.get('precio_id') or request.POST.get('precio_id') or ''
+    precio_en_edicion = None
+    if str(precio_id).isdigit():
+        precio_en_edicion = get_object_or_404(
+            ListaPrecios.objects.select_related('nombre_producto', 'nombre_cliente'),
+            pk=int(precio_id),
+            nombre_cliente=cliente,
+        )
+
     precios = ListaPrecios.objects.filter(nombre_cliente=cliente)
     productos = Producto.objects.all().order_by('nombre_producto')
 
@@ -152,7 +166,7 @@ def asignar_precios(request, cliente_id):
                     lista_pred_id=int(lista_pred_id),
                     vig_override=vig_override
                 )
-                messages.success(request, "Precios importados desde la lista predeterminada.")
+                messages.success(request, "Precios importados y lista asociada al cliente.")
             except Exception as e:
                 messages.error(request, f"No se pudo importar: {e}")
             return redirect('asignar_precios', cliente_id=cliente.id)
@@ -161,7 +175,7 @@ def asignar_precios(request, cliente_id):
         # 2) Guardar un precio puntual (tu flujo con Form)
         # --------------------------
         if accion == 'guardar_uno' or not accion:
-            form = ListaPreciosForm(request.POST, cliente=cliente)
+            form = ListaPreciosForm(request.POST, cliente=cliente, instance=precio_en_edicion)
             if form.is_valid():
                 # Aseguramos que IVA/TOTAL queden calculados y persistidos
                 obj: ListaPrecios = form.save(commit=False)
@@ -171,8 +185,12 @@ def asignar_precios(request, cliente_id):
                 obj.precio_venta = neto
                 obj.precio_iva   = iva
                 obj.precio_total = total
+                obj.lista_predeterminada_origen = None
                 obj.save()
-                messages.success(request, "Precio asignado correctamente.")
+                messages.success(
+                    request,
+                    "Precio actualizado correctamente." if precio_en_edicion else "Precio asignado correctamente."
+                )
                 return redirect('asignar_precios', cliente_id=cliente.id)
             else:
                 for error in form.errors.values():
@@ -182,62 +200,35 @@ def asignar_precios(request, cliente_id):
             return redirect('asignar_precios', cliente_id=cliente.id)
 
     else:
-        form = ListaPreciosForm(cliente=cliente)
+        form = ListaPreciosForm(cliente=cliente, instance=precio_en_edicion)
 
     return render(request, './views/clientes/asignar_precios.html', {
         'form': form,
         'cliente': cliente,
         'precios': precios,
         'productos': productos,
-        # 'categorias': ...  # <-- ya NO se envía
-        'listas_predeterminadas': listas_pred,   # <-- nuevo
+        'listas_predeterminadas': listas_pred,
+        'lista_predeterminada_actual': cliente.lista_precios_predeterminada,
+        'precio_en_edicion': precio_en_edicion,
     })
 
 
 @transaction.atomic
 def importar_desde_predeterminada(cliente_id: int, lista_pred_id: int, vig_override: str | None = None):
     """
-    Copia todos los ítems de ListaPreciosPredeterminada a ListaPrecios del cliente.
-    - Si ya existe (cliente, producto, empaque), se ACTUALIZA.
-    - Si vig_override viene, reemplaza la vigencia de todos los ítems.
+    Sincroniza una lista predeterminada a un cliente y la deja asociada.
     """
-    from Apps.Pedidos.models import ListaPreciosPredItem  # import local para evitar ciclos
+    from Apps.Pedidos.models import ListaPreciosPredeterminada
 
-    items = (
-        ListaPreciosPredItem.objects
-        .select_related("nombre_producto")
-        .filter(listaprecios_id=lista_pred_id)
+    cliente = Cliente.objects.get(pk=cliente_id)
+    lista = ListaPreciosPredeterminada.objects.get(pk=lista_pred_id)
+    return sincronizar_lista_predeterminada_a_cliente(
+        cliente,
+        lista,
+        vig_override=vig_override,
+        asociar=True,
+        limpiar_huerfanos=True,
     )
-
-    for it in items:
-        producto = it.nombre_producto
-        empaque  = it.empaque
-        neto     = _round2(Decimal(it.precio_venta or 0))
-        iva      = _round2(Decimal(it.precio_iva or 0))
-        total    = _round2(Decimal(it.precio_total or 0))
-        vigencia = vig_override or it.vigencia
-
-        obj = (
-            ListaPrecios.objects
-            .filter(nombre_cliente_id=cliente_id, nombre_producto=producto, empaque=empaque)
-            .first()
-        )
-        if obj:
-            obj.precio_venta = neto
-            obj.precio_iva   = iva
-            obj.precio_total = total
-            obj.vigencia     = vigencia
-            obj.save(update_fields=['precio_venta', 'precio_iva', 'precio_total', 'vigencia'])
-        else:
-            ListaPrecios.objects.create(
-                nombre_cliente_id=cliente_id,
-                nombre_producto=producto,
-                empaque=empaque,
-                precio_venta=neto,
-                precio_iva=iva,
-                precio_total=total,
-                vigencia=vigencia,
-            )
 
 
 @require_POST
@@ -278,46 +269,15 @@ def obtener_precio_base_compra(request, producto_id):
     except Producto.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Producto no encontrado'})
 
-    # Ajusta 'tipo_movimiento' si en tu modelo real corresponde a 'RECEPCION'
-    precios_stock = Stock.objects.filter(
-        producto=producto,
-        tipo_movimiento='DISPONIBLE',
-        precio_unitario__isnull=False,
-    )
-
-    precios_normalizados = []
-    for item in precios_stock:
-        # precio como Decimal
-        precio = Decimal(item.precio_unitario)
-
-        # factor por empaque (a unidades primarias)
-        q2 = Decimal(producto.qty_secundario or 1)
-        q3 = Decimal(producto.qty_terciario or 1)
-
-        if item.empaque == 'SECUNDARIO':
-            factor = q2
-        elif item.empaque == 'TERCIARIO':
-            factor = q2 * q3
-        else:  # PRIMARIO u otro
-            factor = Decimal(1)
-
-        if factor <= 0:
-            factor = Decimal(1)
-
-        # normaliza y guarda (con 2 decimales consistentes)
-        precio_unitario = (precio / factor).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
-        precios_normalizados.append(precio_unitario)
-
-    if not precios_normalizados:
+    precio_max_unitario = costo_maximo_unitario(producto)
+    if precio_max_unitario <= 0:
         return JsonResponse({'success': False, 'error': 'Sin registros de compra'})
-
-    precio_max_unitario = max(precios_normalizados)
 
     return JsonResponse({
         'success': True,
         'precio_unitario': float(precio_max_unitario),  # para JSON
-        'qty_secundario': int(producto.qty_secundario or 1),
-        'qty_terciario': int(producto.qty_terciario or 1),
+        'qty_secundario': 1 if es_pack(producto) else int(producto.qty_secundario or 1),
+        'qty_terciario': 1 if es_pack(producto) else int(producto.qty_terciario or 1),
     })
 
 
@@ -341,33 +301,7 @@ def _costo_unitario_desde_stock(producto: Producto) -> Decimal:
     Devuelve el costo unitario neto MÁXIMO normalizado a PRIMARIO desde Stock,
     usando la misma lógica que tu endpoint obtener_precio_base_compra.
     """
-    qs = Stock.objects.filter(
-        producto=producto,
-        tipo_movimiento='DISPONIBLE',
-        precio_unitario__isnull=False,
-    ).only('precio_unitario', 'empaque')
-
-    if not qs.exists():
-        return Decimal('0')
-
-    q2 = Decimal(producto.qty_secundario or 1)
-    q3 = Decimal(producto.qty_terciario  or 1)
-    max_unit = None
-
-    for s in qs:
-        precio = Decimal(s.precio_unitario)
-        if s.empaque == 'SECUNDARIO':
-            factor = q2
-        elif s.empaque == 'TERCIARIO':
-            factor = q2 * q3
-        else:
-            factor = Decimal(1)
-        if factor <= 0:
-            factor = Decimal(1)
-        unit = (precio / factor).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
-        max_unit = unit if (max_unit is None or unit > max_unit) else max_unit
-
-    return max_unit or Decimal('0')
+    return costo_maximo_unitario(producto)
 
 def _costo_por_empaque(c_unit: Decimal, emp: str, qs: Decimal, qt: Decimal) -> Decimal:
     """

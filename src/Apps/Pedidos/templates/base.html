@@ -33,9 +33,9 @@
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarScroll" aria-controls="navbarScroll" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
-      <div class="collapse navbar-collapse" id="navbarScroll">
+      <div class="collapse navbar-collapse saam-navbar-collapse" id="navbarScroll">
         <!-- MENU -->
-        <ul class="navbar-nav me-auto my-2 my-lg-0 navbar-nav-scroll" style="--bs-scroll-height:100px;">
+        <ul class="navbar-nav me-auto my-2 my-lg-0 saam-navbar-menu">
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Indicadores</a>
@@ -83,6 +83,7 @@
               <li><a class="dropdown-item" href="{% url 'calculadora_precios' %}">Calculadora</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="{% url 'crear_producto' %}">Crear Producto</a></li>
+              <li><a class="dropdown-item" href="{% url 'crear_pack' %}">Crear Pack</a></li>
               <li><a class="dropdown-item" href="{% url 'lista_productos' %}">Lista de Productos</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="{% url 'categorias_y_subcategorias' %}">Categorias</a></li>
@@ -133,7 +134,7 @@
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item disabled" href="">Configuración</a></li>
               <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item " href="{% url 'base_datos' %}">Base de Datos</a></li>
+              <li><a class="dropdown-item " href="{% url 'admin:index' %}">Base de Datos</a></li>
             </ul>
           </li>
           {% endif %}

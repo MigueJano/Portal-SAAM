@@ -1,62 +1,73 @@
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, redirect, get_object_or_404
+from urllib.parse import unquote
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
+
 from .forms import ObservacionForm, ResolverObservacionForm
 from .models import Observacion, VersionRegistro
-from .utils_versionado import calcular_siguiente_version
-from urllib.parse import unquote
-from django.utils.http import url_has_allowed_host_and_scheme
+from .utils_versionado import calcular_siguiente_version, obtener_version_actual
+
 
 def _resolver_origen(request):
     raw = request.GET.get("from") or request.POST.get("from")
     host = request.get_host()
 
     if raw:
-        # Decodifica %3A -> ":" etc.
         decoded = unquote(raw)
 
-        # Si es relativa, hazla absoluta
         if decoded.startswith("/"):
             return request.build_absolute_uri(decoded)
 
-        # Si es absoluta, valida host y esquema
         if url_has_allowed_host_and_scheme(
             decoded,
             allowed_hosts={host},
-            require_https=request.is_secure(),  # http en local, https en prod
+            require_https=request.is_secure(),
         ):
             return decoded
 
-    # Fallbacks
     ref = request.META.get("HTTP_REFERER")
-    if ref and url_has_allowed_host_and_scheme(ref, allowed_hosts={host}, require_https=request.is_secure()):
+    if ref and url_has_allowed_host_and_scheme(
+        ref,
+        allowed_hosts={host},
+        require_https=request.is_secure(),
+    ):
         return ref
 
-    return request.build_absolute_uri("/")  # último recurso
+    return request.build_absolute_uri("/")
+
+
+def _version_str(version_tuple):
+    return ".".join(str(valor) for valor in version_tuple)
+
+
+def _obtener_version_registro(observacion):
+    try:
+        return observacion.version_registro
+    except VersionRegistro.DoesNotExist:
+        return None
+
 
 @login_required
 def crear_observacion(request):
-    # Resolvemos una vez la URL de origen (decodificada y validada)
     src = _resolver_origen(request)
 
     if request.method == "POST":
-        # Asegura que el form reciba 'url' (si el form lo define) y 'from'
         data = request.POST.copy()
 
-        # Si el form tiene un campo 'url', complétalo con la URL de origen resuelta
         try:
             form_fields = ObservacionForm().fields
         except Exception:
             form_fields = {}
 
-        if 'url' in form_fields and not data.get('url'):
-            data['url'] = src
+        if "url" in form_fields and not data.get("url"):
+            data["url"] = src
 
-        # Mantén también el 'from' en el POST por si lo usas en otra parte
-        if not data.get('from'):
-            data['from'] = src
+        if not data.get("from"):
+            data["from"] = src
 
         form = ObservacionForm(data, request.FILES)
         if form.is_valid():
@@ -64,89 +75,114 @@ def crear_observacion(request):
             obj.url = src
             obj.usuario = request.user
             obj.save()
-            messages.success(request, "Observación enviada correctamente.")
+            messages.success(request, "Observacion enviada correctamente.")
             if request.user.is_staff:
                 return redirect("lista_observaciones")
             return redirect(src)
-        else:
-            # Muestra errores en página para ver qué está faltando
-            messages.error(request, f"Revisa el formulario: {form.errors.as_text()}")
 
+        messages.error(request, f"Revisa el formulario: {form.errors.as_text()}")
     else:
-        # Pre-carga inicial para que el hidden 'url' tenga valor desde el GET
         init = {}
         try:
-            if 'url' in ObservacionForm().fields:
-                init['url'] = src
+            if "url" in ObservacionForm().fields:
+                init["url"] = src
         except Exception:
             pass
         form = ObservacionForm(initial=init)
 
-    return render(request, "observaciones/crear_observacion.html", {
-        "form": form,
-        "from_url": src,  # el template lo usará en action y en el hidden
-    })
+    return render(
+        request,
+        "observaciones/crear_observacion.html",
+        {
+            "form": form,
+            "from_url": src,
+        },
+    )
+
 
 @staff_member_required
 def lista_observaciones(request):
-    qs = (
-        Observacion.objects
-        .select_related('usuario')
-        .order_by('-creado_en')
-    )
+    qs = Observacion.objects.select_related("usuario").order_by("-creado_en")
 
-    # Filtros
-    tipo = request.GET.get('tipo')  # MEJORA / ERROR / PREGUNTA / None
-    q    = request.GET.get('q', '').strip()
-    estado = request.GET.get('estado', 'pendientes')  # 'pendientes' (default) | 'listos' | 'todos'
+    tipo = request.GET.get("tipo")
+    q = request.GET.get("q", "").strip()
+    estado = request.GET.get("estado", "pendientes")
 
-    if tipo in {'MEJORA', 'ERROR', 'PREGUNTA'}:
+    if tipo in {"MEJORA", "ERROR", "PREGUNTA"}:
         qs = qs.filter(tipo=tipo)
 
     if q:
         qs = qs.filter(observacion__icontains=q)
 
-    # Filtro estado (predefinido: pendientes = lista False)
-    if estado == 'listos':
+    if estado == "listos":
         qs = qs.filter(lista=True)
-    elif estado == 'pendientes':
+    elif estado == "pendientes":
         qs = qs.filter(lista=False)
-    # 'todos' no filtra por lista
 
-    return render(request, 'observaciones/lista.html', {
-        'observaciones': qs,
-        'tipo': tipo or '',
-        'q': q,
-        'estado': estado,  # <-- para marcar seleccionado en el template
-    })
+    return render(
+        request,
+        "observaciones/lista.html",
+        {
+            "observaciones": qs,
+            "tipo": tipo or "",
+            "q": q,
+            "estado": estado,
+        },
+    )
+
 
 @staff_member_required
 def marcar_lista_observacion(request, pk):
     obs = get_object_or_404(Observacion, pk=pk)
+    if _obtener_version_registro(obs) is None:
+        messages.info(
+            request,
+            f"La observacion #{obs.id} necesita una resolucion antes de marcarse como lista.",
+        )
+        return redirect("resolver_observacion", pk=pk)
+
     obs.lista = True
-    obs.save()
-    messages.success(request, f"La observación #{obs.id} fue marcada como lista.")
-    return redirect('resolver_observacion', pk=pk)
+    obs.save(update_fields=["lista"])
+    messages.success(request, f"La observacion #{obs.id} fue marcada como lista.")
+    return redirect("resolver_observacion", pk=pk)
+
 
 @staff_member_required
 def resolver_observacion(request, pk: int):
     """
-    Muestra un formulario para registrar la solución de una observación,
-    clasificar el impacto y crear el VersionRegistro con la versión incrementada.
-    Al confirmar, marca la observación como lista.
+    Muestra un formulario para registrar la solucion de una observacion,
+    clasificar el impacto y crear el VersionRegistro con la version resultante.
+    Al confirmar, marca la observacion como lista.
     """
-    obs = get_object_or_404(Observacion, pk=pk)
+    obs = get_object_or_404(
+        Observacion.objects.select_related(
+            "usuario",
+            "version_registro",
+            "version_registro__creado_por",
+        ),
+        pk=pk,
+    )
+    version_registro = _obtener_version_registro(obs)
+    version_base_str = _version_str(obtener_version_actual())
+    form = None
 
-    if obs.lista:
-        messages.info(request, f"La observación #{obs.id} ya está marcada como lista.")
-        return redirect('lista_observaciones')
+    if request.method == "POST":
+        if obs.lista:
+            messages.info(
+                request,
+                f"La observacion #{obs.id} ya esta cerrada y solo permite revision.",
+            )
+            return redirect("resolver_observacion", pk=pk)
 
-    if request.method == 'POST':
-        form = ResolverObservacionForm(request.POST)
+        data = request.POST.copy()
+        impacto = data.get("impacto") or "PATCH"
+        data["proxima_version"] = _version_str(calcular_siguiente_version(impacto))
+
+        form = ResolverObservacionForm(data)
         if form.is_valid():
-            impacto = form.cleaned_data['impacto']
-            resumen = form.cleaned_data['resumen'].strip()
-            detalle = form.cleaned_data['detalle'].strip()
+            impacto = form.cleaned_data["impacto"]
+            resumen = form.cleaned_data["resumen"].strip()
+            detalle = form.cleaned_data["detalle"].strip()
 
             x, y, z = calcular_siguiente_version(impacto)
 
@@ -159,27 +195,43 @@ def resolver_observacion(request, pk: int):
                     resumen=resumen,
                     detalle=detalle,
                     observacion=obs,
-                    creado_por=request.user
+                    creado_por=request.user,
                 )
                 obs.lista = True
-                obs.save(update_fields=['lista'])
+                obs.save(update_fields=["lista"])
 
                 from django.core.cache import cache
+
                 cache.delete("observaciones:version_str")
                 cache.delete("observaciones:ultima_version")
 
-            messages.success(request, f"Observación #{obs.id} resuelta. Versión actualizada a v{ver.version_str}.")
-            return redirect('lista_observaciones')
-    else:
-        # Valor inicial: impacto PATCH y próxima versión calculada
-        form = ResolverObservacionForm(initial={'impacto': 'PATCH'})
+            messages.success(
+                request,
+                f"Observacion #{obs.id} resuelta. Version actualizada a v{ver.version_str}.",
+            )
+            return redirect("lista_observaciones")
+    elif not obs.lista:
+        impacto_inicial = "PATCH"
+        form = ResolverObservacionForm(
+            initial={
+                "impacto": impacto_inicial,
+                "proxima_version": _version_str(
+                    calcular_siguiente_version(impacto_inicial)
+                ),
+            }
+        )
 
-    # Calcula “en vivo” la próxima versión para mostrarla al cargar
-    impacto_inicial = form.initial.get('impacto', 'PATCH')
-    x, y, z = calcular_siguiente_version(impacto_inicial)
-    form.fields['proxima_version'].initial = f"{x}.{y}.{z}"
+    if form is not None:
+        form.fields["proxima_version"].widget.attrs["data-version-base"] = version_base_str
 
-    return render(request, 'observaciones/resolver_observacion.html', {
-        'form': form,
-        'observacion': obs,
-    })
+    return render(
+        request,
+        "observaciones/resolver_observacion.html",
+        {
+            "form": form,
+            "observacion": obs,
+            "modo_revision": obs.lista,
+            "version_registro": version_registro,
+            "version_base_str": version_base_str,
+        },
+    )

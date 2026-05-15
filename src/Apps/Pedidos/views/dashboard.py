@@ -10,6 +10,9 @@ Fecha de documentación: 2025-08-08
 from django.shortcuts import render
 from decimal import Decimal, ROUND_HALF_UP
 from Apps.Pedidos.models import Recepcion, Pedido, Stock
+from Apps.Pedidos.services.listaprecios_alertas import (
+    filas_precios_cliente,
+)
 
 
 def home(request):
@@ -50,6 +53,17 @@ def home(request):
 
     cantidad_pedidos_no_pagados = len(pedidos_no_pagados)
 
+    filas_clientes = filas_precios_cliente()
+    precios_cliente_bajo_costo = sorted(
+        [
+            row for row in filas_clientes
+            if row["diferencia"] is not None and row["diferencia"] < 0
+        ],
+        key=lambda row: (row["diferencia"], row["cliente"], row["producto"]),
+    )
+    cantidad_precios_cliente_bajo_costo = len(precios_cliente_bajo_costo)
+    precios_cliente_bajo_costo_preview = precios_cliente_bajo_costo[:5]
+
     return render(request, './views/dashboard/home.html', {
         'recepciones': recepciones,
         'cantidad_recepciones': cantidad_recepciones,
@@ -57,4 +71,10 @@ def home(request):
         'pedidos_no_pagados': pedidos_no_pagados,
         'cantidad_pedidos_pendiente': cantidad_pedidos_pendiente,
         'cantidad_pedidos_no_pagados': cantidad_pedidos_no_pagados,
+        'precios_cliente_bajo_costo': precios_cliente_bajo_costo_preview,
+        'cantidad_precios_cliente_bajo_costo': cantidad_precios_cliente_bajo_costo,
+        'precios_cliente_bajo_costo_restantes': max(
+            cantidad_precios_cliente_bajo_costo - len(precios_cliente_bajo_costo_preview),
+            0,
+        ),
     })

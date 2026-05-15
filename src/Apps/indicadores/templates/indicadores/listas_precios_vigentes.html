@@ -78,7 +78,7 @@
     <div class="col-md-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Diferencia promedio</div>
+          <div class="small text-muted">Margen promedio</div>
           <div class="h5 mb-0">$ {{ diferencia_promedio|formatear_miles }}</div>
         </div>
       </div>
@@ -96,8 +96,7 @@
           <th>Producto</th>
           <th>Precio Venta</th>
           <th>Precio Compra</th>
-          <th>Diferencia</th>
-          <th>Utilidad</th>
+          <th>Margen</th>
           <th>% Ganancia</th>
         </tr>
       </thead>
@@ -122,14 +121,7 @@
               {% if row.diferencia is not None %}
                 $ {{ row.diferencia|formatear_miles }}
               {% else %}
-                <span class="text-muted">Sin diferencia</span>
-              {% endif %}
-            </td>
-            <td class="text-end {% if row.utilidad is not None and row.utilidad <= 0 %}text-danger{% elif row.utilidad is not None %}text-success{% endif %}" data-order="{% if row.utilidad is not None %}{{ row.utilidad|floatformat:'2u' }}{% endif %}">
-              {% if row.utilidad is not None %}
-                $ {{ row.utilidad|formatear_miles }}
-              {% else %}
-                <span class="text-muted">Sin utilidad</span>
+                <span class="text-muted">Sin margen</span>
               {% endif %}
             </td>
             <td class="text-end {% if row.ganancia_pct is not None and row.ganancia_pct <= 0 %}text-danger{% elif row.ganancia_pct is not None %}text-success{% endif %}" data-order="{% if row.ganancia_pct is not None %}{{ row.ganancia_pct|floatformat:'2u' }}{% endif %}">
@@ -142,7 +134,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="6" class="text-center text-muted">Sin items para la lista seleccionada.</td>
+            <td colspan="5" class="text-center text-muted">Sin items para la lista seleccionada.</td>
           </tr>
         {% endfor %}
       </tbody>

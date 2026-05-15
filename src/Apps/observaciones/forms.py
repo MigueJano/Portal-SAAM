@@ -18,11 +18,11 @@ class ObservacionForm(forms.ModelForm):
 
 class ResolverObservacionForm(forms.Form):
     """
-    Form para resolver una observación:
-    - impacto (PATCH/MENOR/MAYOR)
+    Form para resolver una observacion:
+    - impacto (SIN_CAMBIO/PATCH/MENOR/MAYOR)
     - resumen (corto)
-    - detalle (descripción de la solución)
-    - Muestra la próxima versión calculada (solo lectura)
+    - detalle (descripcion de la solucion)
+    - Muestra la proxima version calculada (solo lectura)
     """
     impacto = forms.ChoiceField(
         choices=VersionRegistro.IMPACTO,

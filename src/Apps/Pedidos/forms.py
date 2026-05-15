@@ -108,6 +108,32 @@ class CrearProductoForm(forms.ModelForm):
                 self.add_error('codigo_producto_interno', "Ya existe un producto con este código interno.")
         return cleaned_data
 
+
+class CrearPackForm(forms.ModelForm):
+    """
+    Formulario simplificado para crear packs comerciales.
+    """
+
+    class Meta:
+        model = Producto
+        fields = [
+            'codigo_producto_interno',
+            'nombre_producto',
+        ]
+        labels = {
+            'codigo_producto_interno': 'Código interno del pack',
+            'nombre_producto': 'Nombre del pack',
+        }
+
+    def clean_codigo_producto_interno(self):
+        codigo = (self.cleaned_data.get('codigo_producto_interno') or '').strip()
+        qs = Producto.objects.filter(codigo_producto_interno=codigo)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise ValidationError("Ya existe un producto con este código interno.")
+        return codigo
+
 class CrearContactoForm(forms.ModelForm):
     class Meta:
         model = Contacto
@@ -313,7 +339,7 @@ class CrearRecepcionProductoForm(forms.ModelForm):
         """
         self.documento = kwargs.pop('documento', None)
         super().__init__(*args, **kwargs)
-        self.fields['producto'].queryset = Producto.objects.all()
+        self.fields['producto'].queryset = Producto.objects.filter(tipo_producto='SIMPLE').order_by('nombre_producto')
         self.fields['empaque'].widget.choices = Stock.UNIDAD_EMPAQUE
 
     def clean_qty(self):
@@ -480,12 +506,15 @@ class ListaPreciosForm(forms.ModelForm):
             self.add_error('vigencia', "Debe ingresar una fecha de vigencia.")
 
         # Validación: evitar duplicados (si es nuevo)
-        if producto and empaque and not self.instance.pk:
-            if ListaPrecios.objects.filter(
+        if producto and empaque:
+            qs = ListaPrecios.objects.filter(
                 nombre_cliente=self.cliente,
                 nombre_producto=producto,
                 empaque=empaque
-            ).exists():
+            )
+            if self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
                 raise ValidationError("Este producto con ese empaque ya tiene un precio asignado para el cliente.")
 
         return cleaned_data

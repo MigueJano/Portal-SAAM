@@ -15,6 +15,7 @@ from Apps.Pedidos.models import (
     ListaPreciosPredeterminada,     # <-- Asegúrate del nombre real del modelo
     ListaPreciosPredItem,           # <-- Asegúrate del nombre real del modelo de ítem
 )
+from Apps.Pedidos.services import sincronizar_lista_predeterminada_a_clientes_asociados
 
 # --- Constantes numéricas ---
 DOS_DEC   = Decimal("0.01")
@@ -55,7 +56,12 @@ def lista_listaprecios(request):
     Context:
       - listaprecios: queryset con todas las listas
     """
-    listas = ListaPreciosPredeterminada.objects.all().order_by("nombre_listaprecios")
+    listas = (
+        ListaPreciosPredeterminada.objects
+        .prefetch_related("clientes_asociados")
+        .all()
+        .order_by("nombre_listaprecios")
+    )
     return render(request, "./views/clientes/lista_listaprecios.html", {"listaprecios": listas})
 
 @require_http_methods(["GET", "POST"])
@@ -147,7 +153,11 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
                     item.precio_total = total
                     item.vigencia     = vigencia
                     item.save()
-                    messages.success(request, "Precio actualizado exitosamente.")
+                    sync_stats = sincronizar_lista_predeterminada_a_clientes_asociados(lista)
+                    messages.success(
+                        request,
+                        f"Precio actualizado exitosamente. Sincronizados {sync_stats['clientes']} clientes asociados.",
+                    )
                 else:
                     ListaPreciosPredItem.objects.create(
                         listaprecios=lista,
@@ -158,7 +168,11 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
                         precio_total=total,
                         vigencia=vigencia,
                     )
-                    messages.success(request, "Precio agregado exitosamente.")
+                    sync_stats = sincronizar_lista_predeterminada_a_clientes_asociados(lista)
+                    messages.success(
+                        request,
+                        f"Precio agregado exitosamente. Sincronizados {sync_stats['clientes']} clientes asociados.",
+                    )
         except IntegrityError:
             messages.error(request, "No se pudo guardar el precio. Verifica duplicados o datos.")
 
@@ -172,11 +186,13 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
         .filter(listaprecios=lista)
         .order_by("nombre_producto__nombre_producto", "empaque")
     )
+    clientes_asociados = lista.clientes_asociados.order_by("nombre_cliente")
 
     ctx = {
         "listaprecios": lista,
         "productos": productos,
         "precios": precios,
+        "clientes_asociados": clientes_asociados,
     }
     return render(request, "./views/clientes/asignar_precios_listaprecios.html", ctx)
 
@@ -188,9 +204,29 @@ def eliminar_precio_listaprecios(request, item_id: int):
     """
     item = get_object_or_404(ListaPreciosPredItem, id=item_id)
     lista_id = item.listaprecios_id
+    lista = item.listaprecios
     try:
         item.delete()
-        messages.success(request, "Ítem eliminado.")
+        sync_stats = sincronizar_lista_predeterminada_a_clientes_asociados(lista)
+        messages.success(
+            request,
+            f"Ítem eliminado. Sincronizados {sync_stats['clientes']} clientes asociados.",
+        )
     except IntegrityError:
         messages.error(request, "No se pudo eliminar el ítem. Intenta nuevamente.")
     return redirect(reverse("asignar_precios_listaprecios", args=[lista_id]))
+
+
+@require_POST
+def sincronizar_clientes_listaprecios(request, listaprecios_id: int):
+    lista = get_object_or_404(ListaPreciosPredeterminada, id=listaprecios_id)
+    stats = sincronizar_lista_predeterminada_a_clientes_asociados(lista)
+    messages.success(
+        request,
+        (
+            f"Sincronización masiva completada. "
+            f"Clientes: {stats['clientes']}, creados: {stats['created']}, "
+            f"actualizados: {stats['updated']}, eliminados: {stats['deleted']}."
+        ),
+    )
+    return redirect(reverse("asignar_precios_listaprecios", args=[lista.id]))

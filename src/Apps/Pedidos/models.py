@@ -184,6 +184,10 @@ class Subcategoria(models.Model):
         return f"{self.subcategoria} - {self.categoria}"
 
 class Producto(models.Model):
+    TIPO_PRODUCTO_CHOICES = [
+        ('SIMPLE', 'Simple'),
+        ('PACK', 'Pack'),
+    ]
     """
     Representa un producto del inventario.
     Incluye codificación, medidas, empaques y categorías.
@@ -201,6 +205,7 @@ class Producto(models.Model):
 
     categoria_producto = models.ForeignKey(Categoria, on_delete=models.CASCADE, blank=True, null=True)
     subcategoria_producto = models.ForeignKey(Subcategoria, on_delete=models.CASCADE, blank=True, null=True)
+    tipo_producto = models.CharField(max_length=10, choices=TIPO_PRODUCTO_CHOICES, default='SIMPLE')
     codigo_producto_interno = models.CharField(max_length=10)
     nombre_producto = models.CharField(max_length=40)
     qty_terciario = models.IntegerField()
@@ -215,6 +220,44 @@ class Producto(models.Model):
 
     def __str__(self):
         return f"{self.codigo_producto_interno} - {self.nombre_producto} ({self.qty_unidad} {self.medida})"
+
+    @property
+    def es_pack(self):
+        return self.tipo_producto == 'PACK'
+
+
+class PackComponente(models.Model):
+    """
+    Define la receta de un pack en base a productos simples.
+    """
+
+    pack = models.ForeignKey(
+        'Producto',
+        on_delete=models.CASCADE,
+        related_name='componentes_pack'
+    )
+    producto = models.ForeignKey(
+        'Producto',
+        on_delete=models.CASCADE,
+        related_name='usado_en_packs'
+    )
+    empaque = models.CharField(max_length=10, choices=CategoriaEmpaque.NIVELES)
+    cantidad = models.PositiveIntegerField(default=1)
+    orden = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['pack', 'producto', 'empaque'],
+                name='uniq_pack_producto_empaque'
+            )
+        ]
+        ordering = ('orden', 'id')
+        verbose_name = "Componente de Pack"
+        verbose_name_plural = "Componentes de Pack"
+
+    def __str__(self):
+        return f"{self.pack} -> {self.producto} x{self.cantidad} ({self.empaque})"
 
 class CodigoProveedor(models.Model):
     """
@@ -276,6 +319,13 @@ class Stock(models.Model):
     fecha_movimiento = models.DateTimeField(auto_now_add=True)
     recepcion = models.ForeignKey('Recepcion', null=True, blank=True, on_delete=models.SET_NULL)
     pedido = models.ForeignKey('Pedido', null=True, blank=True, on_delete=models.SET_NULL)
+    linea_pedido = models.ForeignKey(
+        'PedidoLinea',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='movimientos_stock',
+    )
 
     def __str__(self):
         referencia = None
@@ -356,6 +406,13 @@ class Cliente(models.Model):
     telefono_cliente = models.CharField(max_length=30)
     correo_cliente = models.CharField(max_length=50)
     categoria = models.CharField(max_length=20, choices=CATEGORIA)
+    lista_precios_predeterminada = models.ForeignKey(
+        'ListaPreciosPredeterminada',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='clientes_asociados',
+    )
 
     def __str__(self):
         return f"{self.nombre_cliente} ({self.rut_cliente})"
@@ -373,6 +430,13 @@ class ListaPrecios(models.Model):
     precio_iva = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
     precio_total = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
     vigencia = models.DateField()
+    lista_predeterminada_origen = models.ForeignKey(
+        'ListaPreciosPredeterminada',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='precios_cliente_sincronizados',
+    )
 
     def __str__(self):
         return f"{self.nombre_cliente} - {self.nombre_producto} - {self.empaque} - {self.vigencia}"
@@ -431,6 +495,45 @@ class Pedido(models.Model):
         if self.num_cotizacion_id:
             partes.append(f"Cot. {self.num_cotizacion.num_cotizacion}")
         return " - ".join(partes)
+
+
+class PedidoLinea(models.Model):
+    """
+    Representa la línea comercial del pedido.
+    """
+
+    TIPO_LINEA_CHOICES = [
+        ('PRODUCTO', 'Producto'),
+        ('PACK', 'Pack'),
+    ]
+
+    pedido = models.ForeignKey(
+        Pedido,
+        on_delete=models.CASCADE,
+        related_name='lineas',
+    )
+    producto = models.ForeignKey(
+        Producto,
+        on_delete=models.CASCADE,
+        related_name='lineas_pedido',
+    )
+    tipo_linea = models.CharField(max_length=10, choices=TIPO_LINEA_CHOICES, default='PRODUCTO')
+    descripcion = models.CharField(max_length=120)
+    empaque = models.CharField(max_length=10, choices=Stock.UNIDAD_EMPAQUE)
+    cantidad = models.PositiveIntegerField(default=0)
+    precio_unitario = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    creado = models.DateTimeField(auto_now_add=True)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ('id',)
+        indexes = [
+            models.Index(fields=['pedido']),
+            models.Index(fields=['producto']),
+        ]
+
+    def __str__(self):
+        return f"{self.pedido.referencia_pedido()} - {self.descripcion} x{self.cantidad}"
 
 class Venta(models.Model):
     """

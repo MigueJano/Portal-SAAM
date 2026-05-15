@@ -2,91 +2,169 @@
 
 {% block content %}
 <div class="container mt-4" style="max-width: 820px;">
-  <h2 class="h5 mb-3">Resolver observación #{{ observacion.id }}</h2>
+  <h2 class="h5 mb-3">
+    {% if modo_revision %}
+      Revision de observacion #{{ observacion.id }}
+    {% else %}
+      Resolver observacion #{{ observacion.id }}
+    {% endif %}
+  </h2>
 
   <div class="card shadow-sm">
     <div class="card-body">
       <div class="mb-3">
         <div class="small text-muted">Tipo</div>
-        <span class="badge 
-          {% if observacion.tipo == 'ERROR' %}bg-danger
-          {% elif observacion.tipo == 'PREGUNTA' %}bg-warning text-dark
-          {% else %}bg-primary{% endif %}">
+        <span class="badge {% if observacion.tipo == 'ERROR' %}bg-danger{% elif observacion.tipo == 'PREGUNTA' %}bg-warning text-dark{% else %}bg-primary{% endif %}">
           {{ observacion.get_tipo_display }}
         </span>
       </div>
+
       <div class="mb-3">
-        <div class="small text-muted">Texto de la observación</div>
+        <div class="small text-muted">Texto de la observacion</div>
         <div style="white-space: pre-wrap;">{{ observacion.observacion }}</div>
       </div>
+
       <div class="mb-3">
         <div class="small text-muted">URL de origen</div>
         <a href="{{ observacion.url }}" target="_blank" rel="noopener">{{ observacion.url }}</a>
       </div>
+
       <hr>
 
-      <form method="post">
-        {% csrf_token %}
-
-        <div class="mb-3">
-          <label class="form-label">Impacto (actualiza versión)</label><br>
-          {{ form.impacto }}
-          <div class="form-text">
-            <strong>PATCH (Z):</strong> correcciones menores ·
-            <strong>MENOR (Y):</strong> nuevas funciones retrocompatibles ·
-            <strong>MAYOR (X):</strong> cambios incompatibles.
+      {% if modo_revision %}
+        {% if version_registro %}
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <div class="small text-muted">Impacto registrado</div>
+              <div>{{ version_registro.get_impacto_display }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="small text-muted">Version resultante</div>
+              <div>v{{ version_registro.version_str }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="small text-muted">Registrado por</div>
+              <div>{{ version_registro.creado_por|default:"-" }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="small text-muted">Fecha de cierre</div>
+              <div>{{ version_registro.creado_en|date:"d/m/Y H:i" }}</div>
+            </div>
           </div>
-        </div>
 
-        <div class="mb-3">
-          <label class="form-label">Próxima versión</label>
-          {{ form.proxima_version }}
-        </div>
+          <div class="mb-3">
+            <div class="small text-muted">Resumen</div>
+            <div>{{ version_registro.resumen }}</div>
+          </div>
 
-        <div class="mb-3">
-          <label class="form-label">Resumen</label>
-          {{ form.resumen }}
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label">Detalle de la solución</label>
-          {{ form.detalle }}
-        </div>
+          <div class="mb-3">
+            <div class="small text-muted">Detalle de la solucion</div>
+            <div style="white-space: pre-wrap;">{{ version_registro.detalle }}</div>
+          </div>
+        {% else %}
+          <div class="alert alert-warning mb-3">
+            Esta observacion esta marcada como lista, pero no tiene un registro de resolucion asociado.
+          </div>
+        {% endif %}
 
         <div class="d-flex gap-2">
-          <button type="submit" class="btn btn-success">Confirmar y marcar como lista</button>
-          <a href="{% url 'lista_observaciones' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <a href="{% url 'lista_observaciones' %}" class="btn btn-outline-secondary">Volver</a>
         </div>
-      </form>
+      {% else %}
+        <form method="post">
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+          {% endif %}
+
+          <div class="mb-3">
+            <label class="form-label">Impacto</label><br>
+            {{ form.impacto }}
+            {% if form.impacto.errors %}
+              <div class="text-danger small mt-1">{{ form.impacto.errors }}</div>
+            {% endif %}
+            <div class="form-text">
+              <strong>SIN CAMBIO:</strong> mejora menor o sin error detectado, mantiene la version actual.<br>
+              <strong>PATCH (Z):</strong> correcciones menores.<br>
+              <strong>MENOR (Y):</strong> nuevas funciones retrocompatibles.<br>
+              <strong>MAYOR (X):</strong> cambios incompatibles.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Proxima version</label>
+            {{ form.proxima_version }}
+            <div class="form-text">Version actual: v{{ version_base_str }}</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Resumen</label>
+            {{ form.resumen }}
+            {% if form.resumen.errors %}
+              <div class="text-danger small mt-1">{{ form.resumen.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Detalle de la solucion</label>
+            {{ form.detalle }}
+            {% if form.detalle.errors %}
+              <div class="text-danger small mt-1">{{ form.detalle.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-success">Confirmar y marcar como lista</button>
+            <a href="{% url 'lista_observaciones' %}" class="btn btn-outline-secondary">Cancelar</a>
+          </div>
+        </form>
+      {% endif %}
     </div>
   </div>
 </div>
 {% endblock %}
 
 {% block script %}
+{% if not modo_revision %}
 <script>
-// Al cambiar el impacto, recalculamos la etiqueta de próxima versión consultando al servidor sería ideal.
-// Para mantenerlo simple sin AJAX, solo cambiaremos el texto según reglas básicas
-// Nota: si quieres precisión con el último registro en vivo, podemos agregar un endpoint JSON.
-(function() {
-  const impactoRadios = document.querySelectorAll('input[name="impacto"]');
+(function () {
   const nextInput = document.querySelector('input[name="proxima_version"]');
-  // Mantendremos el valor precargado (servidor) y advertiremos si puede variar post-envío si hubo otra resolución en paralelo
-  impactoRadios.forEach(r => {
-    r.addEventListener('change', () => {
-      const val = r.value;
-      let hint = nextInput.value.split('.');
-      if (hint.length !== 3) return;
-      let [X, Y, Z] = hint.map(n => parseInt(n, 10));
+  if (!nextInput) {
+    return;
+  }
 
-      // Simulación local: partimos de la versión mostrada y recalculamos
-      if (val === 'PATCH') { Z = Z + 1; }
-      else if (val === 'MENOR') { Y = Y + 1; Z = 0; }
-      else { X = X + 1; Y = 0; Z = 0; }
+  const baseVersion = nextInput.dataset.versionBase || nextInput.value;
+  const impactoRadios = document.querySelectorAll('input[name="impacto"]');
 
-      nextInput.value = `${X}.${Y}.${Z}`;
+  function calcularVersion(impacto) {
+    const partes = baseVersion.split('.').map((valor) => parseInt(valor, 10));
+    if (partes.length !== 3 || partes.some(Number.isNaN)) {
+      return nextInput.value;
+    }
+
+    let [x, y, z] = partes;
+
+    if (impacto === 'PATCH') {
+      z += 1;
+    } else if (impacto === 'MENOR') {
+      y += 1;
+      z = 0;
+    } else if (impacto === 'MAYOR') {
+      x += 1;
+      y = 0;
+      z = 0;
+    }
+
+    return `${x}.${y}.${z}`;
+  }
+
+  impactoRadios.forEach((radio) => {
+    radio.addEventListener('change', function () {
+      nextInput.value = calcularVersion(this.value);
     });
   });
 })();
 </script>
+{% endif %}
 {% endblock %}

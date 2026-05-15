@@ -13,15 +13,20 @@ def obtener_version_actual():
 def calcular_siguiente_version(impacto: str):
     """
     Aplica SemVer:
+      - SIN_CAMBIO => X.Y.Z
       - PATCH => X.Y.(Z+1)
       - MENOR => X.(Y+1).0
       - MAYOR => (X+1).0.0
     Si no hay versión previa, se parte desde:
+      - SIN_CAMBIO => 0.0.0
       - PATCH => 0.0.1
       - MENOR => 0.1.0
       - MAYOR => 1.0.0
     """
     x, y, z = obtener_version_actual()
+
+    if impacto == 'SIN_CAMBIO':
+        return (x, y, z)
 
     if (x, y, z) == (0, 0, 0):
         if impacto == 'PATCH':

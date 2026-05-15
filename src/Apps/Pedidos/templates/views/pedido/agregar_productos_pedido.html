@@ -97,6 +97,11 @@
                 data-label="Producto">
               <div class="nombre-wrap producto-nombre" title="{{ form.producto_nombre.value }}">
                 {{ form.producto_nombre.value }}
+                {% if form.initial.es_pack %}
+                  <div class="small text-success mt-1">
+                    Pack disponible: {{ form.initial.stock_pack_disponible|default:0|formatear_miles }}
+                  </div>
+                {% endif %}
               </div>
             </td>
 

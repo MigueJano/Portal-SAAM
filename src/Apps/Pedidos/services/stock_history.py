@@ -3,6 +3,12 @@ from django.utils import timezone
 from Apps.Pedidos.models import MovimientoStockHistorico, Stock
 
 
+def _normalizar_responsable(responsable):
+    if responsable is None:
+        return None
+    return responsable if getattr(responsable, "is_authenticated", False) else None
+
+
 def registrar_movimiento_stock(
     stock: Stock,
     *,
@@ -17,7 +23,7 @@ def registrar_movimiento_stock(
         empaque=stock.empaque,
         precio_unitario=stock.precio_unitario,
         fecha_movimiento=fecha_movimiento or stock.fecha_movimiento or timezone.now(),
-        responsable=responsable,
+        responsable=_normalizar_responsable(responsable),
     )
 
 
@@ -37,7 +43,7 @@ def registrar_movimientos_stock(
             empaque=stock.empaque,
             precio_unitario=stock.precio_unitario,
             fecha_movimiento=momento,
-            responsable=responsable,
+            responsable=_normalizar_responsable(responsable),
         )
         for stock in stocks
     ]

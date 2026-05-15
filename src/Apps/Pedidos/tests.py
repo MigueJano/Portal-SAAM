@@ -7,11 +7,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from django.contrib.auth.models import User
+from django.conf import settings
+from django.contrib.auth.models import AnonymousUser, User
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
+from django.utils.functional import SimpleLazyObject
 from django.utils import timezone
 
 from Apps.Pedidos.models import (
@@ -21,15 +23,21 @@ from Apps.Pedidos.models import (
     Cotizacion,
     EntregaPedido,
     ListaPrecios,
+    ListaPreciosPredItem,
+    ListaPreciosPredeterminada,
     MovimientoStockHistorico,
+    PackComponente,
     Pedido,
+    PedidoLinea,
     Producto,
     Proveedor,
     Recepcion,
     Stock,
+    UtilidadProducto,
     Subcategoria,
     Venta,
 )
+from Apps.Pedidos.services import registrar_movimiento_stock
 from Apps.Pedidos.templatetags.custom_filters import formatear_miles
 from Apps.Pedidos.utils_pdf import formatear_miles_punto
 from Apps.Pedidos.views.producto import _parse_codigos_proveedor
@@ -311,6 +319,23 @@ class RecepcionLineasSyncTests(TestCase):
         self.assertContains(resp, 'step="1"')
         self.assertContains(resp, 'inputmode="numeric"')
 
+    def test_recepcion_redirige_a_login_si_no_hay_sesion(self):
+        self.client.logout()
+        url = reverse("crear_recepcion_productos", args=[self.recepcion.id])
+
+        resp = self.client.post(
+            url,
+            data={
+                "producto": self.producto.id,
+                "qty": "1",
+                "empaque": "PRIMARIO",
+                "precio_unitario": "100.00",
+            },
+        )
+
+        self.assertRedirects(resp, f"{settings.LOGIN_URL}?next={url}")
+        self.assertFalse(Stock.objects.filter(recepcion=self.recepcion, tipo_movimiento="RECEPCION").exists())
+
     def test_eliminar_producto_recalcula_neto_desde_lineas_restantes(self):
         Stock.objects.create(
             tipo_movimiento="RECEPCION",
@@ -537,6 +562,63 @@ class DashboardHomeTests(TestCase):
         self.assertContains(resp, "Pendientes de Pago (4)")
         self.assertContains(resp, "2000")
         self.assertContains(resp, "2003")
+
+    def test_home_muestra_alerta_por_precios_cliente_bajo_costo(self):
+        categoria = Categoria.objects.create(categoria="Bebidas")
+        subcategoria = Subcategoria.objects.create(categoria=categoria, subcategoria="Jugos")
+        producto = Producto.objects.create(
+            categoria_producto=categoria,
+            subcategoria_producto=subcategoria,
+            codigo_producto_interno="ALR-001",
+            nombre_producto="Jugo en Alerta",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        recepcion = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=datetime(2026, 4, 10).date(),
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=9100,
+            total_neto_recepcion=Decimal("120.00"),
+            iva_recepcion=Decimal("22.80"),
+            total_recepcion=Decimal("142.80"),
+            incluir_iva=True,
+            moneda_recepcion="CLP",
+            comentario_recepcion="Compra alerta",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("120.00"),
+            recepcion=recepcion,
+        )
+        precio = ListaPrecios.objects.create(
+            nombre_cliente=self.cliente,
+            nombre_producto=producto,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("100.00"),
+            precio_iva=Decimal("19.00"),
+            precio_total=Decimal("119.00"),
+            vigencia=timezone.localdate(),
+        )
+
+        resp = self.client.get(reverse("home"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["cantidad_precios_cliente_bajo_costo"], 1)
+        self.assertEqual(len(resp.context["precios_cliente_bajo_costo"]), 1)
+        self.assertContains(resp, "Precios Cliente Bajo Costo (1)")
+        self.assertContains(resp, "Jugo en Alerta")
+        self.assertContains(resp, self.cliente.nombre_cliente)
+        self.assertContains(resp, reverse("dashboard_precios_cliente"))
+        self.assertContains(resp, f'{reverse("asignar_precios", args=[self.cliente.id])}?precio_id={precio.id}')
 
 
 class ListaPedidosTests(TestCase):
@@ -1233,15 +1315,16 @@ class EntregaPedidoFirmaCompatTests(TestCase):
         self.assertEqual(historial.tipo_movimiento, "DESPACHO")
         self.assertEqual(historial.responsable, self.user)
 
-    def test_finalizar_pedido_soporta_usuario_anonimo_sin_romper_historial(self):
+    def test_finalizar_pedido_redirige_a_login_si_no_hay_sesion(self):
         firma_b64 = base64.b64encode(b"firma-prueba").decode("ascii")
         self.client.logout()
+        url = reverse("finalizar_pedido", args=[self.pedido.id])
 
         with TemporaryDirectory() as media_root:
             with self.settings(MEDIA_ROOT=media_root):
                 with patch("Apps.Pedidos.utils_pdf.generar_pdf_entrega", return_value=b"%PDF-1.4 prueba"):
                     resp = self.client.post(
-                        reverse("finalizar_pedido", args=[self.pedido.id]),
+                        url,
                         data={
                             "entrega_nombre": "Ana Perez",
                             "entrega_rut": "11111111-1",
@@ -1250,18 +1333,57 @@ class EntregaPedidoFirmaCompatTests(TestCase):
                         },
                     )
 
-        self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp.url, reverse("detalle_pedido", args=[self.pedido.id]))
+        self.assertRedirects(resp, f"{settings.LOGIN_URL}?next={url}")
 
         self.pedido.refresh_from_db()
         self.stock.refresh_from_db()
 
-        self.assertEqual(self.pedido.estado_pedido, "Entregado")
-        self.assertEqual(self.stock.tipo_movimiento, "DESPACHO")
+        self.assertEqual(self.pedido.estado_pedido, "Pendiente")
+        self.assertEqual(self.stock.tipo_movimiento, "RESERVA")
+        self.assertFalse(EntregaPedido.objects.filter(pedido=self.pedido).exists())
+        self.assertFalse(MovimientoStockHistorico.objects.filter(stock=self.stock).exists())
 
-        historial = MovimientoStockHistorico.objects.get(stock=self.stock)
-        self.assertEqual(historial.tipo_movimiento, "DESPACHO")
-        self.assertIsNone(historial.responsable)
+
+class MovimientoStockHistoricoResponsableTests(TestCase):
+    def setUp(self):
+        self.emp_p = CategoriaEmpaque.objects.create(nombre="Unidad Historial", nivel="PRIMARIO")
+        self.emp_s = CategoriaEmpaque.objects.create(nombre="Caja Historial", nivel="SECUNDARIO")
+        self.emp_t = CategoriaEmpaque.objects.create(nombre="Pallet Historial", nivel="TERCIARIO")
+        self.categoria = Categoria.objects.create(categoria="Categoria Historial")
+        self.subcategoria = Subcategoria.objects.create(
+            categoria=self.categoria,
+            subcategoria="Subcategoria Historial",
+        )
+        self.producto = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="HIST001",
+            nombre_producto="Producto Historial",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+            empaque_primario=self.emp_p,
+            empaque_secundario=self.emp_s,
+            empaque_terciario=self.emp_t,
+        )
+        self.stock = Stock.objects.create(
+            tipo_movimiento="RECEPCION",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("100.00"),
+        )
+
+    def test_registrar_movimiento_stock_descarta_anonymoususer(self):
+        movimiento = registrar_movimiento_stock(
+            self.stock,
+            responsable=SimpleLazyObject(lambda: AnonymousUser()),
+        )
+
+        self.assertIsNone(movimiento.responsable)
 
 
 class ModelStrTrazabilidadTests(TestCase):
@@ -1357,4 +1479,412 @@ class ModelStrTrazabilidadTests(TestCase):
         self.assertEqual(
             str(movimiento),
             f"RESERVA - Stock #{stock.id} - 5 (SECUNDARIO) - Pedido #{pedido.id}",
+        )
+
+
+class ListaPreciosSincronizacionTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("sync_listas", password="test123")
+        self.client.force_login(self.user)
+
+        self.categoria = Categoria.objects.create(categoria="Categoria Lista")
+        self.subcategoria = Subcategoria.objects.create(
+            categoria=self.categoria,
+            subcategoria="Subcategoria Lista",
+        )
+        self.producto = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="LST001",
+            nombre_producto="Producto Lista",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        self.lista = ListaPreciosPredeterminada.objects.create(
+            nombre_listaprecios="Lista Base",
+            descripcion_listaprecios="Lista para sincronizacion",
+            activa=True,
+        )
+        self.item = ListaPreciosPredItem.objects.create(
+            listaprecios=self.lista,
+            nombre_producto=self.producto,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("1000.00"),
+            precio_iva=Decimal("190.00"),
+            precio_total=Decimal("1190.00"),
+            vigencia=datetime(2026, 12, 31).date(),
+        )
+        self.cliente_a = Cliente.objects.create(
+            nombre_cliente="Cliente Sync A",
+            rut_cliente="76111111-9",
+            direccion_cliente="Dir A",
+            direccion_bodega_cliente="Bodega A",
+            cliente_activo=True,
+            telefono_cliente="+56911111111",
+            correo_cliente="synca@test.local",
+            categoria="PYME",
+        )
+        self.cliente_b = Cliente.objects.create(
+            nombre_cliente="Cliente Sync B",
+            rut_cliente="76222222-8",
+            direccion_cliente="Dir B",
+            direccion_bodega_cliente="Bodega B",
+            cliente_activo=True,
+            telefono_cliente="+56922222222",
+            correo_cliente="syncb@test.local",
+            categoria="PYME",
+        )
+
+    def test_importar_lista_asocia_cliente_y_marca_origen(self):
+        resp = self.client.post(
+            reverse("asignar_precios", args=[self.cliente_a.id]),
+            data={
+                "accion": "importar_lista",
+                "lista_predeterminada_id": str(self.lista.id),
+            },
+        )
+
+        self.assertRedirects(resp, reverse("asignar_precios", args=[self.cliente_a.id]))
+        self.cliente_a.refresh_from_db()
+        self.assertEqual(self.cliente_a.lista_precios_predeterminada_id, self.lista.id)
+
+        precio = ListaPrecios.objects.get(
+            nombre_cliente=self.cliente_a,
+            nombre_producto=self.producto,
+            empaque="PRIMARIO",
+        )
+        self.assertEqual(precio.precio_venta, Decimal("1000.00"))
+        self.assertEqual(precio.lista_predeterminada_origen_id, self.lista.id)
+
+    def test_asignar_precios_permita_abrir_y_actualizar_precio_en_edicion(self):
+        precio = ListaPrecios.objects.create(
+            nombre_cliente=self.cliente_a,
+            nombre_producto=self.producto,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("1000.00"),
+            precio_iva=Decimal("190.00"),
+            precio_total=Decimal("1190.00"),
+            vigencia=datetime(2026, 12, 31).date(),
+            lista_predeterminada_origen=self.lista,
+        )
+
+        resp_get = self.client.get(
+            reverse("asignar_precios", args=[self.cliente_a.id]),
+            data={"precio_id": precio.id},
+        )
+
+        self.assertEqual(resp_get.status_code, 200)
+        self.assertContains(resp_get, "Actualizar Precio")
+        self.assertContains(resp_get, f'name="precio_id" value="{precio.id}"')
+        self.assertContains(resp_get, self.producto.nombre_producto)
+
+        resp_post = self.client.post(
+            reverse("asignar_precios", args=[self.cliente_a.id]),
+            data={
+                "accion": "guardar_uno",
+                "precio_id": str(precio.id),
+                "nombre_producto": str(self.producto.id),
+                "empaque": "PRIMARIO",
+                "precio_venta": "1250.00",
+                "vigencia": "2026-12-31",
+            },
+        )
+
+        self.assertRedirects(resp_post, reverse("asignar_precios", args=[self.cliente_a.id]))
+        precio.refresh_from_db()
+        self.assertEqual(precio.precio_venta, Decimal("1250.00"))
+        self.assertEqual(precio.precio_iva, Decimal("237.50"))
+        self.assertEqual(precio.precio_total, Decimal("1487.50"))
+        self.assertIsNone(precio.lista_predeterminada_origen)
+
+    def test_actualizar_item_lista_sincroniza_clientes_asociados(self):
+        for cliente in (self.cliente_a, self.cliente_b):
+            self.client.post(
+                reverse("asignar_precios", args=[cliente.id]),
+                data={
+                    "accion": "importar_lista",
+                    "lista_predeterminada_id": str(self.lista.id),
+                },
+            )
+
+        resp = self.client.post(
+            reverse("asignar_precios_listaprecios", args=[self.lista.id]),
+            data={
+                "producto": str(self.producto.id),
+                "empaque": "PRIMARIO",
+                "precio_venta": "1250.00",
+                "vigencia": "2026-12-31",
+            },
+        )
+
+        self.assertRedirects(resp, reverse("asignar_precios_listaprecios", args=[self.lista.id]))
+        self.assertEqual(
+            ListaPrecios.objects.get(nombre_cliente=self.cliente_a, nombre_producto=self.producto, empaque="PRIMARIO").precio_venta,
+            Decimal("1250.00"),
+        )
+        self.assertEqual(
+            ListaPrecios.objects.get(nombre_cliente=self.cliente_b, nombre_producto=self.producto, empaque="PRIMARIO").precio_venta,
+            Decimal("1250.00"),
+        )
+
+    def test_eliminar_item_lista_limpia_precios_sincronizados(self):
+        self.client.post(
+            reverse("asignar_precios", args=[self.cliente_a.id]),
+            data={
+                "accion": "importar_lista",
+                "lista_predeterminada_id": str(self.lista.id),
+            },
+        )
+
+        resp = self.client.post(reverse("eliminar_precio_listaprecios", args=[self.item.id]))
+
+        self.assertRedirects(resp, reverse("asignar_precios_listaprecios", args=[self.lista.id]))
+        self.assertFalse(
+            ListaPrecios.objects.filter(
+                nombre_cliente=self.cliente_a,
+                nombre_producto=self.producto,
+                empaque="PRIMARIO",
+            ).exists()
+        )
+
+
+class PackFlowTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("packs", password="test123")
+        self.client.force_login(self.user)
+
+        self.emp_p = CategoriaEmpaque.objects.create(nombre="Unidad Pack", nivel="PRIMARIO")
+        self.emp_s = CategoriaEmpaque.objects.create(nombre="Caja Pack", nivel="SECUNDARIO")
+        self.emp_t = CategoriaEmpaque.objects.create(nombre="Pallet Pack", nivel="TERCIARIO")
+
+        self.categoria = Categoria.objects.create(categoria="Sanitizacion")
+        self.subcategoria = Subcategoria.objects.create(
+            categoria=self.categoria,
+            subcategoria="Limpieza",
+        )
+
+        self.cliente_obj = Cliente.objects.create(
+            nombre_cliente="Bellemer Laboratory Ltda",
+            rut_cliente="76123456-9",
+            direccion_cliente="Direccion Cliente 123",
+            direccion_bodega_cliente="Bodega Cliente 123",
+            cliente_activo=True,
+            telefono_cliente="+56912345678",
+            correo_cliente="bellemer@example.com",
+            categoria="PYME",
+        )
+
+        self.producto_cloro = self._crear_producto_simple("CLGI01", "Cloro Gel Igenix 900cc")
+        self.producto_aerosol = self._crear_producto_simple("DAIG01", "Aerosol Desinfectante Igenix 360cc")
+        self.producto_crema = self._crear_producto_simple("LCWX01", "Limpiador Crema Winnex Amoniaco")
+
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto_cloro,
+            qty=7,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("831.93"),
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto_aerosol,
+            qty=16,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("1436.97"),
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto_crema,
+            qty=14,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("815.13"),
+        )
+
+    def _crear_producto_simple(self, codigo, nombre):
+        return Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            tipo_producto="SIMPLE",
+            codigo_producto_interno=codigo,
+            nombre_producto=nombre,
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+            empaque_primario=self.emp_p,
+            empaque_secundario=self.emp_s,
+            empaque_terciario=self.emp_t,
+        )
+
+    def test_menu_productos_expone_link_crear_pack(self):
+        resp = self.client.get(reverse("lista_productos"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, reverse("crear_pack"))
+
+    def test_crear_pack_y_venderlo_desglosa_stock_y_utilidad(self):
+        resp_get = self.client.get(reverse("crear_pack"))
+        self.assertEqual(resp_get.status_code, 200)
+        self.assertContains(resp_get, "Componentes del Pack")
+        self.assertNotContains(resp_get, "Categoría")
+        self.assertNotContains(resp_get, "Subcategoría")
+        self.assertNotContains(resp_get, "Empaque visible")
+        self.assertNotContains(resp_get, "Stock mínimo referencial")
+
+        resp_pack = self.client.post(
+            reverse("crear_pack"),
+            data={
+                "codigo_producto_interno": "PKBLM01",
+                "nombre_producto": "Pack Sanitizacion Bellemer",
+                "componentes[0][producto]": str(self.producto_cloro.id),
+                "componentes[0][empaque]": "PRIMARIO",
+                "componentes[0][cantidad]": "1",
+                "componentes[1][producto]": str(self.producto_aerosol.id),
+                "componentes[1][empaque]": "PRIMARIO",
+                "componentes[1][cantidad]": "1",
+                "componentes[2][producto]": str(self.producto_crema.id),
+                "componentes[2][empaque]": "PRIMARIO",
+                "componentes[2][cantidad]": "1",
+            },
+        )
+
+        self.assertRedirects(resp_pack, reverse("lista_productos"))
+
+        pack = Producto.objects.get(codigo_producto_interno="PKBLM01")
+        self.assertEqual(pack.tipo_producto, "PACK")
+        self.assertEqual(PackComponente.objects.filter(pack=pack).count(), 3)
+
+        resp_precio = self.client.post(
+            reverse("asignar_precios", args=[self.cliente_obj.id]),
+            data={
+                "accion": "guardar_uno",
+                "nombre_producto": str(pack.id),
+                "empaque": "PRIMARIO",
+                "precio_venta": "4190.00",
+                "vigencia": "2026-12-31",
+            },
+        )
+        self.assertRedirects(resp_precio, reverse("asignar_precios", args=[self.cliente_obj.id]))
+        self.assertTrue(
+            ListaPrecios.objects.filter(
+                nombre_cliente=self.cliente_obj,
+                nombre_producto=pack,
+                empaque="PRIMARIO",
+            ).exists()
+        )
+
+        pedido = Pedido.objects.create(
+            nombre_cliente=self.cliente_obj,
+            fecha_pedido=datetime(2026, 5, 12).date(),
+            estado_pedido="Pendiente",
+        )
+
+        resp_agregar = self.client.post(
+            reverse("agregar_productos_pedido", args=[pedido.id]),
+            data={
+                "form-TOTAL_FORMS": "1",
+                "form-INITIAL_FORMS": "1",
+                "form-MIN_NUM_FORMS": "0",
+                "form-MAX_NUM_FORMS": "1000",
+                "form-0-producto_id": str(pack.id),
+                "form-0-producto_nombre": pack.nombre_producto,
+                "form-0-empaque": "PRIMARIO",
+                "form-0-precio_unitario": "4190.00",
+                "form-0-cantidad": "2",
+            },
+        )
+
+        self.assertRedirects(resp_agregar, reverse("detalle_pedido", args=[pedido.id]))
+
+        linea = PedidoLinea.objects.get(pedido=pedido, producto=pack)
+        self.assertEqual(linea.tipo_linea, "PACK")
+        self.assertEqual(linea.cantidad, 2)
+        self.assertEqual(linea.precio_unitario, Decimal("4190.00"))
+
+        reservas = Stock.objects.filter(pedido=pedido, tipo_movimiento="RESERVA").order_by("producto__codigo_producto_interno")
+        self.assertEqual(reservas.count(), 3)
+        self.assertEqual(
+            {
+                row.producto.codigo_producto_interno: row.qty
+                for row in reservas
+            },
+            {
+                "CLGI01": 2,
+                "DAIG01": 2,
+                "LCWX01": 2,
+            },
+        )
+        self.assertTrue(all(row.linea_pedido_id == linea.id for row in reservas))
+
+        resp_detalle = self.client.get(reverse("detalle_pedido", args=[pedido.id]))
+        self.assertEqual(resp_detalle.status_code, 200)
+        self.assertContains(resp_detalle, "Pack Sanitizacion Bellemer")
+        self.assertContains(resp_detalle, "PACK")
+
+        firma_b64 = base64.b64encode(b"firma-pack").decode("ascii")
+        with TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root):
+                with patch("Apps.Pedidos.utils_pdf.generar_pdf_entrega", return_value=b"%PDF-1.4 pack"):
+                    resp_entrega = self.client.post(
+                        reverse("finalizar_pedido", args=[pedido.id]),
+                        data={
+                            "entrega_nombre": "Ana Perez",
+                            "entrega_rut": "11111111-1",
+                            "entrega_fecha": "2026-05-12T15:30",
+                            "entrega_firma": f"data:image/png;base64,{firma_b64}",
+                        },
+                    )
+
+        self.assertRedirects(resp_entrega, reverse("detalle_pedido", args=[pedido.id]))
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.estado_pedido, "Entregado")
+        self.assertEqual(
+            Stock.objects.filter(pedido=pedido, tipo_movimiento="DESPACHO").count(),
+            3,
+        )
+
+        resp_venta = self.client.post(
+            reverse("finalizar_venta", args=[pedido.id]),
+            data={
+                "fecha_venta": "2026-05-12",
+                "documento_pedido": "Factura",
+                "num_documento": "9001",
+            },
+        )
+
+        self.assertRedirects(resp_venta, reverse("lista_ventas"))
+
+        venta = Venta.objects.get(pedidoid=pedido)
+        self.assertEqual(venta.venta_neto_pedido, Decimal("8380.00"))
+        self.assertEqual(venta.venta_iva_pedido, Decimal("1592.20"))
+        self.assertEqual(venta.venta_total_pedido, Decimal("9972.20"))
+        self.assertEqual(venta.ganancia_total, Decimal("2211.94"))
+        self.assertEqual(venta.ganancia_porcentaje, Decimal("26.40"))
+
+        utilidades = UtilidadProducto.objects.filter(venta=venta).order_by("producto__codigo_producto_interno")
+        self.assertEqual(utilidades.count(), 3)
+        self.assertFalse(utilidades.filter(producto=pack).exists())
+
+        detalle_utilidad = {
+            item.producto.codigo_producto_interno: (
+                item.cantidad,
+                item.precio_compra_unitario,
+                item.precio_venta_unitario,
+                item.utilidad,
+            )
+            for item in utilidades
+        }
+        self.assertEqual(
+            detalle_utilidad,
+            {
+                "CLGI01": (2, Decimal("831.93"), Decimal("1130.27"), Decimal("298.34")),
+                "DAIG01": (2, Decimal("1436.97"), Decimal("1952.28"), Decimal("515.31")),
+                "LCWX01": (2, Decimal("815.13"), Decimal("1107.45"), Decimal("292.32")),
+            },
         )

@@ -28,6 +28,7 @@ class VersionRegistro(models.Model):
     y se clasifica el cambio como PATCH / MENOR / MAYOR.
     """
     IMPACTO = (
+        ('SIN_CAMBIO', 'Sin cambio de version'),
         ('PATCH', 'Corrección (Z)'),
         ('MENOR', 'Funcionalidad menor (Y)'),
         ('MAYOR', 'Cambio mayor (X)'),

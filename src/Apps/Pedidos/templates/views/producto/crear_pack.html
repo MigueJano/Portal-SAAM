@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container mt-4 p-4 rounded shadow" style="background-color: #f8f9fa;">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h4 class="mb-1">{% if modo_pack == "editar" %}Editar Pack{% else %}Crear Pack{% endif %}</h4>
+      <p class="text-muted mb-0">El pack se vende como un producto, pero reserva stock por componentes.</p>
+    </div>
+    <a href="{% url 'lista_productos' %}" class="btn btn-outline-secondary">Volver</a>
+  </div>
+
+  {% if form.errors %}
+    <div class="alert alert-danger">
+      <ul class="mb-0">
+        {% for field in form %}
+          {% for error in field.errors %}
+            <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+          {% endfor %}
+        {% endfor %}
+        {% for error in form.non_field_errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <form method="post" id="form-pack">
+    {% csrf_token %}
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Código interno</label>
+        {{ form.codigo_producto_interno }}
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">Nombre del pack</label>
+        {{ form.nombre_producto }}
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <label class="form-label">Costo referencial</label>
+        <input type="text" id="costo-referencial" class="form-control" value="$0" readonly>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Precio</label>
+        <input type="text" id="precio-sugerido" class="form-control" value="$0" readonly>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Packs posibles hoy</label>
+        <input type="text" id="packs-disponibles" class="form-control" value="{% if pack %}{{ stock_pack_disponible }}{% else %}0{% endif %}" readonly>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">Componentes del Pack</h5>
+          <button type="button" class="btn btn-outline-primary btn-sm" id="agregar-componente">Agregar componente</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle" id="tabla-componentes">
+            <thead class="table-light text-center">
+              <tr>
+                <th>Producto</th>
+                <th>Empaque</th>
+                <th>Cantidad</th>
+                <th>Stock libre</th>
+                <th>Costo ref.</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="componentes-body">
+              {% if componentes_pack_post %}
+                {% for item in componentes_pack_post %}
+                  <tr class="componente-row">
+                    <td>
+                      <select name="componentes[{{ forloop.counter0 }}][producto]" class="form-select componente-producto" required>
+                        <option value="">Seleccione</option>
+                        {% for prod in productos_componentes %}
+                          <option value="{{ prod.id }}" data-stock="{{ stock_componentes_map|get_item:prod.id|default:0 }}" {% if item.producto_id == prod.id %}selected{% endif %}>{{ prod.codigo_producto_interno }} - {{ prod.nombre_producto }}</option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                    <td>
+                      <select name="componentes[{{ forloop.counter0 }}][empaque]" class="form-select componente-empaque" required>
+                        <option value="PRIMARIO" {% if item.empaque == 'PRIMARIO' %}selected{% endif %}>Primario</option>
+                        <option value="SECUNDARIO" {% if item.empaque == 'SECUNDARIO' %}selected{% endif %}>Secundario</option>
+                        <option value="TERCIARIO" {% if item.empaque == 'TERCIARIO' %}selected{% endif %}>Terciario</option>
+                      </select>
+                    </td>
+                    <td><input type="number" min="1" name="componentes[{{ forloop.counter0 }}][cantidad]" class="form-control componente-cantidad" value="{{ item.cantidad }}" required></td>
+                    <td class="text-end stock-disponible">0</td>
+                    <td class="text-end costo-componente">$0</td>
+                    <td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm quitar-componente">Quitar</button></td>
+                  </tr>
+                {% endfor %}
+              {% elif componentes_pack %}
+                {% for item in componentes_pack %}
+                  <tr class="componente-row">
+                    <td>
+                      <select name="componentes[{{ forloop.counter0 }}][producto]" class="form-select componente-producto" required>
+                        <option value="">Seleccione</option>
+                        {% for prod in productos_componentes %}
+                          <option value="{{ prod.id }}" data-stock="{{ stock_componentes_map|get_item:prod.id|default:0 }}" {% if item.producto_id == prod.id %}selected{% endif %}>{{ prod.codigo_producto_interno }} - {{ prod.nombre_producto }}</option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                    <td>
+                      <select name="componentes[{{ forloop.counter0 }}][empaque]" class="form-select componente-empaque" required>
+                        <option value="PRIMARIO" {% if item.empaque == 'PRIMARIO' %}selected{% endif %}>Primario</option>
+                        <option value="SECUNDARIO" {% if item.empaque == 'SECUNDARIO' %}selected{% endif %}>Secundario</option>
+                        <option value="TERCIARIO" {% if item.empaque == 'TERCIARIO' %}selected{% endif %}>Terciario</option>
+                      </select>
+                    </td>
+                    <td><input type="number" min="1" name="componentes[{{ forloop.counter0 }}][cantidad]" class="form-control componente-cantidad" value="{{ item.cantidad }}" required></td>
+                    <td class="text-end stock-disponible">{{ stock_componentes_map|get_item:item.producto_id|default:0 }}</td>
+                    <td class="text-end costo-componente">$0</td>
+                    <td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm quitar-componente">Quitar</button></td>
+                  </tr>
+                {% endfor %}
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2">
+      <button type="submit" class="btn btn-outline-success">{% if modo_pack == "editar" %}Guardar Cambios{% else %}Guardar Pack{% endif %}</button>
+      <a href="{% url 'lista_productos' %}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+  </form>
+
+  <template id="tpl-componente">
+    <tr class="componente-row">
+      <td>
+        <select class="form-select componente-producto" required>
+          <option value="">Seleccione</option>
+          {% for prod in productos_componentes %}
+            <option value="{{ prod.id }}" data-stock="{{ stock_componentes_map|get_item:prod.id|default:0 }}">{{ prod.codigo_producto_interno }} - {{ prod.nombre_producto }}</option>
+          {% endfor %}
+        </select>
+      </td>
+      <td>
+        <select class="form-select componente-empaque" required>
+          <option value="PRIMARIO">Primario</option>
+          <option value="SECUNDARIO">Secundario</option>
+          <option value="TERCIARIO">Terciario</option>
+        </select>
+      </td>
+      <td><input type="number" min="1" class="form-control componente-cantidad" value="1" required></td>
+      <td class="text-end stock-disponible">0</td>
+      <td class="text-end costo-componente">$0</td>
+      <td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm quitar-componente">Quitar</button></td>
+    </tr>
+  </template>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const body = document.getElementById("componentes-body");
+  const template = document.getElementById("tpl-componente");
+  const btnAgregar = document.getElementById("agregar-componente");
+  const costoRef = document.getElementById("costo-referencial");
+  const precioSug = document.getElementById("precio-sugerido");
+  const packsDisponibles = document.getElementById("packs-disponibles");
+  let rowIndex = body.querySelectorAll(".componente-row").length;
+
+  function fmtMonto(valor) {
+    return "$" + Math.round(Number(valor || 0)).toLocaleString("es-CL");
+  }
+
+  function renumerarFilas() {
+    body.querySelectorAll(".componente-row").forEach((row, index) => {
+      row.querySelector(".componente-producto").name = `componentes[${index}][producto]`;
+      row.querySelector(".componente-empaque").name = `componentes[${index}][empaque]`;
+      row.querySelector(".componente-cantidad").name = `componentes[${index}][cantidad]`;
+    });
+    rowIndex = body.querySelectorAll(".componente-row").length;
+  }
+
+  async function actualizarFila(row) {
+    const productoSelect = row.querySelector(".componente-producto");
+    const empaqueSelect = row.querySelector(".componente-empaque");
+    const cantidadInput = row.querySelector(".componente-cantidad");
+    const stockCell = row.querySelector(".stock-disponible");
+    const costoCell = row.querySelector(".costo-componente");
+
+    const productoId = productoSelect.value;
+    const cantidad = Number(cantidadInput.value || 0);
+    const stockLibre = Number(productoSelect.selectedOptions[0]?.dataset.stock || 0);
+    stockCell.textContent = stockLibre.toLocaleString("es-CL");
+
+    if (!productoId || cantidad <= 0) {
+      costoCell.textContent = "$0";
+      return { costo: 0, packsPosibles: 0 };
+    }
+
+    try {
+      const resp = await fetch(`/ajax/precio_maximo/${productoId}/`);
+      const data = await resp.json();
+      if (data.error) {
+        costoCell.textContent = "$0";
+        return { costo: 0, packsPosibles: 0 };
+      }
+
+      let factor = 1;
+      if (empaqueSelect.value === "SECUNDARIO") factor = Number(data.qty_secundario || 1);
+      else if (empaqueSelect.value === "TERCIARIO") factor = Number(data.qty_secundario || 1) * Number(data.qty_terciario || 1);
+
+      const costo = Number(data.precio_base || 0) * factor * cantidad;
+      const requerido = factor * cantidad;
+      costoCell.textContent = fmtMonto(costo);
+      return {
+        costo,
+        packsPosibles: requerido > 0 ? Math.max(0, Math.floor(stockLibre / requerido)) : 0,
+      };
+    } catch (error) {
+      costoCell.textContent = "$0";
+      return { costo: 0, packsPosibles: 0 };
+    }
+  }
+
+  async function recalcularResumen() {
+    const rows = Array.from(body.querySelectorAll(".componente-row"));
+    if (!rows.length) {
+      costoRef.value = "$0";
+      precioSug.value = "$0";
+      packsDisponibles.value = "0";
+      return;
+    }
+
+    let costoTotal = 0;
+    let maxPacks = null;
+    for (const row of rows) {
+      const { costo, packsPosibles } = await actualizarFila(row);
+      costoTotal += costo;
+      if (row.querySelector(".componente-producto").value) {
+        maxPacks = maxPacks === null ? packsPosibles : Math.min(maxPacks, packsPosibles);
+      }
+    }
+
+    costoRef.value = fmtMonto(costoTotal);
+    precioSug.value = fmtMonto(costoTotal * 1.3);
+    packsDisponibles.value = String(Math.max(0, maxPacks ?? 0));
+  }
+
+  function crearFila() {
+    const wrapper = document.createElement("tbody");
+    wrapper.innerHTML = template.innerHTML.trim();
+    const row = wrapper.firstElementChild;
+    body.appendChild(row);
+    renumerarFilas();
+    recalcularResumen();
+  }
+
+  btnAgregar?.addEventListener("click", crearFila);
+
+  body.addEventListener("click", (event) => {
+    if (event.target.closest(".quitar-componente")) {
+      event.target.closest(".componente-row")?.remove();
+      renumerarFilas();
+      recalcularResumen();
+    }
+  });
+
+  body.addEventListener("change", (event) => {
+    if (event.target.matches(".componente-producto, .componente-empaque, .componente-cantidad")) {
+      recalcularResumen();
+    }
+  });
+
+  body.addEventListener("input", (event) => {
+    if (event.target.matches(".componente-cantidad")) {
+      recalcularResumen();
+    }
+  });
+
+  if (!body.querySelector(".componente-row")) {
+    crearFila();
+    crearFila();
+  } else {
+    renumerarFilas();
+    recalcularResumen();
+  }
+});
+</script>
+{% endblock %}

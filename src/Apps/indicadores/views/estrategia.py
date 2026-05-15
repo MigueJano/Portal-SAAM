@@ -21,6 +21,7 @@ from Apps.Pedidos.models import (
     UtilidadProducto,
     Venta,
 )
+from Apps.Pedidos.services import costo_referencial_pack, es_pack
 from Apps.indicadores.services.contabilidad import _normalizar_precio_unidad_primaria
 from .common import periodo_desde_request
 
@@ -402,6 +403,15 @@ def _maximos_compra_por_producto(product_ids):
     if not product_ids:
         return {}
 
+    productos = {
+        producto.id: producto
+        for producto in Producto.objects.filter(id__in=product_ids).select_related(
+            "empaque_primario",
+            "empaque_secundario",
+            "empaque_terciario",
+        )
+    }
+
     compras_qs = (
         Stock.objects.filter(
             producto_id__in=product_ids,
@@ -415,6 +425,12 @@ def _maximos_compra_por_producto(product_ids):
     )
 
     maximos = {}
+    for producto_id, producto in productos.items():
+        if es_pack(producto):
+            precio_pack = costo_referencial_pack(producto)
+            if precio_pack > 0:
+                maximos[producto_id] = _q2(precio_pack)
+
     for stock in compras_qs:
         precio = _normalizar_precio_producto(stock.producto, stock.empaque, stock.precio_unitario)
         actual = maximos.get(stock.producto_id)

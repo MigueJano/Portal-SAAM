@@ -49,6 +49,54 @@ def formatear_miles_punto(num):
     num = _to_decimal(num).quantize(PESO, rounding=ROUND_HALF_UP)
     return f"{int(num):,}".replace(",", ".")
 
+
+def _nombre_empaque_producto(producto, empaque):
+    nivel = (empaque or 'PRIMARIO').upper()
+    if nivel == 'SECUNDARIO' and getattr(producto, 'empaque_secundario', None):
+        return producto.empaque_secundario.nombre
+    if nivel == 'TERCIARIO' and getattr(producto, 'empaque_terciario', None):
+        return producto.empaque_terciario.nombre
+    if getattr(producto, 'empaque_primario', None):
+        return producto.empaque_primario.nombre
+    if getattr(producto, 'tipo_producto', 'SIMPLE') == 'PACK':
+        return 'Pack'
+    return nivel
+
+
+def _items_pedido_para_pdf(pedido, reservas):
+    lineas_manager = getattr(pedido, 'lineas', None)
+    if lineas_manager is not None and lineas_manager.exists():
+        items = []
+        for linea in lineas_manager.select_related(
+            'producto',
+            'producto__empaque_primario',
+            'producto__empaque_secundario',
+            'producto__empaque_terciario',
+        ).order_by('id'):
+            cantidad = _to_decimal(linea.cantidad)
+            precio_unitario = _to_decimal(linea.precio_unitario)
+            items.append({
+                'nombre': linea.descripcion,
+                'cantidad': cantidad,
+                'empaque_nombre': _nombre_empaque_producto(linea.producto, linea.empaque),
+                'precio_unitario': precio_unitario,
+                'subtotal': cantidad * precio_unitario,
+            })
+        return items
+
+    items = []
+    for r in reservas:
+        qty = _to_decimal(getattr(r, 'qty', 0))
+        precio = _to_decimal(getattr(r, 'precio_unitario', 0))
+        items.append({
+            'nombre': r.producto.nombre_producto[:30],
+            'cantidad': qty,
+            'empaque_nombre': _nombre_empaque_producto(r.producto, r.empaque),
+            'precio_unitario': precio,
+            'subtotal': qty * precio,
+        })
+    return items
+
 # --------------------------
 # Footer / Pie de página
 # --------------------------
@@ -166,28 +214,17 @@ def generar_pdf_pedido(pedido, reservas):
     data = [["Producto", "Cantidad", "Empaque", "Precio Neto", "Precio c/IVA","Subtotal"]]
     total_neto = Decimal('0')
 
-    for r in reservas:
-        qty     = _to_decimal(r.qty)
-        precio  = _to_decimal(r.precio_unitario)
-        subtotal = qty * precio
+    for item in _items_pedido_para_pdf(pedido, reservas):
+        qty = _to_decimal(item['cantidad'])
+        precio = _to_decimal(item['precio_unitario'])
+        subtotal = _to_decimal(item['subtotal'])
         total_neto += subtotal
-
-        # Nombre de empaque normalizado
-        nombre_empaque = (
-            r.producto.empaque_primario.nombre   if r.empaque == 'PRIMARIO'   and r.producto.empaque_primario   else
-            r.producto.empaque_secundario.nombre if r.empaque == 'SECUNDARIO' and r.producto.empaque_secundario else
-            r.producto.empaque_terciario.nombre  if r.empaque == 'TERCIARIO'  and r.producto.empaque_terciario  else
-            r.empaque
-        )
-
-        # Precio IVA por línea (redondeado a peso)
-        # Nota: IVA es un Decimal tipo Decimal('0.19')
         precio_iva = (precio * (Decimal('1') + IVA)).quantize(PESO, rounding=ROUND_HALF_UP)
 
         data.append([
-            r.producto.nombre_producto[:30],
+            item['nombre'][:30],
             f"{int(qty)}",
-            nombre_empaque,
+            item['empaque_nombre'],
             f"${formatear_miles_punto(precio)}",
             f"${formatear_miles_punto(precio_iva)}",
             f"${formatear_miles_punto(subtotal)}",
@@ -414,23 +451,16 @@ def generar_pdf_entrega(pedido, reservas, receptor, firma_bytes=None):
     data = [["Producto", "Cantidad", "Empaque", "Precio Unitario", "Subtotal"]]
     total_neto = Decimal('0')
 
-    for r in reservas:
-        qty = _to_decimal(getattr(r, 'qty', 0))
-        precio = _to_decimal(getattr(r, 'precio_unitario', 0))
-        subtotal = qty * precio
+    for item in _items_pedido_para_pdf(pedido, reservas):
+        qty = _to_decimal(item['cantidad'])
+        precio = _to_decimal(item['precio_unitario'])
+        subtotal = _to_decimal(item['subtotal'])
         total_neto += subtotal
 
-        nombre_empaque = (
-            r.producto.empaque_primario.nombre   if r.empaque == 'PRIMARIO'   and r.producto.empaque_primario   else
-            r.producto.empaque_secundario.nombre if r.empaque == 'SECUNDARIO' and r.producto.empaque_secundario else
-            r.producto.empaque_terciario.nombre  if r.empaque == 'TERCIARIO'  and r.producto.empaque_terciario  else
-            r.empaque
-        )
-
         data.append([
-            r.producto.nombre_producto[:30],
+            item['nombre'][:30],
             f"{int(qty)}",
-            nombre_empaque,
+            item['empaque_nombre'],
             f"${formatear_miles_punto(precio)}",
             f"${formatear_miles_punto(subtotal)}"
         ])

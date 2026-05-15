@@ -3,7 +3,26 @@
 {% load custom_filters %}
 
 {% block content %}
-<h3>Asignar productos y precios a Lista {{ listaprecios.nombre_listaprecios }}</h3>
+<div class="d-flex justify-content-between align-items-start gap-2">
+  <div>
+    <h3>Asignar productos y precios a Lista {{ listaprecios.nombre_listaprecios }}</h3>
+    <div class="small text-muted">
+      Clientes asociados: {{ clientes_asociados.count }}
+      {% if clientes_asociados %}
+        |
+        {% for cliente in clientes_asociados %}
+          {{ cliente.nombre_cliente }}{% if not forloop.last %}, {% endif %}
+        {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+  <form method="post" action="{% url 'sincronizar_clientes_listaprecios' listaprecios.id %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-outline-success btn-sm">
+      Sincronizar Clientes Asociados
+    </button>
+  </form>
+</div>
 
 <form method="post" class="row g-3">
   {% csrf_token %}

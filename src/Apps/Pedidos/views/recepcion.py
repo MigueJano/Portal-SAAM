@@ -155,7 +155,7 @@ def crear_recepcion_productos(request, recepcion_id):
     else:
         form = CrearRecepcionProductoForm(documento=recepcion)
 
-    productos_disponibles = Producto.objects.all().order_by("nombre_producto")
+    productos_disponibles = Producto.objects.filter(tipo_producto="SIMPLE").order_by("nombre_producto")
     codigos_qs = CodigoProveedor.objects.filter(proveedor=recepcion.proveedor).values(
         "codigo_proveedor",
         "producto_id",

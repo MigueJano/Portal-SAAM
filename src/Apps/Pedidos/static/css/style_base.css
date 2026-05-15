@@ -104,6 +104,47 @@ body {
   background-color: var(--color-icono-menu-activo-fondo); /* si quieres un fondo al hover */
 }
 
+@media (max-width: 991.98px) {
+  .saam-navbar-collapse {
+    width: 100%;
+    padding-top: 0.75rem;
+  }
+
+  .saam-navbar-collapse.show,
+  .saam-navbar-collapse.collapsing {
+    max-height: calc(100vh - 88px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 0.75rem;
+  }
+
+  .saam-navbar-menu,
+  .saam-navbar .navbar-nav {
+    width: 100%;
+  }
+
+  .saam-navbar .nav-link,
+  .saam-navbar .dropdown-item {
+    white-space: normal;
+  }
+
+  .saam-navbar .dropdown-menu {
+    position: static;
+    float: none;
+    margin-top: 0.25rem;
+    margin-bottom: 0.5rem;
+    border: 0;
+    box-shadow: none;
+    padding-left: 0.75rem;
+  }
+
+  .saam-navbar .navbar-nav + .navbar-nav {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.18);
+  }
+}
+
 
 /* Boton de busqueda */
 .btn-buscar {

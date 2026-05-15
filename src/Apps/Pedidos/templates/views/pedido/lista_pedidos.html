@@ -31,7 +31,7 @@
             {% for pedido in pedidos %}
             <tr>
               <td class="text-center">{{ pedido.id }}</td>
-              <td class="text-center">{{ pedido.nombre_cliente }}</td>
+              <td class="text-center">{{ pedido.nombre_cliente.nombre_cliente }}</td>
               <td class="text-center" data-order="{{ pedido.fecha_pedido|date:'Y-m-d' }}">{{ pedido.fecha_pedido|date:"d-m-Y" }}</td>
               <td class="text-center">
                 {% if pedido.estado_pedido == "Pendiente" %}

@@ -17,10 +17,20 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from Apps.Pedidos.models import (
     Producto, Categoria, Subcategoria, CategoriaEmpaque,
-    ListaPrecios, Stock, Proveedor, CodigoProveedor
+    ListaPrecios, Stock, Proveedor, CodigoProveedor, PackComponente
 )
 from Apps.Pedidos.forms import (
-    CrearProductoForm, CategoriaEmpaqueForm, SubCategoriaForm
+    CrearProductoForm, CrearPackForm, CategoriaEmpaqueForm, SubCategoriaForm
+)
+from Apps.Pedidos.services import (
+    costo_referencial_pack,
+    costo_maximo_unitario,
+    es_pack,
+    factor_empaque,
+    q2,
+    snapshot_pack,
+    stock_cache_simple,
+    stock_disponible_pack,
 )
 from Apps.Pedidos.utils import lista_generica, eliminar_generica
 
@@ -122,6 +132,133 @@ def _sync_codigos_proveedor(producto, nuevos):
     return creados, eliminados
 
 
+def _parse_componentes_pack(post_data):
+    """
+    Lee componentes[IDX][producto|empaque|cantidad] y retorna filas válidas.
+    """
+    items = {}
+    for key, value in post_data.items():
+        if not key.startswith('componentes['):
+            continue
+        try:
+            idx = key.split('[', 1)[1].split(']', 1)[0]
+            campo = key.rsplit('[', 1)[1].rstrip(']')
+        except Exception:
+            continue
+        items.setdefault(idx, {})[campo] = value
+
+    componentes = []
+    errores = []
+    for idx, data in items.items():
+        producto_raw = (data.get('producto') or '').strip()
+        empaque = (data.get('empaque') or '').strip().upper()
+        cantidad_raw = (data.get('cantidad') or '').strip()
+
+        if not producto_raw and not empaque and not cantidad_raw:
+            continue
+        if not producto_raw.isdigit():
+            errores.append(f"Componente {idx}: debes seleccionar un producto.")
+            continue
+        if empaque not in {'PRIMARIO', 'SECUNDARIO', 'TERCIARIO'}:
+            errores.append(f"Componente {idx}: empaque inválido.")
+            continue
+        if not cantidad_raw.isdigit() or int(cantidad_raw) <= 0:
+            errores.append(f"Componente {idx}: la cantidad debe ser mayor a cero.")
+            continue
+
+        componentes.append({
+            'orden': int(idx),
+            'producto_id': int(producto_raw),
+            'empaque': empaque,
+            'cantidad': int(cantidad_raw),
+        })
+
+    return componentes, errores
+
+
+def _sync_componentes_pack(pack, componentes):
+    PackComponente.objects.filter(pack=pack).delete()
+    if not componentes:
+        return []
+
+    rows = [
+        PackComponente(
+            pack=pack,
+            producto_id=item['producto_id'],
+            empaque=item['empaque'],
+            cantidad=item['cantidad'],
+            orden=item['orden'],
+        )
+        for item in componentes
+    ]
+    return PackComponente.objects.bulk_create(rows)
+
+
+def _validar_componentes_pack(pack, componentes):
+    errores = []
+    if len(componentes) < 2:
+        errores.append("Debes agregar al menos 2 componentes al pack.")
+        return errores
+
+    vistos = set()
+    for idx, item in enumerate(componentes, start=1):
+        if item['producto_id'] == pack.id:
+            errores.append(f"Componente {idx}: un pack no puede contenerse a sí mismo.")
+            continue
+
+        producto = Producto.objects.filter(pk=item['producto_id']).only('id', 'tipo_producto').first()
+        if not producto:
+            errores.append(f"Componente {idx}: producto no encontrado.")
+            continue
+        if es_pack(producto):
+            errores.append(f"Componente {idx}: no se permiten packs dentro de packs.")
+            continue
+
+        if item['empaque'] == 'PRIMARIO' and not producto.empaque_primario_id:
+            errores.append(f"Componente {idx}: el producto no tiene empaque primario configurado.")
+            continue
+        if item['empaque'] == 'SECUNDARIO' and not producto.empaque_secundario_id:
+            errores.append(f"Componente {idx}: el producto no tiene empaque secundario configurado.")
+            continue
+        if item['empaque'] == 'TERCIARIO' and not producto.empaque_terciario_id:
+            errores.append(f"Componente {idx}: el producto no tiene empaque terciario configurado.")
+            continue
+
+        clave = (item['producto_id'], item['empaque'])
+        if clave in vistos:
+            errores.append(
+                f"Componente {idx}: el producto ya fue agregado con el mismo empaque; ajusta la cantidad en una sola fila."
+            )
+            continue
+        vistos.add(clave)
+
+    return errores
+
+
+def _contexto_pack(pack=None):
+    stock_actual = stock_cache_simple()
+    componente_rows = []
+    if pack is not None:
+        componente_rows = list(
+            PackComponente.objects
+            .filter(pack=pack)
+            .select_related('producto')
+            .order_by('orden', 'id')
+        )
+
+    return {
+        'categorias': Categoria.objects.all(),
+        'subcategorias': Subcategoria.objects.all(),
+        'empaques_primarios': CategoriaEmpaque.objects.filter(nivel='PRIMARIO'),
+        'productos_componentes': Producto.objects.filter(tipo_producto='SIMPLE').order_by('nombre_producto'),
+        'stock_componentes_map': stock_actual,
+        'componentes_pack': componente_rows,
+        'resumen_pack': snapshot_pack(pack) if pack else [],
+        'costo_referencial_pack': costo_referencial_pack(pack) if pack else Decimal('0.00'),
+        'stock_pack_disponible': stock_disponible_pack(pack, cache=stock_actual) if pack else 0,
+    }
+
+
 
 # =========================
 # CATEGORÍAS Y SUBCATEGORÍAS
@@ -208,7 +345,12 @@ def lista_productos(request):
     """
     Lista todos los productos registrados en el sistema.
     """
-    return lista_generica(request, Producto, 'views/producto/lista_productos.html', 'productos')
+    productos = (
+        Producto.objects
+        .select_related('categoria_producto', 'subcategoria_producto')
+        .order_by('tipo_producto', 'nombre_producto')
+    )
+    return render(request, 'views/producto/lista_productos.html', {'productos': productos})
 
 
 def crear_producto(request):
@@ -235,7 +377,9 @@ def crear_producto(request):
 
         if form.is_valid() and not errores:
             with transaction.atomic():
-                producto = form.save()
+                producto = form.save(commit=False)
+                producto.tipo_producto = 'SIMPLE'
+                producto.save()
                 _sync_codigos_proveedor(producto, codigos)  
             messages.success(request, "Producto creado correctamente.")
             return redirect('lista_productos')
@@ -254,8 +398,51 @@ def crear_producto(request):
     })
 
 
+def crear_pack(request):
+    form = CrearPackForm(request.POST or None)
+    contexto = _contexto_pack()
+
+    if request.method == 'POST':
+        componentes, errores = _parse_componentes_pack(request.POST)
+
+        if form.is_valid():
+            pack = form.save(commit=False)
+            pack.tipo_producto = 'PACK'
+            pack.qty_terciario = 1
+            pack.qty_secundario = 1
+            pack.qty_primario = 1
+            pack.qty_unidad = 1
+            pack.medida = 'und'
+            pack.qty_minima = 0
+            pack.categoria_producto = None
+            pack.subcategoria_producto = None
+            pack.empaque_primario = None
+            errores.extend(_validar_componentes_pack(pack, componentes))
+
+            if not errores:
+                with transaction.atomic():
+                    pack.save()
+                    _sync_componentes_pack(pack, componentes)
+                messages.success(request, "Pack creado correctamente.")
+                return redirect('lista_productos')
+
+        for error in errores:
+            messages.error(request, error)
+        messages.error(request, "No fue posible crear el pack. Revisa los datos ingresados.")
+        contexto['componentes_pack_post'] = componentes
+
+    contexto.update({
+        'form': form,
+        'modo_pack': 'crear',
+        'pack': None,
+    })
+    return render(request, 'views/producto/crear_pack.html', contexto)
+
+
 def editar_producto(request, id):
     producto = get_object_or_404(Producto, pk=id)
+    if es_pack(producto):
+        return redirect('editar_pack', id=producto.id)
     form = CrearProductoForm(request.POST or None, instance=producto)
 
     categorias = Categoria.objects.all()
@@ -276,7 +463,9 @@ def editar_producto(request, id):
         if form.is_valid() and not errores:
             try:
                 with transaction.atomic():
-                    form.save()
+                    producto_editado = form.save(commit=False)
+                    producto_editado.tipo_producto = 'SIMPLE'
+                    producto_editado.save()
                     creados = _sync_codigos_proveedor(producto, nuevos)
                 messages.success(request, f"Producto actualizado. Códigos guardados: {creados}.")
                 return redirect('lista_productos')
@@ -296,6 +485,47 @@ def editar_producto(request, id):
         'proveedores': proveedores,
         'codigos_proveedor': codigos_proveedor,
     })
+
+
+def editar_pack(request, id):
+    pack = get_object_or_404(Producto, pk=id, tipo_producto='PACK')
+    form = CrearPackForm(request.POST or None, instance=pack)
+    contexto = _contexto_pack(pack)
+
+    if request.method == 'POST':
+        componentes, errores = _parse_componentes_pack(request.POST)
+        if form.is_valid():
+            pack = form.save(commit=False)
+            pack.tipo_producto = 'PACK'
+            pack.qty_terciario = 1
+            pack.qty_secundario = 1
+            pack.qty_primario = 1
+            pack.qty_unidad = 1
+            pack.medida = 'und'
+            pack.qty_minima = 0
+            pack.categoria_producto = None
+            pack.subcategoria_producto = None
+            pack.empaque_primario = None
+            errores.extend(_validar_componentes_pack(pack, componentes))
+
+            if not errores:
+                with transaction.atomic():
+                    pack.save()
+                    _sync_componentes_pack(pack, componentes)
+                messages.success(request, "Pack actualizado correctamente.")
+                return redirect('lista_productos')
+
+        for error in errores:
+            messages.error(request, error)
+        messages.error(request, "No fue posible actualizar el pack. Revisa los datos ingresados.")
+        contexto['componentes_pack_post'] = componentes
+
+    contexto.update({
+        'form': form,
+        'modo_pack': 'editar',
+        'pack': pack,
+    })
+    return render(request, 'views/producto/crear_pack.html', contexto)
 
 
 def eliminar_producto(request, id):
@@ -326,54 +556,44 @@ def calculadora_precios(request):
 
 def obtener_precio_maximo(request, producto_id):
     """
-    Devuelve precio base (máximo histórico por unidad), más resumen de precios.
-    Todo calculado con Decimal y redondeo HALF_UP.
+    Devuelve el costo referencial máximo por unidad de venta.
+    Para packs, el valor corresponde a la suma del costo de sus componentes.
     """
     try:
         producto = Producto.objects.get(id=producto_id)
     except Producto.DoesNotExist:
         return JsonResponse({'error': 'Producto no encontrado'}, status=404)
 
-    recepciones = Stock.objects.filter(
-        producto_id=producto_id,
-        tipo_movimiento='DISPONIBLE',
-        precio_unitario__isnull=False
-    )
+    if es_pack(producto):
+        precio_base = costo_referencial_pack(producto)
+        if precio_base <= 0:
+            return JsonResponse({'error': 'No hay costos registrados para los componentes de este pack.'}, status=400)
 
-    if not recepciones.exists():
-        return JsonResponse({'error': 'No hay precios registrados para este producto.'}, status=400)
+        precio_prom = precio_base
+        precio_max = precio_base
+        precio_min = precio_base
+        qty_secundario = 1
+        nombre_empaque_secundario = producto.empaque_primario.nombre if producto.empaque_primario else 'Pack'
+    else:
+        recepciones = Stock.objects.filter(
+            producto_id=producto_id,
+            tipo_movimiento='DISPONIBLE',
+            precio_unitario__isnull=False
+        )
+        if not recepciones.exists():
+            return JsonResponse({'error': 'No hay precios registrados para este producto.'}, status=400)
 
-    # ✅ Tomar la recepción con mayor precio_unitario
-    rec_max = recepciones.order_by('-precio_unitario').first()
-    precio_base = Decimal(rec_max.precio_unitario)
-
-    # Normalizar a unidad primaria según empaque
-    if rec_max.empaque == 'SECUNDARIO':
-        divisor = Decimal(producto.qty_secundario or 1)
-        if divisor <= 0:
-            divisor = UNO
-        precio_base = precio_base / divisor
-    elif rec_max.empaque == 'TERCIARIO':
-        factor = (producto.qty_secundario or 1) * (producto.qty_terciario or 1)
-        divisor = Decimal(factor if factor else 1)
-        if divisor <= 0:
-            divisor = UNO
-        precio_base = precio_base / divisor
-
-    # helper de 2 decimales
-    def q2(x: Decimal) -> Decimal:
-        return x.quantize(DOS_DEC, rounding=ROUND_HALF_UP)
-
-    # Resumen crudo por registro (no normalizado)
-    resumen = recepciones.aggregate(
-        maximo=Max('precio_unitario'),
-        promedio=Avg('precio_unitario'),
-        minimo=Min('precio_unitario')
-    )
-
-    precio_prom = Decimal(resumen['promedio'] if resumen['promedio'] is not None else precio_base)
-    precio_max = Decimal(resumen['maximo']  if resumen['maximo']  is not None else precio_base)
-    precio_min = Decimal(resumen['minimo']  if resumen['minimo']  is not None else precio_base)
+        precio_base = costo_maximo_unitario(producto)
+        resumen = recepciones.aggregate(
+            maximo=Max('precio_unitario'),
+            promedio=Avg('precio_unitario'),
+            minimo=Min('precio_unitario')
+        )
+        precio_prom = Decimal(resumen['promedio'] if resumen['promedio'] is not None else precio_base)
+        precio_max = Decimal(resumen['maximo'] if resumen['maximo'] is not None else precio_base)
+        precio_min = Decimal(resumen['minimo'] if resumen['minimo'] is not None else precio_base)
+        qty_secundario = producto.qty_secundario or 1
+        nombre_empaque_secundario = producto.empaque_secundario.nombre if producto.empaque_secundario else 'Manga'
 
     return JsonResponse({
         'precio_base': float(q2(precio_base)),
@@ -381,9 +601,9 @@ def obtener_precio_maximo(request, producto_id):
         'precio_maximo': float(q2(precio_max)),
         'precio_minimo': float(q2(precio_min)),
         'precio_sugerido': float(q2(precio_base * Decimal('1.40'))),
-        'qty_secundario': producto.qty_secundario or 1,
-        'nombre_empaque_secundario': producto.empaque_secundario.nombre if producto.empaque_secundario else 'Manga',
-        'nombre_empaque_primario': producto.empaque_primario.nombre if producto.empaque_primario else 'Unidad'
+        'qty_secundario': qty_secundario,
+        'nombre_empaque_secundario': nombre_empaque_secundario,
+        'nombre_empaque_primario': producto.empaque_primario.nombre if producto.empaque_primario else ('Pack' if es_pack(producto) else 'Unidad')
     })
 
 
@@ -398,9 +618,10 @@ def stock_productos(request):
     productos = Producto.objects.select_related(
         'empaque_primario', 'empaque_secundario'
     )
+    stock_base = stock_cache_simple()
 
     def obtener_stock_por_tipo(tipo):
-        return (
+        filas = (
             Stock.objects.filter(tipo_movimiento=tipo)
             .annotate(
                 qty_unidad=Case(
@@ -414,28 +635,38 @@ def stock_productos(request):
             .values('producto')
             .annotate(total=Sum('qty_unidad'))
         )
+        return {item['producto']: int(item['total'] or 0) for item in filas}
 
-    stock_dict = {i['producto']: i['total'] for i in obtener_stock_por_tipo('DISPONIBLE')}
-    reserva_dict = {i['producto']: i['total'] for i in obtener_stock_por_tipo('RESERVA')}
-    despachado_dict = {i['producto']: i['total'] for i in obtener_stock_por_tipo('DESPACHO')}
+    stock_dict = obtener_stock_por_tipo('DISPONIBLE')
+    reserva_dict = obtener_stock_por_tipo('RESERVA')
+    despachado_dict = obtener_stock_por_tipo('DESPACHO')
 
     productos_info = []
     for prod in productos:
-        idp = prod.id
-        stock = stock_dict.get(idp, 0)
-        reserva = reserva_dict.get(idp, 0)
-        despacho = despachado_dict.get(idp, 0)
-        disponible = stock - reserva - despacho
+        if es_pack(prod):
+            disponible = stock_disponible_pack(prod, cache=stock_base)
+            reserva = 0
+            secundario = 0
+            empaque_secundario = ''
+        else:
+            idp = prod.id
+            stock = stock_dict.get(idp, 0)
+            reserva = reserva_dict.get(idp, 0)
+            despacho = despachado_dict.get(idp, 0)
+            disponible = stock - reserva - despacho
+            secundario = disponible // prod.qty_secundario if prod.qty_secundario else 0
+            empaque_secundario = prod.empaque_secundario.nombre if prod.empaque_secundario else ''
 
         productos_info.append({
             'codigo_interno': prod.codigo_producto_interno,
             'nombre': prod.nombre_producto,
             'qty_minima': prod.qty_minima,
+            'tipo_producto': prod.tipo_producto,
             'stock_empaque_primario': disponible,
-            'stock_empaque_secundario': disponible // prod.qty_secundario if prod.qty_secundario else 0,
+            'stock_empaque_secundario': secundario,
             'reserva_unidades': reserva,
-            'empaque_primario_nombre': prod.empaque_primario.nombre if prod.empaque_primario else '',
-            'empaque_secundario_nombre': prod.empaque_secundario.nombre if prod.empaque_secundario else '',
+            'empaque_primario_nombre': prod.empaque_primario.nombre if prod.empaque_primario else ('Pack' if es_pack(prod) else ''),
+            'empaque_secundario_nombre': empaque_secundario,
         })
 
     return render(request, './views/producto/stock_productos.html', {'productos_info': productos_info})
@@ -477,6 +708,8 @@ def obtener_empaques_producto(request, producto_id):
     empaques = []
     if producto.empaque_primario:
         empaques.append({'nivel': 'PRIMARIO', 'nombre': producto.empaque_primario.nombre})
+    elif es_pack(producto):
+        empaques.append({'nivel': 'PRIMARIO', 'nombre': 'Pack'})
     if producto.empaque_secundario:
         empaques.append({'nivel': 'SECUNDARIO', 'nombre': producto.empaque_secundario.nombre})
     if producto.empaque_terciario:

@@ -2,16 +2,79 @@
 {% load humanize %}
 {% load custom_filters %}
 
+{% block CSS %}
+<style>
+  .dashboard-page {
+    width: 100%;
+  }
+
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .dashboard-card {
+    height: 100%;
+  }
+
+  .dashboard-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .dashboard-card-title {
+    margin-bottom: 0;
+  }
+
+  .dashboard-card-action {
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  @media (min-width: 768px) {
+    .dashboard-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1200px) {
+    main > .w-100 {
+      max-width: min(1680px, calc(100vw - 2rem)) !important;
+    }
+
+    .dashboard-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+</style>
+{% endblock CSS %}
+
 {% block content %}
-<div class="container mt-4">
+<div class="dashboard-page mt-4">
   <h2 class="mb-4">Tareas Pendientes</h2>
-  <div class="row g-4">
+  <div class="dashboard-grid">
 
     <!-- Recepciones Pendientes -->
-    <div class="col-md-4">
-      <div class="card shadow">
+    <div>
+      <div class="card shadow dashboard-card">
         <div class="card-body">
-          <h5 class="card-title text-primary">Recepciones Pendientes ({{ cantidad_recepciones }})</h5>
+          <div class="dashboard-card-header">
+            <h5 class="card-title text-primary dashboard-card-title">Recepciones Pendientes ({{ cantidad_recepciones }})</h5>
+            <a
+              href="{% url 'crear_recepcion' %}"
+              class="btn btn-sm btn-outline-primary rounded-circle d-inline-flex align-items-center justify-content-center dashboard-card-action"
+              title="Crear recepción"
+              aria-label="Crear recepción"
+            >
+              <i class="bi bi-plus-lg"></i>
+            </a>
+          </div>
           {% for r in recepciones %}
             <a href="{% url 'crear_recepcion_productos' r.id %}" class="text-decoration-none text-dark">
               <div class="border p-2 rounded mb-2 bg-light-subtle">
@@ -29,10 +92,20 @@
     </div>
 
     <!-- Pedidos Pendientes -->
-    <div class="col-md-4">
-      <div class="card shadow">
+    <div>
+      <div class="card shadow dashboard-card">
         <div class="card-body">
-          <h5 class="card-title text-success">Pedidos Pendientes ({{ cantidad_pedidos_pendiente }})</h5>
+          <div class="dashboard-card-header">
+            <h5 class="card-title text-success dashboard-card-title">Pedidos Pendientes ({{ cantidad_pedidos_pendiente }})</h5>
+            <a
+              href="{% url 'crear_pedido' %}"
+              class="btn btn-sm btn-outline-success rounded-circle d-inline-flex align-items-center justify-content-center dashboard-card-action"
+              title="Crear pedido"
+              aria-label="Crear pedido"
+            >
+              <i class="bi bi-plus-lg"></i>
+            </a>
+          </div>
           {% for p in pedidos %}
             <a href="{% url 'detalle_pedido' p.id %}" class="text-decoration-none text-dark">
               <div class="border p-2 rounded mb-2 bg-light-subtle">
@@ -50,8 +123,8 @@
     </div>
 
     <!-- Pedidos Entregados No Pagados -->
-    <div class="col-md-4">
-      <div class="card shadow">
+    <div>
+      <div class="card shadow dashboard-card">
         <div class="card-body">
           <h5 class="card-title text-warning">Pendientes de Pago ({{ cantidad_pedidos_no_pagados }})</h5>
           {% for p in pedidos_no_pagados %}
@@ -66,6 +139,33 @@
             <p>No hay pedidos pendientes de pago.</p>
           {% endfor %}
           <a href="{% url 'lista_pedidos' %}?estado=Entregado" class="btn btn-outline-warning btn-sm mt-2">Ver entregados</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Productos Bajo Costo -->
+    <div>
+      <div class="card shadow dashboard-card">
+        <div class="card-body">
+          <h5 class="card-title text-danger">Precios Cliente Bajo Costo ({{ cantidad_precios_cliente_bajo_costo }})</h5>
+          {% for row in precios_cliente_bajo_costo %}
+            <div class="border p-2 rounded mb-2 bg-light-subtle">
+              <a href="{% url 'asignar_precios' row.cliente_id %}?precio_id={{ row.precio_id }}" class="fw-semibold text-decoration-none">
+                {{ row.producto }}
+              </a><br>
+              <span class="small text-muted">{{ row.cliente }}</span><br>
+              <span class="small text-muted">{{ row.codigo_interno }} | {{ row.empaque_label }}</span><br>
+              Precio: ${{ row.precio_cliente|floatformat:0|formatear_miles }}<br>
+              Diferencia:
+              <span class="text-danger">${{ row.diferencia|floatformat:0|formatear_miles }}</span>
+            </div>
+          {% empty %}
+            <p>No hay productos con precio de venta menor al precio de compra.</p>
+          {% endfor %}
+          {% if precios_cliente_bajo_costo_restantes %}
+            <p class="small text-muted mb-2">Y {{ precios_cliente_bajo_costo_restantes }} registro{% if precios_cliente_bajo_costo_restantes != 1 %}s{% endif %} m&aacute;s.</p>
+          {% endif %}
+          <a href="{% url 'dashboard_precios_cliente' %}" class="btn btn-outline-danger btn-sm mt-2">Ver precios clientes</a>
         </div>
       </div>
     </div>

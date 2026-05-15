@@ -68,26 +68,33 @@
         </tr>
       </thead>
       <tbody>
-        {% for r in reservas %}
+        {% for linea in lineas %}
         <tr>
-          <td class="text-start">{{ r.producto__nombre_producto }}</td>
-          <td class="text-center">{{ r.qty_sum|formatear_miles }}</td>
-          <td class="text-center">
-            {% if r.empaque == 'PRIMARIO' %}{{ r.producto__empaque_primario__nombre }}
-            {% elif r.empaque == 'SECUNDARIO' %}{{ r.producto__empaque_secundario__nombre }}
-            {% elif r.empaque == 'TERCIARIO' %}{{ r.producto__empaque_terciario__nombre }}
-            {% else %}{{ r.empaque }}{% endif %}
+          <td class="text-start">
+            {{ linea.nombre }}
+            {% if linea.es_pack %}
+              <span class="badge bg-success ms-2">PACK</span>
+            {% endif %}
           </td>
-          <td class="text-center">${{ r.precio_unitario|formatear_miles }}</td>
-          <td class="text-center">${{ r.subtotal|formatear_miles }}</td>
-          <td class="text-center">${{ r.ganancia|formatear_miles }} | {{ r.ganancia_pct }}%</td>
+          <td class="text-center">{{ linea.cantidad|formatear_miles }}</td>
+          <td class="text-center">{{ linea.empaque_display }}</td>
+          <td class="text-center">${{ linea.precio_unitario|formatear_miles }}</td>
+          <td class="text-center">${{ linea.subtotal|formatear_miles }}</td>
+          <td class="text-center">${{ linea.ganancia|formatear_miles }} | {{ linea.ganancia_pct }}%</td>
           <td class="text-center">
             {% if pedido.estado_pedido == "Entregado" %}
               <button class="btn btn-sm btn-outline-secondary" title="No disponible en Entregado" disabled>
                 <i class="fas fa-ban"></i>
               </button>
+            {% elif linea.linea_id %}
+              <form method="post" action="{% url 'eliminar_linea_pedido' pedido.id linea.linea_id %}" style="display:inline-block;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger d-flex justify-content-center align-items-center" title="Eliminar línea">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </form>
             {% else %}
-              <form method="post" action="{% url 'eliminar_producto_pedido' pedido.id r.producto %}" style="display:inline-block;">
+              <form method="post" action="{% url 'eliminar_producto_pedido' pedido.id linea.legacy_producto_id %}" style="display:inline-block;">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-sm btn-outline-danger d-flex justify-content-center align-items-center" title="Eliminar producto">
                   <i class="fas fa-trash"></i>
@@ -95,6 +102,10 @@
               </form>
             {% endif %}
           </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7" class="text-center text-muted py-4">Este pedido aún no tiene productos cargados.</td>
         </tr>
         {% endfor %}
       </tbody>

@@ -28,7 +28,12 @@
             {% for prod in productos_info %}
             <tr {% if prod.stock_empaque_primario <= prod.qty_minima %}class="table-danger"{% endif %}>
               <td>{{ prod.codigo_interno }}</td>
-              <td>{{ prod.nombre }}</td>
+              <td>
+                {{ prod.nombre }}
+                {% if prod.tipo_producto == 'PACK' %}
+                  <span class="badge bg-success ms-2">PACK</span>
+                {% endif %}
+              </td>
               <td class="text-end">
                 {{ prod.stock_empaque_primario|intcomma }}
                 {% if prod.empaque_primario_nombre %}
