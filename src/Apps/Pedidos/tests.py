@@ -1668,7 +1668,8 @@ class ListaPreciosSincronizacionTests(TestCase):
         self.cliente_a.lista_precios_predeterminada = self.lista
         self.cliente_a.save(update_fields=["lista_precios_predeterminada"])
 
-        resp = self.client.get(reverse("asignar_precios", args=[self.cliente_a.id]))
+        with patch("Apps.Pedidos.views.cliente.timezone.localdate", return_value=datetime(2026, 5, 15).date()):
+            resp = self.client.get(reverse("asignar_precios", args=[self.cliente_a.id]))
 
         self.assertEqual(resp.status_code, 200)
         self.assertContains(
@@ -1680,6 +1681,70 @@ class ListaPreciosSincronizacionTests(TestCase):
             'name="vigencia_import" id="vigencia_import" class="form-control form-control-sm" value="2026-05-08"',
         )
         self.assertContains(resp, 'data-default-desde="2026-05-08"')
+        self.assertContains(resp, 'class="btn btn-outline-secondary js-set-hoy" data-target="vigencia" data-today="2026-05-15"')
+        self.assertContains(resp, 'class="btn btn-outline-secondary js-set-hoy" data-target="vigencia_import" data-today="2026-05-15"')
+
+    def test_asignar_precios_listaprecios_muestra_compra_diferencia_y_alerta_por_antiguedad(self):
+        self.item.vigencia = datetime(2025, 10, 1).date()
+        self.item.save()
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("1200.00"),
+        )
+
+        with patch("Apps.Pedidos.views.listaprecios.timezone.localdate", return_value=datetime(2026, 5, 15).date()):
+            resp = self.client.get(reverse("asignar_precios_listaprecios", args=[self.lista.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["precios_desactualizados_count"], 1)
+        self.assertContains(resp, "Compra")
+        self.assertContains(resp, "Dif.")
+        self.assertContains(resp, "Desde")
+        self.assertContains(resp, "$1.200")
+        self.assertContains(resp, "-$200")
+        self.assertContains(resp, "+6 meses sin actualizar")
+        self.assertContains(resp, "Hay 1 precio sin actualizar hace")
+
+    def test_asignar_precios_listaprecios_prefill_desde_y_boton_hoy(self):
+        self.item.vigencia = datetime(2026, 5, 8).date()
+        self.item.save()
+        otro_producto = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="LST003",
+            nombre_producto="Producto Lista 3",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        ListaPreciosPredItem.objects.create(
+            listaprecios=self.lista,
+            nombre_producto=otro_producto,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("1400.00"),
+            precio_iva=Decimal("266.00"),
+            precio_total=Decimal("1666.00"),
+            vigencia=datetime(2026, 5, 12).date(),
+        )
+
+        with patch("Apps.Pedidos.views.listaprecios.timezone.localdate", return_value=datetime(2026, 5, 15).date()):
+            resp = self.client.get(reverse("asignar_precios_listaprecios", args=[self.lista.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(
+            resp,
+            'name="vigencia" id="vigencia" class="form-control form-control-sm" required value="2026-05-12"',
+        )
+        self.assertContains(
+            resp,
+            'class="btn btn-outline-secondary js-set-hoy" data-target="vigencia" data-today="2026-05-15"',
+        )
 
     def test_actualizar_item_lista_sincroniza_clientes_asociados(self):
         for cliente in (self.cliente_a, self.cliente_b):

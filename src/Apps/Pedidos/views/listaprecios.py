@@ -8,18 +8,25 @@ from django.contrib import messages
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
+from dateutil.relativedelta import relativedelta
 
 from Apps.Pedidos.models import (
     Producto,
     ListaPreciosPredeterminada,     # <-- Asegúrate del nombre real del modelo
     ListaPreciosPredItem,           # <-- Asegúrate del nombre real del modelo de ítem
 )
-from Apps.Pedidos.services import sincronizar_lista_predeterminada_a_clientes_asociados
+from Apps.Pedidos.services import (
+    costo_maximo_unitario,
+    es_pack,
+    sincronizar_lista_predeterminada_a_clientes_asociados,
+)
 
 # --- Constantes numéricas ---
 DOS_DEC   = Decimal("0.01")
 IVA_RATE  = Decimal("0.19")
+MESES_ALERTA_ACTUALIZACION = 6
 
 
 # =============================================================================
@@ -43,6 +50,42 @@ def _calcular_iva_total(precio_neto: Decimal) -> tuple[Decimal, Decimal]:
     iva   = (precio_neto * IVA_RATE).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
     total = (precio_neto + iva).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
     return iva, total
+
+
+def _round2(value: Decimal) -> Decimal:
+    return _to_decimal(value).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
+
+
+def _date_input_value(value) -> str:
+    if not value:
+        return ""
+    if hasattr(value, "strftime"):
+        return value.strftime("%Y-%m-%d")
+    return str(value)
+
+
+def _fecha_requiere_actualizacion(fecha_desde):
+    if not fecha_desde:
+        return None
+    return fecha_desde + relativedelta(months=MESES_ALERTA_ACTUALIZACION)
+
+
+def _precio_esta_desactualizado(fecha_desde, today=None) -> bool:
+    fecha_alerta = _fecha_requiere_actualizacion(fecha_desde)
+    if not fecha_alerta:
+        return False
+    return fecha_alerta <= (today or timezone.localdate())
+
+
+def _costo_por_empaque(costo_unitario: Decimal, producto: Producto, empaque: str) -> Decimal:
+    qty_secundario = Decimal(1 if es_pack(producto) else (producto.qty_secundario or 1))
+    qty_terciario = Decimal(1 if es_pack(producto) else (producto.qty_terciario or 1))
+    nivel = (empaque or "").upper().strip()
+    if nivel == "SECUNDARIO":
+        return _round2(costo_unitario * qty_secundario)
+    if nivel == "TERCIARIO":
+        return _round2(costo_unitario * qty_secundario * qty_terciario)
+    return _round2(costo_unitario)
 
 
 # =============================================================================
@@ -121,6 +164,7 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
       - Evita duplicados por (lista, producto, empaque). Si existe, actualiza precio + vigencia.
     """
     lista = get_object_or_404(ListaPreciosPredeterminada, id=listaprecios_id)
+    today = timezone.localdate()
 
     if request.method == "POST":
         producto_id  = request.POST.get("producto")
@@ -180,19 +224,59 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
 
     # GET
     productos = Producto.objects.all().order_by("nombre_producto")
-    precios   = (
+    precios   = list(
         ListaPreciosPredItem.objects
-        .select_related("nombre_producto")
+        .select_related(
+            "nombre_producto",
+            "nombre_producto__empaque_primario",
+            "nombre_producto__empaque_secundario",
+            "nombre_producto__empaque_terciario",
+        )
         .filter(listaprecios=lista)
         .order_by("nombre_producto__nombre_producto", "empaque")
     )
     clientes_asociados = lista.clientes_asociados.order_by("nombre_cliente")
+    costos_unitarios_por_producto: dict[int, Decimal] = {}
+    precios_desactualizados_count = 0
+
+    for item in precios:
+        producto = item.nombre_producto
+        if producto.id not in costos_unitarios_por_producto:
+            costos_unitarios_por_producto[producto.id] = costo_maximo_unitario(producto)
+        precio_compra_unitario = costos_unitarios_por_producto[producto.id]
+
+        if precio_compra_unitario and precio_compra_unitario > 0:
+            item.precio_compra_referencial = _costo_por_empaque(
+                Decimal(precio_compra_unitario),
+                producto,
+                item.empaque,
+            )
+            item.diferencia_compra_venta = _round2(
+                Decimal(item.precio_venta or 0) - item.precio_compra_referencial
+            )
+        else:
+            item.precio_compra_referencial = None
+            item.diferencia_compra_venta = None
+
+        item.tiene_precio_compra_referencial = item.precio_compra_referencial is not None
+        item.tiene_diferencia_compra_venta = item.diferencia_compra_venta is not None
+        item.alerta_bajo_costo = (
+            item.diferencia_compra_venta is not None and item.diferencia_compra_venta < 0
+        )
+        item.precio_desactualizado = _precio_esta_desactualizado(item.vigencia, today=today)
+        if item.precio_desactualizado:
+            precios_desactualizados_count += 1
+
+    vigencia_default = max((item.vigencia for item in precios if item.vigencia), default=None) or today
 
     ctx = {
         "listaprecios": lista,
         "productos": productos,
         "precios": precios,
         "clientes_asociados": clientes_asociados,
+        "vigencia_form_value": _date_input_value(vigencia_default),
+        "today_input_value": _date_input_value(today),
+        "precios_desactualizados_count": precios_desactualizados_count,
     }
     return render(request, "./views/clientes/asignar_precios_listaprecios.html", ctx)
 

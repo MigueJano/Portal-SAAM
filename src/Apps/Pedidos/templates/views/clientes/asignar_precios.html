@@ -66,7 +66,10 @@
   <!-- Desde -->
   <div class="col-md-2">
     <label for="vigencia" class="form-label">Desde</label>
-    <input type="date" name="vigencia" id="vigencia" class="form-control form-control-sm" required value="{{ vigencia_form_value }}">
+    <div class="input-group input-group-sm">
+      <input type="date" name="vigencia" id="vigencia" class="form-control form-control-sm" required value="{{ vigencia_form_value }}">
+      <button type="button" class="btn btn-outline-secondary js-set-hoy" data-target="vigencia" data-today="{{ today_input_value }}">HOY</button>
+    </div>
   </div>
 
   <!-- Botones (guardar uno) -->
@@ -99,7 +102,10 @@
   </div>
   <div class="col-md-3">
     <label for="vigencia_import" class="form-label">Sobrescribir desde (opcional)</label>
-    <input type="date" name="vigencia_import" id="vigencia_import" class="form-control form-control-sm" value="{{ vigencia_import_form_value }}" data-fallback="{{ vigencia_import_fallback }}">
+    <div class="input-group input-group-sm">
+      <input type="date" name="vigencia_import" id="vigencia_import" class="form-control form-control-sm" value="{{ vigencia_import_form_value }}" data-fallback="{{ vigencia_import_fallback }}">
+      <button type="button" class="btn btn-outline-secondary js-set-hoy" data-target="vigencia_import" data-today="{{ today_input_value }}">HOY</button>
+    </div>
   </div>
   <div class="col-md-3 d-flex align-items-end justify-content-end">
     <button
@@ -291,6 +297,16 @@ document.addEventListener('DOMContentLoaded', () => {
       vigenciaImportInput.value = fechaObjetivo;
     }
   }
+
+  document.querySelectorAll('.js-set-hoy').forEach(button => {
+    button.addEventListener('click', () => {
+      const target = document.getElementById(button.dataset.target);
+      const today = button.dataset.today || '';
+      if (target && today) {
+        target.value = today;
+      }
+    });
+  });
 
   // DataTable
   $('#tabla-filtros').DataTable({

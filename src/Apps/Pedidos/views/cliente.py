@@ -326,6 +326,7 @@ def asignar_precios(request, cliente_id):
         'vigencia_import_form_value': vigencia_import_form_value or _date_input_value(vigencia_import_default),
         'vigencia_import_fallback': _date_input_value(vigencia_import_default),
         'precios_desactualizados_count': precios_desactualizados_count,
+        'today_input_value': _date_input_value(today),
     })
 
 

@@ -3,15 +3,15 @@
 {% load custom_filters %}
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %} {% endblock %}</title>
+    <title>{% block title %}{% endblock %}</title>
     <link rel="icon" type="image/png" href="{% static_version 'ico/bruja.ico' %}">
 
     <!-- CDN Font Awesome 5 -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <!-- Bootstrap CSS (local para evitar dependencia de red) -->
     <link rel="stylesheet" href="{% static_version 'vendor/bootstrap/css/bootstrap.min.css' %}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
@@ -24,21 +24,22 @@
     <link rel="stylesheet" href="{% static_version 'css/margin.css' %}">
     {% block CSS %}
     {% endblock CSS %}
-
 </head>
 <body>
   <nav class="navbar navbar-expand-lg saam-navbar" data-bs-theme="dark">
     <div class="container-fluid">
-      <a class="navbar-brand" href="{% url 'home' %}"><img src="{% static_version 'img/texto.png' %}" alt="Logo" height="40" class="d-inline-block align-text-top"></a>
+      <a class="navbar-brand" href="{% url 'home' %}">
+        <img src="{% static_version 'img/texto.png' %}" alt="Logo" height="40" class="d-inline-block align-text-top">
+      </a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarScroll" aria-controls="navbarScroll" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse saam-navbar-collapse" id="navbarScroll">
-        <!-- MENU -->
         <ul class="navbar-nav me-auto my-2 my-lg-0 saam-navbar-menu">
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Indicadores</a>
+              Indicadores
+            </a>
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'dashboard_financiero_simple' %}">Financieros</a></li>
               <!--<li><a class="dropdown-item" href="{% url 'dashboard_ventas' %}">Ventas</a></li> // INFO EN INVENTARIO-->
@@ -54,30 +55,33 @@
           </li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Proveedores</a>
+              Proveedores
+            </a>
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'lista_proveedores' %}">Proveedores</a></li>
               <li><a class="dropdown-item" href="{% url 'crear_proveedor' %}">Crear Proveedor</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="{% url 'lista_contacto' %}">Contactos</a></li>
-              <li><a class="dropdown-item " href="{% url 'crear_contacto' %}">Crear Contacto</a></li>
+              <li><a class="dropdown-item" href="{% url 'crear_contacto' %}">Crear Contacto</a></li>
             </ul>
           </li>
-                    <li class="nav-item dropdown">
+          <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Recepción</a>
+              Recepcion
+            </a>
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'lista_recepcion' %}">Pendientes</a></li>
-              <li><a class="dropdown-item" href="{% url 'crear_recepcion' %}">Crear Recepción</a></li>
+              <li><a class="dropdown-item" href="{% url 'crear_recepcion' %}">Crear Recepcion</a></li>
               <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="{% url 'lista_recepcion_historico' %}"> Historico</a></li>
+              <li><a class="dropdown-item" href="{% url 'lista_recepcion_historico' %}">Historico</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item disabled" href="#">Cargar Archivo XML</a></li>
             </ul>
           </li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Productos</a>
+              Productos
+            </a>
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'stock_productos' %}">Stock</a></li>
               <li><a class="dropdown-item" href="{% url 'calculadora_precios' %}">Calculadora</a></li>
@@ -87,13 +91,13 @@
               <li><a class="dropdown-item" href="{% url 'lista_productos' %}">Lista de Productos</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="{% url 'categorias_y_subcategorias' %}">Categorias</a></li>
-              <li><a class="dropdown-item" href="{% url 'categorias_empaque' %}">Empaques</a>
-
+              <li><a class="dropdown-item" href="{% url 'categorias_empaque' %}">Empaques</a></li>
             </ul>
           </li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Clientes</a>
+              Clientes
+            </a>
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'lista_clientes' %}">Clientes</a></li>
               <li><a class="dropdown-item" href="{% url 'crear_cliente' %}">Crear Cliente</a></li>
@@ -105,19 +109,21 @@
           </li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Pedidos</a>
+              Pedidos
+            </a>
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'lista_pedidos' %}">Pedidos</a></li>
               <li><a class="dropdown-item" href="{% url 'crear_pedido' %}">Crear Pedido</a></li>
               <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="{% url 'lista_ventas' %}">Ventas Históricas</a></li>
+              <li><a class="dropdown-item" href="{% url 'lista_ventas' %}">Ventas Historicas</a></li>
             </ul>
           </li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Cotización</a>
+              Cotizacion
+            </a>
             <ul class="dropdown-menu">
-              <li><a class="dropdown-item" href="{% url 'crear_cotizacion' %}">Crear Cotización</a></li>
+              <li><a class="dropdown-item" href="{% url 'crear_cotizacion' %}">Crear Cotizacion</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="{% url 'lista_cotizaciones' %}">Cotizaciones</a></li>
             </ul>
@@ -132,39 +138,20 @@
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="{% url 'clonar_base_datos' %}">Clonar</a></li>
               <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item disabled" href="">Configuración</a></li>
+              <li><a class="dropdown-item disabled" href="#">Configuracion</a></li>
               <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item " href="{% url 'admin:index' %}">Base de Datos</a></li>
+              <li><a class="dropdown-item" href="{% url 'admin:index' %}">Base de Datos</a></li>
             </ul>
           </li>
           {% endif %}
-          </li>
         </ul>
-          <!-- Botón flotante de Observaciones -->
-            <a href="{% url 'crear_observacion' %}?from={{ request.build_absolute_uri|urlencode }}"
-              class="btn btn-primary shadow"
-              title="Enviar observación"
-              style="
-                position: fixed;
-                right: 20px;
-                bottom: 24px;
-                border-radius: 9999px;
-                width: 56px;
-                height: 56px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 1050;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M2 2a2 2 0 0 0-2 2v7.793A1 1 0 0 0 1.707 13.5L4 11h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2z"/>
-              </svg>
-            </a>
-        <!-- Icono Cerrar Sesión -->
+
         <ul class="navbar-nav">
           <li class="nav-item">
             <form method="post" action="{% url 'logout' %}">
               {% csrf_token %}
-              <button class="btn nav-link text-danger" type="submit" title="Cerrar sesión">Cerrar Sesión
+              <button class="btn nav-link text-danger" type="submit" title="Cerrar sesion">
+                Cerrar Sesion
                 <i class="fas fa-sign-out-alt"></i>
               </button>
             </form>
@@ -173,8 +160,27 @@
       </div>
     </div>
   </nav>
+
+  <a href="{% url 'crear_observacion' %}?from={{ request.build_absolute_uri|urlencode }}"
+    class="btn btn-primary shadow"
+    title="Enviar observacion"
+    style="
+      position: fixed;
+      right: 20px;
+      bottom: 24px;
+      border-radius: 9999px;
+      width: 56px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1050;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2 2a2 2 0 0 0-2 2v7.793A1 1 0 0 0 1.707 13.5L4 11h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2z"/>
+    </svg>
+  </a>
+
   <div class="container-fluid custom-container p-0">
-    <!-- Bloque de mensajes fuera del block content -->
     {% if messages %}
       <div class="container mt-3">
         {% for message in messages %}
@@ -202,26 +208,24 @@
       </div>
     </main>
   </div>
-  <!--SCRIPTS-->
+
   <script src="{% static_version 'vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
-  <!-- jQuery -->
   <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-  <!-- JS DataTables -->
   <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", function () {
-      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
       tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl)
-      })
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+      });
     });
   </script>
 
   {% block script %}
-
   {% endblock script %}
-    <footer class="text-center py-2 mt-4 border-top small text-muted">
-      SAAM Spa © 2025 — Versión:{% version_actual %}
-    </footer>
-  </body>
-</html></html>
+
+  <footer class="text-center py-2 mt-4 border-top small text-muted">
+    SAAM Spa &copy; 2025 - Version:{% version_actual %}
+  </footer>
+</body>
+</html>

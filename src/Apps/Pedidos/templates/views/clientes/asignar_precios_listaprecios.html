@@ -24,6 +24,12 @@
   </form>
 </div>
 
+{% if precios_desactualizados_count %}
+  <div class="alert alert-warning py-2 mt-3">
+    Hay {{ precios_desactualizados_count }} precio{{ precios_desactualizados_count|pluralize }} sin actualizar hace m&aacute;s de 6 meses.
+  </div>
+{% endif %}
+
 <form method="post" class="row g-3">
   {% csrf_token %}
 
@@ -58,8 +64,11 @@
 
   <!-- Vigencia -->
   <div class="col-md-2">
-    <label for="vigencia" class="form-label">Vigencia</label>
-    <input type="date" name="vigencia" id="vigencia" class="form-control form-control-sm" required>
+    <label for="vigencia" class="form-label">Desde</label>
+    <div class="input-group input-group-sm">
+      <input type="date" name="vigencia" id="vigencia" class="form-control form-control-sm" required value="{{ vigencia_form_value }}">
+      <button type="button" class="btn btn-outline-secondary js-set-hoy" data-target="vigencia" data-today="{{ today_input_value }}">HOY</button>
+    </div>
   </div>
 
   <!-- Guardar y Cerrar -->
@@ -77,16 +86,18 @@
     <tr class="text-center">
       <th>Producto</th>
       <th>Empaque</th>
+      <th>Compra</th>
       <th>Precio Neto</th>
+      <th>Dif.</th>
       <th>IVA</th>
       <th>Total</th>
-      <th>Vigencia</th>
+      <th>Desde</th>
       <th>Eliminar</th>
     </tr>
   </thead>
   <tbody>
     {% for item in precios %}
-    <tr>
+    <tr{% if item.alerta_bajo_costo %} class="table-danger"{% elif item.precio_desactualizado %} class="table-warning"{% endif %}>
       <td>{{ item.nombre_producto.nombre_producto }}</td>
       <td class="text-center">
         {% if item.empaque == 'PRIMARIO' and item.nombre_producto.empaque_primario %}
@@ -99,10 +110,31 @@
           {{ item.empaque }}
         {% endif %}
       </td>
+      <td class="text-end">
+        {% if item.tiene_precio_compra_referencial %}
+          ${{ item.precio_compra_referencial|floatformat:0|formatear_miles }}
+        {% else %}
+          <span class="text-muted">-</span>
+        {% endif %}
+      </td>
       <td class="text-end">${{ item.precio_venta|floatformat:0|formatear_miles }}</td>
+      <td class="text-end">
+        {% if item.tiene_diferencia_compra_venta %}
+          <span class="{% if item.alerta_bajo_costo %}text-danger{% else %}text-success{% endif %} fw-semibold">
+            {% if item.diferencia_compra_venta > 0 %}+{% elif item.diferencia_compra_venta < 0 %}-{% endif %}${{ item.diferencia_compra_venta|floatformat:0|formatear_miles|cut:'-' }}
+          </span>
+        {% else %}
+          <span class="text-muted">-</span>
+        {% endif %}
+      </td>
       <td class="text-end">${{ item.precio_iva|floatformat:0|formatear_miles }}</td>
       <td class="text-end">${{ item.precio_total|floatformat:0|formatear_miles }}</td>
-      <td class="text-center" data-order="{{ item.vigencia|date:'Y-m-d' }}">{{ item.vigencia|date:'d-m-Y' }}</td>
+      <td class="text-center" data-order="{{ item.vigencia|date:'Y-m-d' }}">
+        <div>{{ item.vigencia|date:'d-m-Y' }}</div>
+        {% if item.precio_desactualizado %}
+          <span class="badge bg-warning text-dark mt-1">+6 meses sin actualizar</span>
+        {% endif %}
+      </td>
       <td class="text-center">
         <form method="post" action="{% url 'eliminar_precio_listaprecios' item.id %}" style="display:inline;">
           {% csrf_token %}
@@ -189,9 +221,19 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   }
 
+  document.querySelectorAll('.js-set-hoy').forEach(button => {
+    button.addEventListener('click', () => {
+      const target = document.getElementById(button.dataset.target);
+      const today = button.dataset.today || '';
+      if (target && today) {
+        target.value = today;
+      }
+    });
+  });
+
   // DataTable
   $('#tabla-filtros').DataTable({
-    order: [[5, 'asc']], // Vigencia
+    order: [[7, 'asc']], // Desde
     language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json" },
     autoWidth: false,
     scrollX: true
