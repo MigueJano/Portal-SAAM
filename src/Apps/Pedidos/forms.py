@@ -466,7 +466,7 @@ class ListaPreciosForm(forms.ModelForm):
             'nombre_producto': 'Producto',
             'empaque': 'Empaque',
             'precio_venta': 'Precio Neto',
-            'vigencia': 'Fecha de Vigencia',
+            'vigencia': 'Desde',
         }
         widgets = {
             'vigencia': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
@@ -503,7 +503,7 @@ class ListaPreciosForm(forms.ModelForm):
             self.add_error('precio_venta', "El precio de venta no puede ser negativo.")
 
         if not vigencia:
-            self.add_error('vigencia', "Debe ingresar una fecha de vigencia.")
+            self.add_error('vigencia', "Debe ingresar una fecha desde.")
 
         # Validación: evitar duplicados (si es nuevo)
         if producto and empaque:

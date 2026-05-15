@@ -10,12 +10,14 @@ Este módulo permite:
 Fecha de documentación: 2025-08-04
 Autor: Miguel Plasencia
 """
-from django.db.models import F
+from django.db.models import F, Max
 from django.db import transaction 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse
+from django.utils import timezone
+from dateutil.relativedelta import relativedelta
 
 from Apps.Pedidos.models import Cliente, Producto, ListaPrecios, Stock
 from Apps.Pedidos.forms import ClienteForm, ListaPreciosForm
@@ -30,6 +32,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 
 DOS_DEC = Decimal('0.01')
+MESES_ALERTA_ACTUALIZACION = 6
 
 
 # ------------------------------------------------------------------
@@ -124,6 +127,27 @@ def _calc_iva_total(neto: Decimal):
     return iva, total
 
 
+def _date_input_value(value) -> str:
+    if not value:
+        return ""
+    if hasattr(value, "strftime"):
+        return value.strftime("%Y-%m-%d")
+    return str(value)
+
+
+def _fecha_requiere_actualizacion(fecha_desde):
+    if not fecha_desde:
+        return None
+    return fecha_desde + relativedelta(months=MESES_ALERTA_ACTUALIZACION)
+
+
+def _precio_esta_desactualizado(fecha_desde, today=None) -> bool:
+    fecha_alerta = _fecha_requiere_actualizacion(fecha_desde)
+    if not fecha_alerta:
+        return False
+    return fecha_alerta <= (today or timezone.localdate())
+
+
 def asignar_precios(request, cliente_id):
     """
     Asignar precios personalizados a un cliente:
@@ -133,6 +157,7 @@ def asignar_precios(request, cliente_id):
     cliente = get_object_or_404(Cliente, pk=cliente_id)
     precio_id = request.GET.get('precio_id') or request.POST.get('precio_id') or ''
     precio_en_edicion = None
+    today = timezone.localdate()
     if str(precio_id).isdigit():
         precio_en_edicion = get_object_or_404(
             ListaPrecios.objects.select_related('nombre_producto', 'nombre_cliente'),
@@ -140,12 +165,79 @@ def asignar_precios(request, cliente_id):
             nombre_cliente=cliente,
         )
 
-    precios = ListaPrecios.objects.filter(nombre_cliente=cliente)
+    precios = list(
+        ListaPrecios.objects
+        .filter(nombre_cliente=cliente)
+        .select_related(
+            'nombre_producto',
+            'nombre_producto__empaque_primario',
+            'nombre_producto__empaque_secundario',
+            'nombre_producto__empaque_terciario',
+        )
+        .order_by('nombre_producto__nombre_producto', 'empaque')
+    )
     productos = Producto.objects.all().order_by('nombre_producto')
 
     # Listas predeterminadas activas para el selector
     from Apps.Pedidos.models import ListaPreciosPredeterminada  # evitar import circular si lo hubiera
-    listas_pred = ListaPreciosPredeterminada.objects.filter(activa=True).order_by('nombre_listaprecios')
+    listas_pred = list(
+        ListaPreciosPredeterminada.objects
+        .filter(activa=True)
+        .annotate(default_desde=Max('items__vigencia'))
+        .order_by('nombre_listaprecios')
+    )
+    listas_pred_map = {lp.id: lp for lp in listas_pred}
+    lista_predeterminada_actual = cliente.lista_precios_predeterminada
+    costos_unitarios_por_producto: dict[int, Decimal] = {}
+
+    precios_desactualizados_count = 0
+    for item in precios:
+        producto = item.nombre_producto
+        if producto.id not in costos_unitarios_por_producto:
+            costos_unitarios_por_producto[producto.id] = _costo_unitario_desde_stock(producto)
+        precio_compra_unitario = costos_unitarios_por_producto[producto.id]
+
+        if precio_compra_unitario and precio_compra_unitario > 0:
+            producto = item.nombre_producto
+            qty_secundario = Decimal(1 if es_pack(producto) else (producto.qty_secundario or 1))
+            qty_terciario = Decimal(1 if es_pack(producto) else (producto.qty_terciario or 1))
+            item.precio_compra_referencial = _round2(
+                _costo_por_empaque(
+                    Decimal(precio_compra_unitario),
+                    item.empaque,
+                    qty_secundario,
+                    qty_terciario,
+                )
+            )
+            item.diferencia_compra_venta = _round2(
+                Decimal(item.precio_venta or 0) - item.precio_compra_referencial
+            )
+        else:
+            item.precio_compra_referencial = None
+            item.diferencia_compra_venta = None
+
+        item.tiene_precio_compra_referencial = item.precio_compra_referencial is not None
+        item.tiene_diferencia_compra_venta = item.diferencia_compra_venta is not None
+        item.alerta_bajo_costo = (
+            item.diferencia_compra_venta is not None and item.diferencia_compra_venta < 0
+        )
+        item.fecha_requiere_actualizacion = _fecha_requiere_actualizacion(item.vigencia)
+        item.precio_desactualizado = _precio_esta_desactualizado(item.vigencia, today=today)
+        if item.precio_desactualizado:
+            precios_desactualizados_count += 1
+
+    ultima_fecha_cliente = max((item.vigencia for item in precios if item.vigencia), default=None) or today
+    default_desde_lista_actual = None
+    if lista_predeterminada_actual:
+        lista_actual = listas_pred_map.get(lista_predeterminada_actual.id)
+        if lista_actual:
+            default_desde_lista_actual = lista_actual.default_desde
+        if default_desde_lista_actual is None:
+            default_desde_lista_actual = (
+                lista_predeterminada_actual.items.aggregate(max_vigencia=Max('vigencia'))["max_vigencia"]
+            )
+    vigencia_default = precio_en_edicion.vigencia if precio_en_edicion else ultima_fecha_cliente
+    vigencia_import_default = default_desde_lista_actual or ultima_fecha_cliente
 
     if request.method == 'POST':
         accion = request.POST.get('accion')
@@ -202,14 +294,38 @@ def asignar_precios(request, cliente_id):
     else:
         form = ListaPreciosForm(cliente=cliente, instance=precio_en_edicion)
 
+    producto_form_value = request.POST.get('nombre_producto') if request.method == 'POST' else (
+        str(precio_en_edicion.nombre_producto_id) if precio_en_edicion else ''
+    )
+    empaque_form_value = request.POST.get('empaque') if request.method == 'POST' else (
+        precio_en_edicion.empaque if precio_en_edicion else ''
+    )
+    precio_venta_form_value = request.POST.get('precio_venta') if request.method == 'POST' else (
+        str(precio_en_edicion.precio_venta) if precio_en_edicion else ''
+    )
+    vigencia_form_value = request.POST.get('vigencia') if request.method == 'POST' else _date_input_value(vigencia_default)
+
+    lista_predeterminada_id_form_value = request.POST.get('lista_predeterminada_id') if request.method == 'POST' else (
+        str(lista_predeterminada_actual.id) if lista_predeterminada_actual else ''
+    )
+    vigencia_import_form_value = request.POST.get('vigencia_import') if request.method == 'POST' else _date_input_value(vigencia_import_default)
+
     return render(request, './views/clientes/asignar_precios.html', {
         'form': form,
         'cliente': cliente,
         'precios': precios,
         'productos': productos,
         'listas_predeterminadas': listas_pred,
-        'lista_predeterminada_actual': cliente.lista_precios_predeterminada,
+        'lista_predeterminada_actual': lista_predeterminada_actual,
         'precio_en_edicion': precio_en_edicion,
+        'producto_form_value': producto_form_value or '',
+        'empaque_form_value': empaque_form_value or '',
+        'precio_venta_form_value': precio_venta_form_value or '',
+        'vigencia_form_value': vigencia_form_value or _date_input_value(vigencia_default),
+        'lista_predeterminada_id_form_value': lista_predeterminada_id_form_value or '',
+        'vigencia_import_form_value': vigencia_import_form_value or _date_input_value(vigencia_import_default),
+        'vigencia_import_fallback': _date_input_value(vigencia_import_default),
+        'precios_desactualizados_count': precios_desactualizados_count,
     })
 
 

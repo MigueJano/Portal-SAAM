@@ -21,6 +21,12 @@
   </div>
 {% endif %}
 
+{% if precios_desactualizados_count %}
+  <div class="alert alert-warning py-2">
+    Hay {{ precios_desactualizados_count }} precio{{ precios_desactualizados_count|pluralize }} sin actualizar hace m&aacute;s de 6 meses.
+  </div>
+{% endif %}
+
 <form method="post" class="row g-3">
   {% csrf_token %}
   {% if precio_en_edicion %}
@@ -31,9 +37,9 @@
   <div class="col-md-5">
     <label for="producto" class="form-label">Producto</label>
     <select name="nombre_producto" id="producto" class="form-select form-select-sm" required>
-      <option value="" disabled selected>Seleccione un producto</option>
+      <option value="" disabled {% if not producto_form_value %}selected{% endif %}>Seleccione un producto</option>
       {% for prod in productos %}
-        <option value="{{ prod.id }}" {% if precio_en_edicion and precio_en_edicion.nombre_producto_id == prod.id %}selected{% endif %}>
+        <option value="{{ prod.id }}" {% if producto_form_value == prod.id|stringformat:'s' %}selected{% endif %}>
           {% if prod.tipo_producto == 'PACK' %}[PACK] {% endif %}{{ prod.nombre_producto }}
         </option>
       {% endfor %}
@@ -43,24 +49,24 @@
   <!-- Empaque -->
   <div class="col-md-2">
     <label for="empaque" class="form-label">Empaque</label>
-    <select name="empaque" id="empaque" class="form-select form-select-sm" required data-selected="{% if precio_en_edicion %}{{ precio_en_edicion.empaque }}{% endif %}">
-      <option value="" disabled selected>Seleccione</option>
+    <select name="empaque" id="empaque" class="form-select form-select-sm" required data-selected="{{ empaque_form_value }}">
+      <option value="" disabled {% if not empaque_form_value %}selected{% endif %}>Seleccione</option>
     </select>
   </div>
 
   <!-- Precio Venta -->
   <div class="col-md-3">
     <label for="precio_venta" class="form-label">Precio Neto</label>
-    <input type="number" name="precio_venta" id="precio_venta" class="form-control form-control-sm" required min="0" step="0.01" value="{% if precio_en_edicion %}{{ precio_en_edicion.precio_venta }}{% endif %}">
+    <input type="number" name="precio_venta" id="precio_venta" class="form-control form-control-sm" required min="0" step="0.01" value="{{ precio_venta_form_value }}">
     <div class="form-text text-danger small">
       Precio de compra (sin IVA): $<span id="precio_minimo">-</span>
     </div>
   </div>
 
-  <!-- Vigencia -->
+  <!-- Desde -->
   <div class="col-md-2">
-    <label for="vigencia" class="form-label">Vigencia</label>
-    <input type="date" name="vigencia" id="vigencia" class="form-control form-control-sm" required value="{% if precio_en_edicion %}{{ precio_en_edicion.vigencia|date:'Y-m-d' }}{% endif %}">
+    <label for="vigencia" class="form-label">Desde</label>
+    <input type="date" name="vigencia" id="vigencia" class="form-control form-control-sm" required value="{{ vigencia_form_value }}">
   </div>
 
   <!-- Botones (guardar uno) -->
@@ -80,16 +86,20 @@
   <div class="col-md-6">
     <label for="lista_predeterminada_id" class="form-label">Importar y asociar Lista Predeterminada</label>
     <select name="lista_predeterminada_id" id="lista_predeterminada_id" class="form-select form-select-sm">
-      <option value="" selected>Seleccione una lista</option>
+      <option value="" {% if not lista_predeterminada_id_form_value %}selected{% endif %}>Seleccione una lista</option>
       {% for lp in listas_predeterminadas %}
-        <option value="{{ lp.id }}" {% if lista_predeterminada_actual and lp.id == lista_predeterminada_actual.id %}selected{% endif %}>{{ lp.nombre_listaprecios }}</option>
+        <option
+          value="{{ lp.id }}"
+          data-default-desde="{% if lp.default_desde %}{{ lp.default_desde|date:'Y-m-d' }}{% endif %}"
+          {% if lista_predeterminada_id_form_value == lp.id|stringformat:'s' %}selected{% endif %}
+        >{{ lp.nombre_listaprecios }}</option>
       {% endfor %}
     </select>
     <div class="form-text">Se copiarán todos los ítems al cliente y quedará vinculado para futuras sincronizaciones masivas.</div>
   </div>
   <div class="col-md-3">
-    <label for="vigencia_import" class="form-label">Sobrescribir vigencia (opcional)</label>
-    <input type="date" name="vigencia_import" id="vigencia_import" class="form-control form-control-sm">
+    <label for="vigencia_import" class="form-label">Sobrescribir desde (opcional)</label>
+    <input type="date" name="vigencia_import" id="vigencia_import" class="form-control form-control-sm" value="{{ vigencia_import_form_value }}" data-fallback="{{ vigencia_import_fallback }}">
   </div>
   <div class="col-md-3 d-flex align-items-end justify-content-end">
     <button
@@ -113,16 +123,18 @@
     <tr class="text-center">
       <th>Producto</th>
       <th>Empaque</th>
+      <th>Compra</th>
       <th>Precio Neto</th>
+      <th>Dif.</th>
       <th>IVA</th>
       <th>Total</th>
-      <th>Vigencia</th>
+      <th>Desde</th>
       <th>Eliminar</th>
     </tr>
   </thead>
   <tbody>
     {% for item in precios %}
-    <tr>
+    <tr{% if item.alerta_bajo_costo %} class="table-danger"{% elif item.precio_desactualizado %} class="table-warning"{% endif %}>
       <td>
         {% if item.nombre_producto.tipo_producto == 'PACK' %}
           <span class="badge bg-success me-1">PACK</span>
@@ -142,10 +154,31 @@
           {{ item.empaque }}
         {% endif %}
       </td>
+      <td class="text-end">
+        {% if item.tiene_precio_compra_referencial %}
+          ${{ item.precio_compra_referencial|floatformat:0|formatear_miles }}
+        {% else %}
+          <span class="text-muted">-</span>
+        {% endif %}
+      </td>
       <td class="text-end">${{ item.precio_venta|floatformat:0|formatear_miles }}</td>
+      <td class="text-end">
+        {% if item.tiene_diferencia_compra_venta %}
+          <span class="{% if item.alerta_bajo_costo %}text-danger{% else %}text-success{% endif %} fw-semibold">
+            {% if item.diferencia_compra_venta > 0 %}+{% elif item.diferencia_compra_venta < 0 %}-{% endif %}${{ item.diferencia_compra_venta|floatformat:0|formatear_miles|cut:'-' }}
+          </span>
+        {% else %}
+          <span class="text-muted">-</span>
+        {% endif %}
+      </td>
       <td class="text-end">${{ item.precio_iva|floatformat:0|formatear_miles }}</td>
       <td class="text-end">${{ item.precio_total|floatformat:0|formatear_miles }}</td>
-      <td class="text-center" data-order="{{ item.vigencia|date:'Y-m-d' }}">{{ item.vigencia|date:'d-m-Y' }}</td>
+      <td class="text-center" data-order="{{ item.vigencia|date:'Y-m-d' }}">
+        <div>{{ item.vigencia|date:'d-m-Y' }}</div>
+        {% if item.precio_desactualizado %}
+          <span class="badge bg-warning text-dark mt-1">+6 meses sin actualizar</span>
+        {% endif %}
+      </td>
       <td class="text-center">
         <form method="post" action="{% url 'eliminar_precio' item.id %}" style="display:inline;">
           {% csrf_token %}
@@ -166,6 +199,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectProducto = document.getElementById('producto');
   const selectEmpaque  = document.getElementById('empaque');
   const precioSpan     = document.getElementById('precio_minimo');
+  const selectListaPredeterminada = document.getElementById('lista_predeterminada_id');
+  const vigenciaImportInput = document.getElementById('vigencia_import');
   let empaqueSeleccionadoInicial = selectEmpaque.dataset.selected || '';
 
   let precioPorUnidad = 0;
@@ -245,13 +280,32 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   }
 
+  function sincronizarDesdeImportacion(force = false) {
+    if (!selectListaPredeterminada || !vigenciaImportInput) return;
+    const selectedOption = selectListaPredeterminada.options[selectListaPredeterminada.selectedIndex];
+    const fechaPorLista = selectedOption?.dataset?.defaultDesde || '';
+    const fechaFallback = vigenciaImportInput.dataset.fallback || '';
+    const fechaObjetivo = fechaPorLista || fechaFallback;
+    if (!fechaObjetivo) return;
+    if (force || !vigenciaImportInput.value) {
+      vigenciaImportInput.value = fechaObjetivo;
+    }
+  }
+
   // DataTable
   $('#tabla-filtros').DataTable({
-    order: [[5, 'asc']], // Vigencia
+    order: [[7, 'asc']], // Desde
     language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json" },
     autoWidth: false,
     scrollX: true
   });
+
+  if (selectListaPredeterminada) {
+    selectListaPredeterminada.addEventListener('change', () => {
+      sincronizarDesdeImportacion(true);
+    });
+    sincronizarDesdeImportacion(false);
+  }
 
   if (selectProducto.value) {
     cargarEmpaques(selectProducto.value).then(() => cargarPrecioBase(selectProducto.value));

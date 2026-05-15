@@ -87,7 +87,7 @@
                       </select>
                     </td>
                     <td>
-                      <select name="componentes[{{ forloop.counter0 }}][empaque]" class="form-select componente-empaque" required>
+                      <select name="componentes[{{ forloop.counter0 }}][empaque]" class="form-select componente-empaque" data-selected-empaque="{{ item.empaque }}" required>
                         <option value="PRIMARIO" {% if item.empaque == 'PRIMARIO' %}selected{% endif %}>Primario</option>
                         <option value="SECUNDARIO" {% if item.empaque == 'SECUNDARIO' %}selected{% endif %}>Secundario</option>
                         <option value="TERCIARIO" {% if item.empaque == 'TERCIARIO' %}selected{% endif %}>Terciario</option>
@@ -111,7 +111,7 @@
                       </select>
                     </td>
                     <td>
-                      <select name="componentes[{{ forloop.counter0 }}][empaque]" class="form-select componente-empaque" required>
+                      <select name="componentes[{{ forloop.counter0 }}][empaque]" class="form-select componente-empaque" data-selected-empaque="{{ item.empaque }}" required>
                         <option value="PRIMARIO" {% if item.empaque == 'PRIMARIO' %}selected{% endif %}>Primario</option>
                         <option value="SECUNDARIO" {% if item.empaque == 'SECUNDARIO' %}selected{% endif %}>Secundario</option>
                         <option value="TERCIARIO" {% if item.empaque == 'TERCIARIO' %}selected{% endif %}>Terciario</option>
@@ -148,9 +148,7 @@
       </td>
       <td>
         <select class="form-select componente-empaque" required>
-          <option value="PRIMARIO">Primario</option>
-          <option value="SECUNDARIO">Secundario</option>
-          <option value="TERCIARIO">Terciario</option>
+          <option value="">Seleccione producto</option>
         </select>
       </td>
       <td><input type="number" min="1" class="form-control componente-cantidad" value="1" required></td>
@@ -184,6 +182,55 @@ document.addEventListener("DOMContentLoaded", () => {
       row.querySelector(".componente-cantidad").name = `componentes[${index}][cantidad]`;
     });
     rowIndex = body.querySelectorAll(".componente-row").length;
+  }
+
+  function resetEmpaques(row, mensaje = "Seleccione producto") {
+    const empaqueSelect = row.querySelector(".componente-empaque");
+    empaqueSelect.innerHTML = "";
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = mensaje;
+    empaqueSelect.appendChild(option);
+    empaqueSelect.value = "";
+  }
+
+  async function cargarEmpaquesFila(row, selectedEmpaque = null) {
+    const productoSelect = row.querySelector(".componente-producto");
+    const empaqueSelect = row.querySelector(".componente-empaque");
+    const productoId = productoSelect.value;
+    const selected = selectedEmpaque || empaqueSelect.dataset.selectedEmpaque || empaqueSelect.value || "";
+
+    if (!productoId) {
+      resetEmpaques(row);
+      return;
+    }
+
+    try {
+      const resp = await fetch(`/ajax/empaques-producto/${productoId}/`);
+      const data = await resp.json();
+      if (!data.success || !Array.isArray(data.empaques) || !data.empaques.length) {
+        resetEmpaques(row, "Sin empaques");
+        return;
+      }
+
+      empaqueSelect.innerHTML = "";
+      data.empaques.forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item.nivel;
+        option.textContent = item.nombre;
+        if (item.nivel === selected) {
+          option.selected = true;
+        }
+        empaqueSelect.appendChild(option);
+      });
+
+      if (!empaqueSelect.value && empaqueSelect.options.length) {
+        empaqueSelect.selectedIndex = 0;
+      }
+      delete empaqueSelect.dataset.selectedEmpaque;
+    } catch (error) {
+      resetEmpaques(row, "Error al cargar");
+    }
   }
 
   async function actualizarFila(row) {
@@ -258,6 +305,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const row = wrapper.firstElementChild;
     body.appendChild(row);
     renumerarFilas();
+    resetEmpaques(row);
     recalcularResumen();
   }
 
@@ -271,8 +319,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  body.addEventListener("change", (event) => {
-    if (event.target.matches(".componente-producto, .componente-empaque, .componente-cantidad")) {
+  body.addEventListener("change", async (event) => {
+    if (event.target.matches(".componente-producto")) {
+      await cargarEmpaquesFila(event.target.closest(".componente-row"));
+      await recalcularResumen();
+      return;
+    }
+    if (event.target.matches(".componente-empaque, .componente-cantidad")) {
       recalcularResumen();
     }
   });
@@ -288,7 +341,9 @@ document.addEventListener("DOMContentLoaded", () => {
     crearFila();
   } else {
     renumerarFilas();
-    recalcularResumen();
+    Promise.all(
+      Array.from(body.querySelectorAll(".componente-row")).map((row) => cargarEmpaquesFila(row))
+    ).then(() => recalcularResumen());
   }
 });
 </script>

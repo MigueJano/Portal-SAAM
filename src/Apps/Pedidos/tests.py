@@ -1601,6 +1601,86 @@ class ListaPreciosSincronizacionTests(TestCase):
         self.assertEqual(precio.precio_total, Decimal("1487.50"))
         self.assertIsNone(precio.lista_predeterminada_origen)
 
+    def test_asignar_precios_muestra_compra_diferencia_y_alerta_por_antiguedad(self):
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("800.00"),
+        )
+        ListaPrecios.objects.create(
+            nombre_cliente=self.cliente_a,
+            nombre_producto=self.producto,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("700.00"),
+            precio_iva=Decimal("133.00"),
+            precio_total=Decimal("833.00"),
+            vigencia=datetime(2025, 10, 1).date(),
+        )
+
+        with patch("Apps.Pedidos.views.cliente.timezone.localdate", return_value=datetime(2026, 5, 15).date()):
+            resp = self.client.get(reverse("asignar_precios", args=[self.cliente_a.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["precios_desactualizados_count"], 1)
+        self.assertContains(resp, "Compra")
+        self.assertContains(resp, "Dif.")
+        self.assertContains(resp, "Desde")
+        self.assertContains(resp, "$800")
+        self.assertContains(resp, "-$100")
+        self.assertContains(resp, "+6 meses sin actualizar")
+        self.assertContains(resp, "Hay 1 precio sin actualizar hace")
+
+    def test_asignar_precios_prefill_desde_con_ultima_fecha_cliente_y_lista(self):
+        ListaPrecios.objects.create(
+            nombre_cliente=self.cliente_a,
+            nombre_producto=self.producto,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("1000.00"),
+            precio_iva=Decimal("190.00"),
+            precio_total=Decimal("1190.00"),
+            vigencia=datetime(2026, 4, 10).date(),
+        )
+        otro_producto = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="LST002",
+            nombre_producto="Producto Lista 2",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        ListaPrecios.objects.create(
+            nombre_cliente=self.cliente_a,
+            nombre_producto=otro_producto,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("1400.00"),
+            precio_iva=Decimal("266.00"),
+            precio_total=Decimal("1666.00"),
+            vigencia=datetime(2026, 5, 12).date(),
+        )
+        self.item.vigencia = datetime(2026, 5, 8).date()
+        self.item.save()
+        self.cliente_a.lista_precios_predeterminada = self.lista
+        self.cliente_a.save(update_fields=["lista_precios_predeterminada"])
+
+        resp = self.client.get(reverse("asignar_precios", args=[self.cliente_a.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(
+            resp,
+            'name="vigencia" id="vigencia" class="form-control form-control-sm" required value="2026-05-12"',
+        )
+        self.assertContains(
+            resp,
+            'name="vigencia_import" id="vigencia_import" class="form-control form-control-sm" value="2026-05-08"',
+        )
+        self.assertContains(resp, 'data-default-desde="2026-05-08"')
+
     def test_actualizar_item_lista_sincroniza_clientes_asociados(self):
         for cliente in (self.cliente_a, self.cliente_b):
             self.client.post(
@@ -1888,3 +1968,23 @@ class PackFlowTests(TestCase):
                 "LCWX01": (2, Decimal("815.13"), Decimal("1107.45"), Decimal("292.32")),
             },
         )
+
+    def test_crear_pack_permite_un_solo_producto_con_cantidad_mayor_a_uno(self):
+        resp = self.client.post(
+            reverse("crear_pack"),
+            data={
+                "codigo_producto_interno": "PKUNI01",
+                "nombre_producto": "Pack Doble Cloro",
+                "componentes[0][producto]": str(self.producto_cloro.id),
+                "componentes[0][empaque]": "PRIMARIO",
+                "componentes[0][cantidad]": "2",
+            },
+        )
+
+        self.assertRedirects(resp, reverse("lista_productos"))
+
+        pack = Producto.objects.get(codigo_producto_interno="PKUNI01")
+        self.assertEqual(pack.tipo_producto, "PACK")
+        componente = PackComponente.objects.get(pack=pack)
+        self.assertEqual(componente.producto_id, self.producto_cloro.id)
+        self.assertEqual(componente.cantidad, 2)

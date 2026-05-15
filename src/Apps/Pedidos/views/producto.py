@@ -196,8 +196,8 @@ def _sync_componentes_pack(pack, componentes):
 
 def _validar_componentes_pack(pack, componentes):
     errores = []
-    if len(componentes) < 2:
-        errores.append("Debes agregar al menos 2 componentes al pack.")
+    if len(componentes) < 1:
+        errores.append("Debes agregar al menos 1 componente al pack.")
         return errores
 
     vistos = set()
