@@ -25,7 +25,7 @@ DOS_DEC = Decimal('0.01')
 
 
 def _productos_cotizacion_qs(cliente):
-    return (
+    precios = list(
         ListaPrecios.objects.filter(nombre_cliente=cliente)
         .select_related(
             'nombre_producto',
@@ -33,8 +33,10 @@ def _productos_cotizacion_qs(cliente):
             'nombre_producto__empaque_secundario',
             'nombre_producto__empaque_terciario',
         )
+        .prefetch_related('nombre_producto__componentes_pack__producto')
         .order_by(Lower('nombre_producto__nombre_producto'), 'empaque', 'id')
     )
+    return [precio for precio in precios if precio.nombre_producto.venta_habilitada]
 
 
 def seleccionar_cliente_cotizacion(request):
@@ -86,10 +88,20 @@ def vista_previa_cotizacion(request):
             })
 
         cliente = get_object_or_404(Cliente, id=cliente_id)
-        precios = _productos_cotizacion_qs(cliente).filter(
-            nombre_cliente=cliente,
-            id__in=productos_ids
-        )
+        productos_ids_set = set(productos_ids)
+        precios = [
+            precio
+            for precio in _productos_cotizacion_qs(cliente)
+            if str(precio.id) in productos_ids_set
+        ]
+        if len(precios) != len(productos_ids_set):
+            return render(request, 'views/cotizacion/error.html', {
+                'mensaje': 'Uno o mÃ¡s productos seleccionados ya no estÃ¡n habilitados para cotizar.'
+            })
+        if not precios:
+            return render(request, 'views/cotizacion/error.html', {
+                'mensaje': 'Los productos seleccionados ya no estÃ¡n habilitados para cotizar.'
+            })
 
         # Armado de ítems con nombres de empaques según nivel
         items = []

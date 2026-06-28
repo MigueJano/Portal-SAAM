@@ -100,23 +100,25 @@ def calcular_kpis_inventario():
     Returns:
         dict
     """
-    ahora = timezone.now()
+    ahora = timezone.now().date()
     hace_30_dias = ahora - timedelta(days=30)
 
-    total_entradas = Stock.objects.filter(tipo_movimiento='RECEPCION').aggregate(total=Sum('qty'))['total'] or 0
+    total_entradas = Stock.objects.filter(tipo_movimiento='DISPONIBLE').aggregate(total=Sum('qty'))['total'] or 0
+    total_reservas = Stock.objects.filter(tipo_movimiento='RESERVA').aggregate(total=Sum('qty'))['total'] or 0
     total_salidas = Stock.objects.filter(tipo_movimiento='DESPACHO').aggregate(total=Sum('qty'))['total'] or 0
-    stock_total = total_entradas - total_salidas
+    stock_total = total_entradas - total_reservas - total_salidas
 
     productos_criticos = 0
     for producto in Producto.objects.all():
-        entradas = Stock.objects.filter(producto=producto, tipo_movimiento='RECEPCION').aggregate(q=Sum('qty'))['q'] or 0
+        entradas = Stock.objects.filter(producto=producto, tipo_movimiento='DISPONIBLE').aggregate(q=Sum('qty'))['q'] or 0
+        reservas = Stock.objects.filter(producto=producto, tipo_movimiento='RESERVA').aggregate(q=Sum('qty'))['q'] or 0
         salidas = Stock.objects.filter(producto=producto, tipo_movimiento='DESPACHO').aggregate(q=Sum('qty'))['q'] or 0
-        stock_actual = entradas - salidas
+        stock_actual = entradas - reservas - salidas
 
         if producto.qty_minima and stock_actual < producto.qty_minima:
             productos_criticos += 1
 
-    productos_reservados = Stock.objects.filter(tipo_movimiento='RESERVA').aggregate(total=Sum('qty'))['total'] or 0
+    productos_reservados = total_reservas
 
     salidas_30 = Stock.objects.filter(tipo_movimiento='DESPACHO', fecha_movimiento__gte=hace_30_dias)
     total_salidas_30 = salidas_30.aggregate(total=Sum('qty'))['total'] or 0

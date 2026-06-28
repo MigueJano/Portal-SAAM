@@ -12,7 +12,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import JsonResponse, Http404
 from django.db import transaction, IntegrityError
-from django.db.models import Sum, Case, When, Value, IntegerField, F, Avg, Max, Min
+from django.db.models import Sum, Case, When, Value, IntegerField, F, Avg, Max, Min, Count
 from decimal import Decimal, ROUND_HALF_UP
 
 from Apps.Pedidos.models import (
@@ -20,7 +20,7 @@ from Apps.Pedidos.models import (
     ListaPrecios, Stock, Proveedor, CodigoProveedor, PackComponente
 )
 from Apps.Pedidos.forms import (
-    CrearProductoForm, CrearPackForm, CategoriaEmpaqueForm, SubCategoriaForm
+    CambiarEstadoProductoForm, CrearProductoForm, CrearPackForm, CategoriaEmpaqueForm, SubCategoriaForm
 )
 from Apps.Pedidos.services import (
     costo_referencial_pack,
@@ -37,6 +37,33 @@ from Apps.Pedidos.utils import lista_generica, eliminar_generica
 # --- Constantes Decimal ---
 DOS_DEC = Decimal('0.01')
 UNO     = Decimal('1')
+
+
+def _productos_para_precio():
+    productos = (
+        Producto.objects
+        .filter(estado_operativo__in=Producto.estados_precio_habilitados())
+        .prefetch_related('componentes_pack__producto')
+        .order_by('nombre_producto')
+    )
+    return [producto for producto in productos if producto.precio_habilitado]
+
+
+def _impactos_estado_producto(producto: Producto) -> list[str]:
+    impactos = []
+    if producto.stock_set.exists():
+        impactos.append("El producto tiene movimientos de stock y debe seguir visible en inventario e historicos.")
+    if producto.lineas_pedido.filter(pedido__estado_pedido__in=["Pendiente", "Entregado"]).exists():
+        impactos.append("El producto participa en pedidos abiertos o aun no cerrados completamente.")
+    if producto.listaprecios_set.exists():
+        impactos.append("El producto ya tiene precios asignados a clientes; esos precios historicos se conservaran.")
+    if producto.precios_predeterminados.exists():
+        impactos.append("El producto existe en listas predeterminadas; la desactivacion no debe borrar esos registros.")
+    if producto.usado_en_packs.exists():
+        impactos.append("El producto es componente de uno o mas packs; esos packs dejaran de ser vendibles si el componente queda bloqueado.")
+    if producto.componentes_pack.exists():
+        impactos.append("El producto es un pack; su estado afectara nuevas ventas, precios y cotizaciones del pack.")
+    return impactos
 
 
 # =========================
@@ -250,7 +277,10 @@ def _contexto_pack(pack=None):
         'categorias': Categoria.objects.all(),
         'subcategorias': Subcategoria.objects.all(),
         'empaques_primarios': CategoriaEmpaque.objects.filter(nivel='PRIMARIO'),
-        'productos_componentes': Producto.objects.filter(tipo_producto='SIMPLE').order_by('nombre_producto'),
+        'productos_componentes': Producto.objects.filter(
+            tipo_producto='SIMPLE',
+            estado_operativo__in=Producto.estados_venta_habilitados(),
+        ).order_by('nombre_producto'),
         'stock_componentes_map': stock_actual,
         'componentes_pack': componente_rows,
         'resumen_pack': snapshot_pack(pack) if pack else [],
@@ -345,12 +375,43 @@ def lista_productos(request):
     """
     Lista todos los productos registrados en el sistema.
     """
-    productos = (
+    filtro_estado = (request.GET.get('estado') or 'activos').strip().lower()
+    productos_qs = (
         Producto.objects
         .select_related('categoria_producto', 'subcategoria_producto')
+        .prefetch_related('componentes_pack__producto')
         .order_by('tipo_producto', 'nombre_producto')
     )
-    return render(request, 'views/producto/lista_productos.html', {'productos': productos})
+    if filtro_estado == 'suspendidos':
+        productos_qs = productos_qs.filter(estado_operativo__in=Producto.estados_suspendidos())
+    elif filtro_estado == 'descontinuados':
+        productos_qs = productos_qs.filter(estado_operativo=Producto.ESTADO_DESCONTINUADO)
+    elif filtro_estado == 'todos':
+        pass
+    else:
+        filtro_estado = 'activos'
+        productos_qs = productos_qs.filter(estado_operativo=Producto.ESTADO_ACTIVO)
+
+    productos = list(productos_qs)
+    for producto in productos:
+        producto.puede_eliminarse_catalogo = producto.puede_eliminarse_fisicamente()
+
+    conteos_raw = {
+        row['estado_operativo']: row['total']
+        for row in Producto.objects.values('estado_operativo').annotate(total=Count('id'))
+    }
+    conteos = {
+        'activos': conteos_raw.get(Producto.ESTADO_ACTIVO, 0),
+        'suspendidos': sum(conteos_raw.get(estado, 0) for estado in Producto.estados_suspendidos()),
+        'descontinuados': conteos_raw.get(Producto.ESTADO_DESCONTINUADO, 0),
+        'todos': sum(conteos_raw.values()),
+    }
+
+    return render(request, 'views/producto/lista_productos.html', {
+        'productos': productos,
+        'filtro_estado': filtro_estado,
+        'conteos_estado': conteos,
+    })
 
 
 def crear_producto(request):
@@ -532,7 +593,39 @@ def eliminar_producto(request, id):
     """
     Elimina un producto.
     """
+    producto = get_object_or_404(Producto, pk=id)
+    if not producto.puede_eliminarse_fisicamente():
+        messages.error(
+            request,
+            "No se puede eliminar el producto porque tiene historial o relaciones operativas. Usa cambio de estado.",
+        )
+        return redirect('cambiar_estado_producto', id=producto.id)
     return eliminar_generica(request, Producto, id, 'lista_productos')
+
+
+def cambiar_estado_producto(request, id):
+    producto = get_object_or_404(
+        Producto.objects.select_related('usuario_estado').prefetch_related('componentes_pack__producto'),
+        pk=id,
+    )
+    form = CambiarEstadoProductoForm(request.POST or None, producto=producto)
+
+    if request.method == 'POST' and form.is_valid():
+        usuario = request.user if getattr(request.user, 'is_authenticated', False) else None
+        estado_anterior = producto.get_estado_operativo_display()
+        producto = form.save(usuario=usuario)
+        messages.success(
+            request,
+            f"Estado actualizado: {estado_anterior} -> {producto.get_estado_operativo_display()}."
+        )
+        return redirect('lista_productos')
+
+    return render(request, 'views/producto/estado_producto.html', {
+        'producto': producto,
+        'form': form,
+        'impactos_estado': _impactos_estado_producto(producto),
+        'razones_bloqueo_eliminacion': producto.razones_bloqueo_eliminacion(),
+    })
 
 
 # ======================
@@ -612,64 +705,11 @@ def obtener_precio_maximo(request, producto_id):
 # =======
 def stock_productos(request):
     """
-    Muestra el stock disponible, reservado y despachado de todos los productos.
-    Calcula cantidades en unidades equivalentes, independientemente del tipo de empaque.
+    Punto de entrada principal al reporte de inventario.
     """
-    productos = Producto.objects.select_related(
-        'empaque_primario', 'empaque_secundario'
-    )
-    stock_base = stock_cache_simple()
+    from Apps.indicadores.views.inventario import render_informe_inventario
 
-    def obtener_stock_por_tipo(tipo):
-        filas = (
-            Stock.objects.filter(tipo_movimiento=tipo)
-            .annotate(
-                qty_unidad=Case(
-                    When(empaque__iexact='TERCIARIO', then=F('qty') * F('producto__qty_terciario') * F('producto__qty_secundario')),
-                    When(empaque__iexact='SECUNDARIO', then=F('qty') * F('producto__qty_secundario')),
-                    When(empaque__iexact='PRIMARIO', then=F('qty')),
-                    default=Value(0),
-                    output_field=IntegerField()
-                )
-            )
-            .values('producto')
-            .annotate(total=Sum('qty_unidad'))
-        )
-        return {item['producto']: int(item['total'] or 0) for item in filas}
-
-    stock_dict = obtener_stock_por_tipo('DISPONIBLE')
-    reserva_dict = obtener_stock_por_tipo('RESERVA')
-    despachado_dict = obtener_stock_por_tipo('DESPACHO')
-
-    productos_info = []
-    for prod in productos:
-        if es_pack(prod):
-            disponible = stock_disponible_pack(prod, cache=stock_base)
-            reserva = 0
-            secundario = 0
-            empaque_secundario = ''
-        else:
-            idp = prod.id
-            stock = stock_dict.get(idp, 0)
-            reserva = reserva_dict.get(idp, 0)
-            despacho = despachado_dict.get(idp, 0)
-            disponible = stock - reserva - despacho
-            secundario = disponible // prod.qty_secundario if prod.qty_secundario else 0
-            empaque_secundario = prod.empaque_secundario.nombre if prod.empaque_secundario else ''
-
-        productos_info.append({
-            'codigo_interno': prod.codigo_producto_interno,
-            'nombre': prod.nombre_producto,
-            'qty_minima': prod.qty_minima,
-            'tipo_producto': prod.tipo_producto,
-            'stock_empaque_primario': disponible,
-            'stock_empaque_secundario': secundario,
-            'reserva_unidades': reserva,
-            'empaque_primario_nombre': prod.empaque_primario.nombre if prod.empaque_primario else ('Pack' if es_pack(prod) else ''),
-            'empaque_secundario_nombre': empaque_secundario,
-        })
-
-    return render(request, './views/producto/stock_productos.html', {'productos_info': productos_info})
+    return render_informe_inventario(request)
 
 
 # =========

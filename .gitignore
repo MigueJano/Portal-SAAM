@@ -17,6 +17,7 @@ media/
 db.sqlite3
 *.sqlite3
 database/*.sqlite3
+*.db
 
 # Postgres / DB dumps / backups
 *.sql
@@ -40,6 +41,7 @@ htmlcov/
 # IDEs
 .vscode/
 .idea/
+.git/
 
 # OS
 .DS_Store
@@ -52,3 +54,9 @@ docs/
 registro_docs.json
 documentacion.py
 update_readme_architecture.py
+
+#IA
+.agents/
+.codex/
+.codex-runtime/
+

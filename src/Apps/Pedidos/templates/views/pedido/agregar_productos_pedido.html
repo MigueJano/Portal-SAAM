@@ -67,6 +67,10 @@
     </div>
   </div>
 
+  <div class="alert alert-secondary py-2">
+    Solo se muestran productos habilitados para nuevas ventas. Los productos suspendidos o descontinuados mantienen su historial, pero no aparecen para nuevas reservas.
+  </div>
+
   <form method="post" id="form-productos">
     {% csrf_token %}
     {{ formset.management_form }}

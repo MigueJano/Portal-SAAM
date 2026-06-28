@@ -48,9 +48,13 @@ def sincronizar_lista_predeterminada_a_cliente(
 
     created = 0
     updated = 0
+    skipped_disabled = 0
     for item in items:
         clave = _source_key(item)
         row = rows_existentes.get(clave)
+        if not item.nombre_producto.precio_habilitado:
+            skipped_disabled += 1
+            continue
         defaults = {
             "precio_venta": _q2(item.precio_venta),
             "precio_iva": _q2(item.precio_iva),
@@ -92,6 +96,7 @@ def sincronizar_lista_predeterminada_a_cliente(
         "created": created,
         "updated": updated,
         "deleted": deleted,
+        "skipped_disabled": skipped_disabled,
     }
 
 
@@ -105,6 +110,7 @@ def sincronizar_lista_predeterminada_a_clientes_asociados(
     created = 0
     updated = 0
     deleted = 0
+    skipped_disabled = 0
 
     for cliente in clientes:
         stats = sincronizar_lista_predeterminada_a_cliente(
@@ -117,10 +123,12 @@ def sincronizar_lista_predeterminada_a_clientes_asociados(
         created += stats["created"]
         updated += stats["updated"]
         deleted += stats["deleted"]
+        skipped_disabled += stats.get("skipped_disabled", 0)
 
     return {
         "clientes": len(clientes),
         "created": created,
         "updated": updated,
         "deleted": deleted,
+        "skipped_disabled": skipped_disabled,
     }

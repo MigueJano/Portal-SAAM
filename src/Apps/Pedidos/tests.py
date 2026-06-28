@@ -8,12 +8,12 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.conf import settings
-from django.contrib.auth.models import AnonymousUser, User
+from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import connection
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
-from django.utils.functional import SimpleLazyObject
 from django.utils import timezone
 
 from Apps.Pedidos.models import (
@@ -25,21 +25,22 @@ from Apps.Pedidos.models import (
     ListaPrecios,
     ListaPreciosPredItem,
     ListaPreciosPredeterminada,
-    MovimientoStockHistorico,
     PackComponente,
     Pedido,
     PedidoLinea,
     Producto,
     Proveedor,
     Recepcion,
+    RecepcionLinea,
     Stock,
     UtilidadProducto,
     Subcategoria,
     Venta,
 )
-from Apps.Pedidos.services import registrar_movimiento_stock
 from Apps.Pedidos.templatetags.custom_filters import formatear_miles
-from Apps.Pedidos.utils_pdf import formatear_miles_punto
+from Apps.Pedidos.utils_pdf import _items_pedido_para_pdf, formatear_miles_punto
+from Apps.Pedidos.services import sincronizar_lista_predeterminada_a_cliente
+from Apps.Pedidos.views.pedido import _detalle_lineas_pedido
 from Apps.Pedidos.views.producto import _parse_codigos_proveedor
 from Apps.indicadores.services.contabilidad import Periodo, filas_stock_contable
 
@@ -334,19 +335,17 @@ class RecepcionLineasSyncTests(TestCase):
         )
 
         self.assertRedirects(resp, f"{settings.LOGIN_URL}?next={url}")
-        self.assertFalse(Stock.objects.filter(recepcion=self.recepcion, tipo_movimiento="RECEPCION").exists())
+        self.assertFalse(RecepcionLinea.objects.filter(recepcion=self.recepcion).exists())
 
     def test_eliminar_producto_recalcula_neto_desde_lineas_restantes(self):
-        Stock.objects.create(
-            tipo_movimiento="RECEPCION",
+        RecepcionLinea.objects.create(
             producto=self.producto,
             qty=1,
             empaque="PRIMARIO",
             precio_unitario=Decimal("100.00"),
             recepcion=self.recepcion,
         )
-        otra_linea = Stock.objects.create(
-            tipo_movimiento="RECEPCION",
+        otra_linea = RecepcionLinea.objects.create(
             producto=self.producto,
             qty=2,
             empaque="PRIMARIO",
@@ -365,8 +364,7 @@ class RecepcionLineasSyncTests(TestCase):
         self.assertEqual(self.recepcion.total_recepcion, Decimal("119.00"))
 
     def test_finalizar_recepcion_corrige_neto_antes_de_cambiar_estado(self):
-        Stock.objects.create(
-            tipo_movimiento="RECEPCION",
+        RecepcionLinea.objects.create(
             producto=self.producto,
             qty=1,
             empaque="PRIMARIO",
@@ -457,7 +455,7 @@ class RecepcionFinalizadaGuardTests(TestCase):
         )
 
     def test_post_agregar_producto_no_modifica_recepcion_finalizada(self):
-        total_lineas = Stock.objects.filter(recepcion=self.recepcion).count()
+        total_lineas = RecepcionLinea.objects.filter(recepcion=self.recepcion).count()
 
         resp = self.client.post(
             reverse("crear_recepcion_productos", args=[self.recepcion.id]),
@@ -473,16 +471,24 @@ class RecepcionFinalizadaGuardTests(TestCase):
             resp,
             reverse("recepcion_productos_historico", args=[self.recepcion.id]),
         )
-        self.assertEqual(Stock.objects.filter(recepcion=self.recepcion).count(), total_lineas)
+        self.assertEqual(RecepcionLinea.objects.filter(recepcion=self.recepcion).count(), total_lineas)
 
     def test_post_eliminar_producto_no_modifica_recepcion_finalizada(self):
-        resp = self.client.post(reverse("eliminar_recepcion_producto", args=[self.stock.id]))
+        self.linea = RecepcionLinea.objects.create(
+            recepcion=self.recepcion,
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("100.00"),
+        )
+
+        resp = self.client.post(reverse("eliminar_recepcion_producto", args=[self.linea.id]))
 
         self.assertRedirects(
             resp,
             reverse("recepcion_productos_historico", args=[self.recepcion.id]),
         )
-        self.assertTrue(Stock.objects.filter(id=self.stock.id).exists())
+        self.assertTrue(RecepcionLinea.objects.filter(id=self.linea.id).exists())
 
     def test_eliminar_recepcion_finalizada_queda_bloqueada(self):
         resp = self.client.get(reverse("eliminar_recepcion", args=[self.recepcion.id]))
@@ -562,6 +568,87 @@ class DashboardHomeTests(TestCase):
         self.assertContains(resp, "Pendientes de Pago (4)")
         self.assertContains(resp, "2000")
         self.assertContains(resp, "2003")
+
+    def test_home_muestra_total_adeudado_en_titulos_de_pedidos(self):
+        categoria = Categoria.objects.create(categoria="Abarrotes")
+        subcategoria = Subcategoria.objects.create(categoria=categoria, subcategoria="General")
+        producto = Producto.objects.create(
+            categoria_producto=categoria,
+            subcategoria_producto=subcategoria,
+            codigo_producto_interno="DASH-001",
+            nombre_producto="Producto Dashboard",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+
+        pedido_pendiente_1 = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=datetime(2026, 2, 1).date(),
+            estado_pedido="Pendiente",
+            comentario_pedido="Pendiente 1",
+        )
+        pedido_pendiente_2 = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=datetime(2026, 2, 2).date(),
+            estado_pedido="Pendiente",
+            comentario_pedido="Pendiente 2",
+        )
+        pedido_entregado_1 = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=datetime(2026, 3, 1).date(),
+            estado_pedido="Entregado",
+            comentario_pedido="Entregado 1",
+        )
+        pedido_entregado_2 = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=datetime(2026, 3, 2).date(),
+            estado_pedido="Entregado",
+            comentario_pedido="Entregado 2",
+        )
+
+        PedidoLinea.objects.create(
+            pedido=pedido_pendiente_1,
+            producto=producto,
+            descripcion="Pendiente 1",
+            empaque="PRIMARIO",
+            cantidad=1,
+            precio_unitario=Decimal("1000.00"),
+        )
+        PedidoLinea.objects.create(
+            pedido=pedido_pendiente_2,
+            producto=producto,
+            descripcion="Pendiente 2",
+            empaque="PRIMARIO",
+            cantidad=2,
+            precio_unitario=Decimal("1000.00"),
+        )
+        PedidoLinea.objects.create(
+            pedido=pedido_entregado_1,
+            producto=producto,
+            descripcion="Entregado 1",
+            empaque="PRIMARIO",
+            cantidad=1,
+            precio_unitario=Decimal("1500.00"),
+        )
+        PedidoLinea.objects.create(
+            pedido=pedido_entregado_2,
+            producto=producto,
+            descripcion="Entregado 2",
+            empaque="PRIMARIO",
+            cantidad=1,
+            precio_unitario=Decimal("2500.00"),
+        )
+
+        resp = self.client.get(reverse("home"))
+
+        self.assertEqual(resp.context["monto_pedidos_pendientes"], Decimal("3570.00"))
+        self.assertEqual(resp.context["monto_pedidos_no_pagados"], Decimal("4760.00"))
+        self.assertContains(resp, "Total adeudado: $3.570")
+        self.assertContains(resp, "Total adeudado: $4.760")
 
     def test_home_muestra_alerta_por_precios_cliente_bajo_costo(self):
         categoria = Categoria.objects.create(categoria="Bebidas")
@@ -1010,8 +1097,7 @@ class InventarioPeriodoTests(TestCase):
         self._actualizar_fecha_movimiento(self.despacho_marzo, datetime(2026, 3, 2, 12, 0, 0))
 
     def _actualizar_fecha_movimiento(self, stock, fecha):
-        fecha_aware = timezone.make_aware(fecha)
-        Stock.objects.filter(pk=stock.pk).update(fecha_movimiento=fecha_aware)
+        Stock.objects.filter(pk=stock.pk).update(fecha_movimiento=fecha.date())
 
     def _fila_producto(self, year, month):
         filas = filas_stock_contable(Periodo(year=year, month=month))
@@ -1019,25 +1105,25 @@ class InventarioPeriodoTests(TestCase):
 
     def test_filas_stock_contable_respetan_periodo_y_stock_total(self):
         fila_enero = self._fila_producto(2026, 1)
-        self.assertEqual(fila_enero["cantidad_disponible_uprim"], 14)
+        self.assertEqual(fila_enero["cantidad_disponible_uprim"], 6)
         self.assertEqual(fila_enero["cantidad_reservada_uprim"], 4)
         self.assertEqual(fila_enero["cantidad_despachada_uprim"], 0)
         self.assertEqual(fila_enero["costo_unitario_compra"], Decimal("100.00"))
-        self.assertEqual(fila_enero["total_producto"], Decimal("1400.00"))
+        self.assertEqual(fila_enero["total_producto"], Decimal("600.00"))
 
         fila_febrero = self._fila_producto(2026, 2)
-        self.assertEqual(fila_febrero["cantidad_disponible_uprim"], 34)
+        self.assertEqual(fila_febrero["cantidad_disponible_uprim"], 26)
         self.assertEqual(fila_febrero["cantidad_reservada_uprim"], 4)
         self.assertEqual(fila_febrero["cantidad_despachada_uprim"], 0)
         self.assertEqual(fila_febrero["costo_unitario_compra"], Decimal("150.00"))
-        self.assertEqual(fila_febrero["total_producto"], Decimal("5100.00"))
+        self.assertEqual(fila_febrero["total_producto"], Decimal("3900.00"))
 
         fila_marzo = self._fila_producto(2026, 3)
-        self.assertEqual(fila_marzo["cantidad_disponible_uprim"], 32)
+        self.assertEqual(fila_marzo["cantidad_disponible_uprim"], 24)
         self.assertEqual(fila_marzo["cantidad_reservada_uprim"], 4)
         self.assertEqual(fila_marzo["cantidad_despachada_uprim"], 2)
         self.assertEqual(fila_marzo["costo_unitario_compra"], Decimal("150.00"))
-        self.assertEqual(fila_marzo["total_producto"], Decimal("4800.00"))
+        self.assertEqual(fila_marzo["total_producto"], Decimal("3600.00"))
 
     def test_exportar_inventario_propyme_csv_usa_periodo_consultado(self):
         resp = self.client.get(
@@ -1049,12 +1135,12 @@ class InventarioPeriodoTests(TestCase):
         filas = list(csv.DictReader(StringIO(contenido), delimiter=";"))
         fila = next(item for item in filas if item["codigo_interno"] == self.producto.codigo_producto_interno)
 
-        self.assertEqual(fila["cantidad_disponible_uprim"], "14")
+        self.assertEqual(fila["cantidad_disponible_uprim"], "6")
         self.assertEqual(fila["cantidad_despachada_uprim"], "0")
         self.assertEqual(fila["costo_unitario_compra"], "100.00")
-        self.assertEqual(fila["total_producto"], "1400.00")
+        self.assertEqual(fila["total_producto"], "600.00")
 
-    def test_dashboard_inventario_permita_filtrar_solo_productos_con_stock(self):
+    def test_stock_productos_permita_filtrar_solo_productos_con_stock(self):
         producto_sin_stock = Producto.objects.create(
             categoria_producto=self.categoria,
             subcategoria_producto=self.subcategoria,
@@ -1072,7 +1158,7 @@ class InventarioPeriodoTests(TestCase):
         )
 
         resp = self.client.get(
-            reverse("dashboard_inventario"),
+            reverse("stock_productos"),
             data={"year": 2026, "month": 3, "stock_view": "con_stock"},
         )
         self.assertEqual(resp.status_code, 200)
@@ -1080,9 +1166,63 @@ class InventarioPeriodoTests(TestCase):
         self.assertContains(resp, self.producto.nombre_producto)
         self.assertNotContains(resp, producto_sin_stock.nombre_producto)
 
-    def test_dashboard_inventario_muestre_link_a_flujo(self):
+    def test_stock_productos_permita_buscar_por_codigo_y_nombre(self):
+        producto_codigo = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="BUSC001",
+            nombre_producto="Producto Codigo",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=0,
+            empaque_primario=self.emp_p,
+            empaque_secundario=self.emp_s,
+            empaque_terciario=self.emp_t,
+        )
+        producto_nombre = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="OTRO002",
+            nombre_producto="Nombre Especial",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=0,
+            empaque_primario=self.emp_p,
+            empaque_secundario=self.emp_s,
+            empaque_terciario=self.emp_t,
+        )
+
+        resp_codigo = self.client.get(
+            reverse("stock_productos"),
+            data={"year": 2026, "month": 3, "stock_view": "todos", "q": "BUSC001"},
+        )
+        self.assertEqual(resp_codigo.status_code, 200)
+        self.assertEqual(resp_codigo.context["search_term"], "BUSC001")
+        self.assertEqual(len(resp_codigo.context["stock_rows"]), 1)
+        self.assertContains(resp_codigo, producto_codigo.nombre_producto)
+        self.assertNotContains(resp_codigo, producto_nombre.nombre_producto)
+        self.assertNotContains(resp_codigo, self.producto.nombre_producto)
+
+        resp_nombre = self.client.get(
+            reverse("stock_productos"),
+            data={"year": 2026, "month": 3, "stock_view": "todos", "q": "Especial"},
+        )
+        self.assertEqual(resp_nombre.status_code, 200)
+        self.assertEqual(resp_nombre.context["search_term"], "Especial")
+        self.assertEqual(len(resp_nombre.context["stock_rows"]), 1)
+        self.assertContains(resp_nombre, producto_nombre.nombre_producto)
+        self.assertNotContains(resp_nombre, producto_codigo.nombre_producto)
+        self.assertNotContains(resp_nombre, self.producto.nombre_producto)
+
+    def test_stock_productos_muestre_link_a_flujo(self):
         resp = self.client.get(
-            reverse("dashboard_inventario"),
+            reverse("stock_productos"),
             data={"year": 2026, "month": 3, "stock_view": "todos"},
         )
         self.assertEqual(resp.status_code, 200)
@@ -1091,14 +1231,52 @@ class InventarioPeriodoTests(TestCase):
             f'{reverse("flujo_inventario_producto", args=[self.producto.id])}?year=2026&month=3&stock_view=todos',
         )
 
-    def test_dashboard_inventario_renderice_tablas_ordenables(self):
+    def test_stock_productos_conserve_busqueda_en_links_de_flujo_y_regreso(self):
+        resp = self.client.get(
+            reverse("stock_productos"),
+            data={"year": 2026, "month": 3, "stock_view": "todos", "q": "INVPER001"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(
+            resp,
+            f'{reverse("flujo_inventario_producto", args=[self.producto.id])}?year=2026&month=3&stock_view=todos&q=INVPER001',
+        )
+
+        resp_flujo = self.client.get(
+            reverse("flujo_inventario_producto", args=[self.producto.id]),
+            data={"year": 2026, "month": 3, "stock_view": "todos", "q": "INVPER001"},
+        )
+        self.assertEqual(resp_flujo.status_code, 200)
+        self.assertContains(
+            resp_flujo,
+            f'{reverse("stock_productos")}?year=2026&month=3&stock_view=todos&q=INVPER001',
+        )
+
+    def test_stock_productos_renderice_tablas_ordenables(self):
+        resp = self.client.get(
+            reverse("stock_productos"),
+            data={"year": 2026, "month": 3, "stock_view": "todos"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "js-sortable-report-table", count=2)
+        self.assertContains(resp, '$(".js-sortable-report-table").each(function () {')
+        self.assertContains(resp, "Informe de Inventario")
+        self.assertContains(resp, "Reservas")
+        self.assertNotContains(resp, "Despachos")
+        self.assertNotContains(resp, "Revision Detallada de Movimientos")
+        self.assertNotContains(resp, "Movimientos del Periodo")
+        self.assertNotContains(resp, "Productos Criticos")
+
+    def test_dashboard_inventario_redirige_a_stock_productos(self):
         resp = self.client.get(
             reverse("dashboard_inventario"),
             data={"year": 2026, "month": 3, "stock_view": "todos"},
         )
-        self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "js-sortable-report-table", count=5)
-        self.assertContains(resp, '$(".js-sortable-report-table").each(function () {')
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(
+            resp.url,
+            f'{reverse("stock_productos")}?year=2026&month=3&stock_view=todos',
+        )
 
     def test_flujo_inventario_producto_muestre_historial_ordenado(self):
         resp = self.client.get(
@@ -1107,47 +1285,32 @@ class InventarioPeriodoTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Flujo de Inventario")
+        self.assertContains(
+            resp,
+            f'{reverse("stock_productos")}?year=2026&month=3&stock_view=todos',
+        )
         self.assertContains(resp, "Sin responsable registrado")
-        self.assertContains(resp, "Subtotal Final")
+        self.assertContains(resp, "Stock Disponible")
+        self.assertNotContains(resp, "Reserva pendiente")
 
         movimientos = resp.context["movimientos_rows"]
-        self.assertEqual(len(movimientos), 4)
+        self.assertEqual(len(movimientos), 3)
         self.assertEqual(movimientos[0]["transaccion"], "Entrada / Factura #1001")
-        self.assertEqual(movimientos[1]["transaccion"], "Reserva pendiente")
-        self.assertEqual(movimientos[2]["transaccion"], "Entrada / Factura #1002")
-        self.assertEqual(movimientos[3]["transaccion"], "Salida - Despacho")
+        self.assertEqual(movimientos[1]["transaccion"], "Entrada / Factura #1002")
+        self.assertEqual(movimientos[2]["transaccion"], "Salida - Despacho")
         self.assertEqual(movimientos[0]["subtotal"], 10)
-        self.assertEqual(movimientos[1]["subtotal"], 10)
-        self.assertEqual(movimientos[2]["subtotal"], 30)
-        self.assertEqual(movimientos[3]["subtotal"], 28)
+        self.assertEqual(movimientos[1]["subtotal"], 30)
+        self.assertEqual(movimientos[2]["subtotal"], 28)
         self.assertFalse(movimientos[0]["es_salida"])
-        self.assertTrue(movimientos[3]["es_salida"])
+        self.assertTrue(movimientos[2]["es_salida"])
         self.assertEqual(resp.context["subtotal_entradas"], 30)
         self.assertEqual(resp.context["subtotal_salidas"], 2)
         self.assertEqual(resp.context["reservas_pendientes"], 4)
-        self.assertEqual(resp.context["subtotal_final"], 28)
+        self.assertEqual(resp.context["subtotal_final"], 24)
 
-    def test_flujo_inventario_producto_muestre_responsable_desde_historial(self):
-        fecha_ingreso = timezone.make_aware(datetime(2026, 1, 10, 12, 0, 0))
-        fecha_reserva = timezone.make_aware(datetime(2026, 1, 20, 12, 0, 0))
-        MovimientoStockHistorico.objects.create(
-            stock=self.ingreso_enero,
-            tipo_movimiento="RECEPCION",
-            qty=self.ingreso_enero.qty,
-            empaque=self.ingreso_enero.empaque,
-            precio_unitario=self.ingreso_enero.precio_unitario,
-            fecha_movimiento=fecha_ingreso,
-            responsable=self.user,
-        )
-        MovimientoStockHistorico.objects.create(
-            stock=self.reserva_enero,
-            tipo_movimiento="RESERVA",
-            qty=self.reserva_enero.qty,
-            empaque=self.reserva_enero.empaque,
-            precio_unitario=self.reserva_enero.precio_unitario,
-            fecha_movimiento=fecha_reserva,
-            responsable=self.user,
-        )
+    def test_flujo_inventario_producto_muestre_responsable_desde_stock(self):
+        Stock.objects.filter(pk=self.ingreso_enero.pk).update(responsable=self.user)
+        Stock.objects.filter(pk=self.reserva_enero.pk).update(responsable=self.user)
 
         resp = self.client.get(
             reverse("flujo_inventario_producto", args=[self.producto.id]),
@@ -1157,9 +1320,53 @@ class InventarioPeriodoTests(TestCase):
         movimientos = resp.context["movimientos_rows"]
 
         self.assertEqual(movimientos[0]["responsable"], self.user.username)
-        self.assertEqual(movimientos[1]["responsable"], self.user.username)
-        self.assertEqual(movimientos[1]["transaccion"], "Reserva pendiente")
-        self.assertEqual(movimientos[1]["subtotal"], 10)
+        self.assertNotIn("Reserva pendiente", [row["transaccion"] for row in movimientos])
+        self.assertEqual(resp.context["reservas_pendientes"], 4)
+
+    def test_stock_productos_incluye_reservas_hasta_confirmar_entrega(self):
+        resp = self.client.get(
+            reverse("stock_productos"),
+            data={"year": 2026, "month": 3, "stock_view": "todos"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Informe de Inventario")
+        self.assertContains(resp, "descuenta reservas pendientes")
+        self.assertContains(resp, "confirmar la entrega del pedido")
+        self.assertNotContains(resp, "Movimientos del Periodo")
+        self.assertNotContains(resp, "Productos Criticos")
+
+        fila = next(row for row in resp.context["stock_rows"] if row["codigo_interno"] == self.producto.codigo_producto_interno)
+        self.assertEqual(fila["cantidad_disponible_uprim"], 24)
+        self.assertEqual(fila["cantidad_despachada_uprim"], 2)
+        self.assertFalse(fila["es_critico"])
+
+    def test_stock_productos_destaca_solo_celda_con_stock_cero_o_negativo(self):
+        producto_sin_stock = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="INVPER003",
+            nombre_producto="Producto Agotado",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=0,
+            empaque_primario=self.emp_p,
+            empaque_secundario=self.emp_s,
+            empaque_terciario=self.emp_t,
+        )
+
+        resp = self.client.get(
+            reverse("stock_productos"),
+            data={"year": 2026, "month": 3, "stock_view": "todos"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, producto_sin_stock.nombre_producto)
+        self.assertNotContains(resp, 'class="table-danger"')
+        self.assertContains(resp, 'class="text-end text-danger fw-semibold" data-order="0"')
 
     def test_flujo_inventario_producto_prioriza_fechas_de_documento(self):
         self._actualizar_fecha_movimiento(self.ingreso_enero, datetime(2026, 1, 18, 12, 0, 0))
@@ -1218,6 +1425,21 @@ class InventarioPeriodoTests(TestCase):
         self.assertContains(resp, "08-03-2026")
         self.assertNotContains(resp, "18-01-2026")
         self.assertNotContains(resp, "20-03-2026")
+
+    def test_flujo_inventario_producto_tolera_fechas_legacy_en_texto_datetime(self):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE Pedidos_stock SET fecha_movimiento = ? WHERE id = ?",
+                ["2026-03-02 12:00:00", self.despacho_marzo.id],
+            )
+
+        resp = self.client.get(
+            reverse("flujo_inventario_producto", args=[self.producto.id]),
+            data={"year": 2026, "month": 3, "stock_view": "todos"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Salida - Despacho")
+        self.assertEqual(len(resp.context["movimientos_rows"]), 3)
 
 class EntregaPedidoFirmaCompatTests(TestCase):
     def setUp(self):
@@ -1284,6 +1506,7 @@ class EntregaPedidoFirmaCompatTests(TestCase):
 
     def test_finalizar_pedido_acepta_firma_dataurl_y_mueve_stock(self):
         firma_b64 = base64.b64encode(b"firma-prueba").decode("ascii")
+        fecha_reserva_esperada = self.stock.fecha_movimiento
 
         with TemporaryDirectory() as media_root:
             with self.settings(MEDIA_ROOT=media_root):
@@ -1306,14 +1529,13 @@ class EntregaPedidoFirmaCompatTests(TestCase):
 
         self.assertEqual(self.pedido.estado_pedido, "Entregado")
         self.assertEqual(self.stock.tipo_movimiento, "DESPACHO")
+        self.assertEqual(self.stock.fecha_movimiento, datetime(2026, 3, 5).date())
+        self.assertEqual(self.stock.fecha_reserva, fecha_reserva_esperada)
 
         entrega = EntregaPedido.objects.get(pedido=self.pedido)
         self.assertEqual(entrega.nombre_receptor, "Ana Perez")
         self.assertTrue(entrega.archivo_pdf.name.endswith(".pdf"))
-
-        historial = MovimientoStockHistorico.objects.get(stock=self.stock)
-        self.assertEqual(historial.tipo_movimiento, "DESPACHO")
-        self.assertEqual(historial.responsable, self.user)
+        self.assertEqual(self.stock.responsable, self.user)
 
     def test_finalizar_pedido_redirige_a_login_si_no_hay_sesion(self):
         firma_b64 = base64.b64encode(b"firma-prueba").decode("ascii")
@@ -1341,10 +1563,120 @@ class EntregaPedidoFirmaCompatTests(TestCase):
         self.assertEqual(self.pedido.estado_pedido, "Pendiente")
         self.assertEqual(self.stock.tipo_movimiento, "RESERVA")
         self.assertFalse(EntregaPedido.objects.filter(pedido=self.pedido).exists())
-        self.assertFalse(MovimientoStockHistorico.objects.filter(stock=self.stock).exists())
+        self.assertIsNone(self.stock.fecha_reserva)
 
 
-class MovimientoStockHistoricoResponsableTests(TestCase):
+class PedidoPendienteHibridoCompatTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("pedido_hibrido", password="test123")
+        self.client.force_login(self.user)
+
+        self.emp_p = CategoriaEmpaque.objects.create(nombre="Unidad Hibrida", nivel="PRIMARIO")
+        self.emp_s = CategoriaEmpaque.objects.create(nombre="Caja Hibrida", nivel="SECUNDARIO")
+        self.emp_t = CategoriaEmpaque.objects.create(nombre="Pallet Hibrido", nivel="TERCIARIO")
+        self.categoria = Categoria.objects.create(categoria="Categoria Hibrida")
+        self.subcategoria = Subcategoria.objects.create(
+            categoria=self.categoria,
+            subcategoria="Subcategoria Hibrida",
+        )
+        self.cliente = Cliente.objects.create(
+            nombre_cliente="Cliente Hibrido",
+            rut_cliente="76999999-9",
+            direccion_cliente="Dir Hibrida",
+            direccion_bodega_cliente="Bodega Hibrida",
+            cliente_activo=True,
+            telefono_cliente="+56977777777",
+            correo_cliente="cliente.hibrido@example.com",
+            categoria="PYME",
+        )
+        self.producto_legacy = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="LEG001",
+            nombre_producto="Producto Legacy",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+            empaque_primario=self.emp_p,
+            empaque_secundario=self.emp_s,
+            empaque_terciario=self.emp_t,
+        )
+        self.producto_nuevo = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="NEW001",
+            nombre_producto="Producto Nuevo",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+            empaque_primario=self.emp_p,
+            empaque_secundario=self.emp_s,
+            empaque_terciario=self.emp_t,
+        )
+        self.pedido = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=datetime(2026, 5, 16).date(),
+            estado_pedido="Pendiente",
+        )
+
+        Stock.objects.create(
+            tipo_movimiento="RESERVA",
+            producto=self.producto_legacy,
+            qty=2,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("1000.00"),
+            pedido=self.pedido,
+        )
+
+        self.linea = PedidoLinea.objects.create(
+            pedido=self.pedido,
+            producto=self.producto_nuevo,
+            tipo_linea="PRODUCTO",
+            descripcion=self.producto_nuevo.nombre_producto,
+            empaque="PRIMARIO",
+            cantidad=3,
+            precio_unitario=Decimal("2000.00"),
+        )
+        Stock.objects.create(
+            tipo_movimiento="RESERVA",
+            producto=self.producto_nuevo,
+            qty=3,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("2000.00"),
+            pedido=self.pedido,
+            linea_pedido=self.linea,
+        )
+
+    def test_detalle_pedido_combina_lineas_nuevas_y_reservas_legacy(self):
+        filas, total_neto, iva, total, _ = _detalle_lineas_pedido(self.pedido)
+
+        self.assertEqual(len(filas), 2)
+        self.assertEqual({fila["nombre"] for fila in filas}, {"Producto Legacy", "Producto Nuevo"})
+        self.assertEqual(total_neto, Decimal("8000"))
+        self.assertEqual(iva, Decimal("1520"))
+        self.assertEqual(total, Decimal("9520"))
+
+        resp = self.client.get(reverse("detalle_pedido", args=[self.pedido.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Producto Legacy")
+        self.assertContains(resp, "Producto Nuevo")
+
+    def test_items_pdf_pedido_incluyen_flujo_legacy_y_nuevo(self):
+        items = _items_pedido_para_pdf(self.pedido, reservas=Stock.objects.filter(pedido=self.pedido))
+
+        self.assertEqual(len(items), 2)
+        self.assertEqual({item["nombre"] for item in items}, {"Producto Legacy", "Producto Nuevo"})
+        self.assertEqual(sum(item["subtotal"] for item in items), Decimal("8000.00"))
+
+
+class StockResponsableTests(TestCase):
     def setUp(self):
         self.emp_p = CategoriaEmpaque.objects.create(nombre="Unidad Historial", nivel="PRIMARIO")
         self.emp_s = CategoriaEmpaque.objects.create(nombre="Caja Historial", nivel="SECUNDARIO")
@@ -1370,20 +1702,15 @@ class MovimientoStockHistoricoResponsableTests(TestCase):
             empaque_terciario=self.emp_t,
         )
         self.stock = Stock.objects.create(
-            tipo_movimiento="RECEPCION",
+            tipo_movimiento="DISPONIBLE",
             producto=self.producto,
             qty=1,
             empaque="PRIMARIO",
             precio_unitario=Decimal("100.00"),
         )
 
-    def test_registrar_movimiento_stock_descarta_anonymoususer(self):
-        movimiento = registrar_movimiento_stock(
-            self.stock,
-            responsable=SimpleLazyObject(lambda: AnonymousUser()),
-        )
-
-        self.assertIsNone(movimiento.responsable)
+    def test_stock_puede_quedar_sin_responsable(self):
+        self.assertIsNone(self.stock.responsable)
 
 
 class ModelStrTrazabilidadTests(TestCase):
@@ -1450,7 +1777,7 @@ class ModelStrTrazabilidadTests(TestCase):
             f"Entrega #{entrega.id} - Pedido #{pedido.id} - Cliente Traza (76123456-7)",
         )
 
-    def test_stock_y_historial_muestran_referencia_de_pedido(self):
+    def test_stock_muestra_referencia_de_pedido(self):
         pedido = Pedido.objects.create(
             nombre_cliente=self.cliente,
             fecha_pedido=datetime(2026, 2, 6).date(),
@@ -1464,21 +1791,10 @@ class ModelStrTrazabilidadTests(TestCase):
             precio_unitario=Decimal("2500.00"),
             pedido=pedido,
         )
-        movimiento = MovimientoStockHistorico.objects.create(
-            stock=stock,
-            tipo_movimiento="RESERVA",
-            qty=5,
-            empaque="SECUNDARIO",
-            precio_unitario=Decimal("2500.00"),
-        )
 
         self.assertEqual(
             str(stock),
             f"RESERVA - TRAZA1 - Producto Traza (1 und) - 5 (SECUNDARIO) - Pedido #{pedido.id}",
-        )
-        self.assertEqual(
-            str(movimiento),
-            f"RESERVA - Stock #{stock.id} - 5 (SECUNDARIO) - Pedido #{pedido.id}",
         )
 
 
@@ -2053,3 +2369,329 @@ class PackFlowTests(TestCase):
         componente = PackComponente.objects.get(pack=pack)
         self.assertEqual(componente.producto_id, self.producto_cloro.id)
         self.assertEqual(componente.cantidad, 2)
+
+
+class ProductoEstadoBaseTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("producto_estado", password="test123")
+        self.client.force_login(self.user)
+
+        self.emp_p = CategoriaEmpaque.objects.create(nombre="Unidad Estado", nivel="PRIMARIO")
+        self.emp_s = CategoriaEmpaque.objects.create(nombre="Caja Estado", nivel="SECUNDARIO")
+        self.emp_t = CategoriaEmpaque.objects.create(nombre="Pallet Estado", nivel="TERCIARIO")
+        self.categoria = Categoria.objects.create(categoria="Categoria Estado")
+        self.subcategoria = Subcategoria.objects.create(
+            categoria=self.categoria,
+            subcategoria="Subcategoria Estado",
+        )
+        self.proveedor = Proveedor.objects.create(
+            nombre_proveedor="Proveedor Estado",
+            rut_proveedor="77000000-1",
+            direccion_proveedor="Dir Proveedor",
+            direccion_bodega_proveedor="Dir Bodega",
+            empresa_activa=True,
+            banco_proveedor="Banco Estado",
+            cta_proveedor="Corriente",
+            num_cuenta_proveedor="1234567890",
+        )
+        self.cliente_comercial = Cliente.objects.create(
+            nombre_cliente="Cliente Estado",
+            rut_cliente="77111111-1",
+            direccion_cliente="Dir Cliente",
+            direccion_bodega_cliente="Bodega Cliente",
+            cliente_activo=True,
+            telefono_cliente="+56911112222",
+            correo_cliente="cliente.estado@example.com",
+            categoria="PYME",
+        )
+
+    def crear_producto(self, codigo, nombre, **overrides):
+        data = {
+            "categoria_producto": self.categoria,
+            "subcategoria_producto": self.subcategoria,
+            "codigo_producto_interno": codigo,
+            "nombre_producto": nombre,
+            "qty_terciario": 1,
+            "qty_secundario": 1,
+            "qty_primario": 1,
+            "qty_unidad": 1,
+            "medida": "und",
+            "qty_minima": 1,
+            "empaque_primario": self.emp_p,
+            "empaque_secundario": self.emp_s,
+            "empaque_terciario": self.emp_t,
+            "estado_operativo": Producto.ESTADO_ACTIVO,
+        }
+        data.update(overrides)
+        return Producto.objects.create(**data)
+
+    def crear_pack(self, codigo, nombre, **overrides):
+        data = {
+            "tipo_producto": "PACK",
+            "categoria_producto": None,
+            "subcategoria_producto": None,
+            "codigo_producto_interno": codigo,
+            "nombre_producto": nombre,
+            "qty_terciario": 1,
+            "qty_secundario": 1,
+            "qty_primario": 1,
+            "qty_unidad": 1,
+            "medida": "und",
+            "qty_minima": 0,
+            "empaque_primario": None,
+            "empaque_secundario": None,
+            "empaque_terciario": None,
+            "estado_operativo": Producto.ESTADO_ACTIVO,
+        }
+        data.update(overrides)
+        return Producto.objects.create(**data)
+
+    def crear_recepcion(self):
+        return Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=datetime(2026, 6, 1).date(),
+            estado_recepcion="Pendiente",
+            documento_recepcion="Factura",
+            num_documento_recepcion=9001,
+            total_neto_recepcion=Decimal("0.00"),
+            iva_recepcion=Decimal("0.00"),
+            total_recepcion=Decimal("0.00"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+
+    def crear_precio_cliente(
+        self,
+        producto,
+        *,
+        precio="1500.00",
+        empaque="PRIMARIO",
+        vigencia=None,
+        origen=None,
+    ):
+        neto = Decimal(precio)
+        iva = (neto * Decimal("0.19")).quantize(Decimal("0.01"))
+        total = neto + iva
+        return ListaPrecios.objects.create(
+            nombre_cliente=self.cliente_comercial,
+            nombre_producto=producto,
+            empaque=empaque,
+            precio_venta=neto,
+            precio_iva=iva,
+            precio_total=total,
+            vigencia=vigencia or datetime(2026, 6, 1).date(),
+            lista_predeterminada_origen=origen,
+        )
+
+
+class ProductoEstadoOperativoTests(ProductoEstadoBaseTests):
+    def test_cambiar_estado_producto_persiste_trazabilidad(self):
+        producto = self.crear_producto("EST001", "Producto Estado")
+
+        resp = self.client.post(
+            reverse("cambiar_estado_producto", args=[producto.id]),
+            data={
+                "estado_operativo": Producto.ESTADO_SUSPENDIDO_VENTA,
+                "motivo_estado": "Suspendido por revision comercial",
+            },
+        )
+
+        self.assertRedirects(resp, reverse("lista_productos"))
+        producto.refresh_from_db()
+        self.assertEqual(producto.estado_operativo, Producto.ESTADO_SUSPENDIDO_VENTA)
+        self.assertEqual(producto.motivo_estado, "Suspendido por revision comercial")
+        self.assertIsNotNone(producto.fecha_estado)
+        self.assertEqual(producto.usuario_estado, self.user)
+
+    def test_eliminar_producto_con_historial_redirige_a_cambio_estado(self):
+        producto = self.crear_producto("EST002", "Producto Con Historial")
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=producto,
+            qty=3,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("1200.00"),
+            fecha_movimiento=timezone.localdate(),
+        )
+
+        resp = self.client.get(reverse("eliminar_producto", args=[producto.id]))
+
+        self.assertRedirects(resp, reverse("cambiar_estado_producto", args=[producto.id]))
+        self.assertTrue(Producto.objects.filter(pk=producto.pk).exists())
+
+    def test_pack_no_es_vendible_si_un_componente_esta_suspendido_de_venta(self):
+        componente = self.crear_producto(
+            "EST003",
+            "Componente Suspendido",
+            estado_operativo=Producto.ESTADO_SUSPENDIDO_VENTA,
+        )
+        pack = self.crear_pack("PACK001", "Pack Bloqueado")
+        PackComponente.objects.create(
+            pack=pack,
+            producto=componente,
+            empaque="PRIMARIO",
+            cantidad=1,
+            orden=0,
+        )
+
+        pack = Producto.objects.prefetch_related("componentes_pack__producto").get(pk=pack.pk)
+
+        self.assertFalse(pack.venta_habilitada)
+        self.assertFalse(pack.precio_habilitado)
+
+
+class ProductoEstadoRecepcionTests(ProductoEstadoBaseTests):
+    def setUp(self):
+        super().setUp()
+        self.producto_activo = self.crear_producto("REC001", "Producto Recepcion Activo")
+        self.producto_suspendido_compra = self.crear_producto(
+            "REC002",
+            "Producto Recepcion Bloqueado",
+            estado_operativo=Producto.ESTADO_SUSPENDIDO_COMPRA,
+        )
+        self.recepcion = self.crear_recepcion()
+
+    def test_recepcion_excluye_producto_suspendido_compra_del_formulario(self):
+        resp = self.client.get(reverse("crear_recepcion_productos", args=[self.recepcion.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        producto_ids = set(resp.context["form"].fields["producto"].queryset.values_list("id", flat=True))
+        self.assertIn(self.producto_activo.id, producto_ids)
+        self.assertNotIn(self.producto_suspendido_compra.id, producto_ids)
+
+    def test_recepcion_rechaza_producto_suspendido_compra_en_post(self):
+        resp = self.client.post(
+            reverse("crear_recepcion_productos", args=[self.recepcion.id]),
+            data={
+                "producto": self.producto_suspendido_compra.id,
+                "qty": "1",
+                "empaque": "PRIMARIO",
+                "precio_unitario": "1000.00",
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(RecepcionLinea.objects.filter(recepcion=self.recepcion).exists())
+        self.assertIn("producto", resp.context["form"].errors)
+
+
+class ProductoEstadoPreciosTests(ProductoEstadoBaseTests):
+    def test_asignacion_de_precios_mantiene_historial_visible_y_excluye_bloqueados_del_selector(self):
+        producto_activo = self.crear_producto("PRE001", "Producto Precio Activo")
+        producto_suspendido = self.crear_producto(
+            "PRE002",
+            "Producto Precio Bloqueado",
+            estado_operativo=Producto.ESTADO_SUSPENDIDO_VENTA,
+        )
+        self.crear_precio_cliente(producto_suspendido, precio="2990.00")
+
+        resp = self.client.get(reverse("asignar_precios", args=[self.cliente_comercial.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, producto_suspendido.nombre_producto)
+        producto_ids = {producto.id for producto in resp.context["productos"]}
+        self.assertIn(producto_activo.id, producto_ids)
+        self.assertNotIn(producto_suspendido.id, producto_ids)
+
+    def test_sincronizacion_de_lista_omite_producto_bloqueado_y_preserva_precio_existente(self):
+        lista = ListaPreciosPredeterminada.objects.create(nombre_listaprecios="Lista Estado")
+        producto_activo = self.crear_producto("PRE003", "Producto Sync Activo")
+        producto_suspendido = self.crear_producto(
+            "PRE004",
+            "Producto Sync Bloqueado",
+            estado_operativo=Producto.ESTADO_SUSPENDIDO_VENTA,
+        )
+
+        ListaPreciosPredItem.objects.create(
+            listaprecios=lista,
+            nombre_producto=producto_activo,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("2000.00"),
+            precio_iva=Decimal("380.00"),
+            precio_total=Decimal("2380.00"),
+            vigencia=datetime(2026, 6, 1).date(),
+        )
+        ListaPreciosPredItem.objects.create(
+            listaprecios=lista,
+            nombre_producto=producto_suspendido,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("5000.00"),
+            precio_iva=Decimal("950.00"),
+            precio_total=Decimal("5950.00"),
+            vigencia=datetime(2026, 6, 1).date(),
+        )
+        precio_historico = self.crear_precio_cliente(
+            producto_suspendido,
+            precio="1990.00",
+            origen=lista,
+        )
+
+        stats = sincronizar_lista_predeterminada_a_cliente(self.cliente_comercial, lista)
+
+        self.assertEqual(stats["created"], 1)
+        self.assertEqual(stats["skipped_disabled"], 1)
+        self.assertEqual(stats["deleted"], 0)
+
+        precio_historico.refresh_from_db()
+        self.assertEqual(precio_historico.precio_venta, Decimal("1990.00"))
+        self.assertTrue(
+            ListaPrecios.objects.filter(
+                nombre_cliente=self.cliente_comercial,
+                nombre_producto=producto_activo,
+                empaque="PRIMARIO",
+            ).exists()
+        )
+
+
+class ProductoEstadoVentaTests(ProductoEstadoBaseTests):
+    def setUp(self):
+        super().setUp()
+        self.producto_activo = self.crear_producto("VEN001", "Producto Venta Activo")
+        self.producto_suspendido = self.crear_producto(
+            "VEN002",
+            "Producto Venta Bloqueado",
+            estado_operativo=Producto.ESTADO_SUSPENDIDO_VENTA,
+        )
+        self.crear_precio_cliente(self.producto_activo, precio="3100.00")
+        self.crear_precio_cliente(self.producto_suspendido, precio="4100.00")
+        self.pedido = Pedido.objects.create(
+            nombre_cliente=self.cliente_comercial,
+            fecha_pedido=datetime(2026, 6, 2).date(),
+            estado_pedido="Pendiente",
+        )
+
+    def test_agregar_productos_pedido_excluye_producto_suspendido_de_venta(self):
+        resp = self.client.get(reverse("agregar_productos_pedido", args=[self.pedido.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        producto_ids = {int(form.initial["producto_id"]) for form in resp.context["formset"].forms}
+        self.assertIn(self.producto_activo.id, producto_ids)
+        self.assertNotIn(self.producto_suspendido.id, producto_ids)
+
+    def test_agregar_productos_pedido_rechaza_post_de_producto_suspendido(self):
+        resp = self.client.post(
+            reverse("agregar_productos_pedido", args=[self.pedido.id]),
+            data={
+                "form-TOTAL_FORMS": "1",
+                "form-INITIAL_FORMS": "0",
+                "form-MIN_NUM_FORMS": "0",
+                "form-MAX_NUM_FORMS": "1000",
+                "form-0-producto_id": str(self.producto_suspendido.id),
+                "form-0-producto_nombre": self.producto_suspendido.nombre_producto,
+                "form-0-empaque": "PRIMARIO",
+                "form-0-precio_unitario": "4100.00",
+                "form-0-cantidad": "1",
+            },
+        )
+
+        self.assertRedirects(resp, reverse("agregar_productos_pedido", args=[self.pedido.id]))
+        self.assertFalse(PedidoLinea.objects.filter(pedido=self.pedido).exists())
+        self.assertFalse(Stock.objects.filter(pedido=self.pedido, tipo_movimiento="RESERVA").exists())
+
+    def test_cotizacion_excluye_producto_suspendido_de_venta(self):
+        resp = self.client.get(reverse("seleccionar_productos_cotizacion", args=[self.cliente_comercial.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        producto_ids = {precio.nombre_producto_id for precio in resp.context["productos"]}
+        self.assertIn(self.producto_activo.id, producto_ids)
+        self.assertNotIn(self.producto_suspendido.id, producto_ids)

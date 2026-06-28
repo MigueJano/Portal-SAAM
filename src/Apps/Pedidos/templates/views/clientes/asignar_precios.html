@@ -27,6 +27,10 @@
   </div>
 {% endif %}
 
+<div class="alert alert-secondary py-2">
+  Solo se muestran productos habilitados para nuevos precios. Los registros hist&oacute;ricos bloqueados se mantienen en la tabla inferior.
+</div>
+
 <form method="post" class="row g-3">
   {% csrf_token %}
   {% if precio_en_edicion %}
@@ -144,6 +148,9 @@
       <td>
         {% if item.nombre_producto.tipo_producto == 'PACK' %}
           <span class="badge bg-success me-1">PACK</span>
+        {% endif %}
+        {% if not item.nombre_producto.precio_habilitado %}
+          <span class="badge bg-warning text-dark me-1">Bloqueado</span>
         {% endif %}
         <a href="{% url 'asignar_precios' cliente.id %}?precio_id={{ item.id }}" class="text-decoration-none">
           {{ item.nombre_producto.nombre_producto }}

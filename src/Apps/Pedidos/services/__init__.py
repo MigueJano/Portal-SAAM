@@ -1,8 +1,8 @@
-from .stock_history import registrar_movimiento_stock, registrar_movimientos_stock
 from .listaprecios_sync import (
     sincronizar_lista_predeterminada_a_cliente,
     sincronizar_lista_predeterminada_a_clientes_asociados,
 )
+from .pedido_items import items_comerciales_pedido
 from .packs import (
     cantidad_primaria,
     componentes_pack,
@@ -27,9 +27,8 @@ __all__ = [
     "desglose_ingreso_pack",
     "es_pack",
     "factor_empaque",
+    "items_comerciales_pedido",
     "q2",
-    "registrar_movimiento_stock",
-    "registrar_movimientos_stock",
     "sincronizar_lista_predeterminada_a_cliente",
     "sincronizar_lista_predeterminada_a_clientes_asociados",
     "snapshot_pack",

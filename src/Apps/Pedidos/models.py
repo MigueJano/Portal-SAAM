@@ -188,6 +188,16 @@ class Producto(models.Model):
         ('SIMPLE', 'Simple'),
         ('PACK', 'Pack'),
     ]
+    ESTADO_ACTIVO = "ACTIVO"
+    ESTADO_SUSPENDIDO_VENTA = "SUSPENDIDO_VENTA"
+    ESTADO_SUSPENDIDO_COMPRA = "SUSPENDIDO_COMPRA"
+    ESTADO_DESCONTINUADO = "DESCONTINUADO"
+    ESTADO_OPERATIVO_CHOICES = [
+        (ESTADO_ACTIVO, "Activo"),
+        (ESTADO_SUSPENDIDO_VENTA, "Suspendido de venta"),
+        (ESTADO_SUSPENDIDO_COMPRA, "Suspendido de compra"),
+        (ESTADO_DESCONTINUADO, "Descontinuado"),
+    ]
     """
     Representa un producto del inventario.
     Incluye codificación, medidas, empaques y categorías.
@@ -217,6 +227,21 @@ class Producto(models.Model):
     empaque_primario = models.ForeignKey('CategoriaEmpaque', on_delete=models.SET_NULL, null=True, blank=True, related_name='productos_primarios')
     empaque_secundario = models.ForeignKey('CategoriaEmpaque', on_delete=models.SET_NULL, null=True, blank=True, related_name='productos_secundarios')
     empaque_terciario = models.ForeignKey('CategoriaEmpaque', on_delete=models.SET_NULL, null=True, blank=True, related_name='productos_terciarios')
+    estado_operativo = models.CharField(
+        max_length=22,
+        choices=ESTADO_OPERATIVO_CHOICES,
+        default=ESTADO_ACTIVO,
+        db_index=True,
+    )
+    motivo_estado = models.CharField(max_length=255, blank=True, default="")
+    fecha_estado = models.DateTimeField(null=True, blank=True)
+    usuario_estado = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='productos_estado_actualizado',
+    )
 
     def __str__(self):
         return f"{self.codigo_producto_interno} - {self.nombre_producto} ({self.qty_unidad} {self.medida})"
@@ -224,6 +249,109 @@ class Producto(models.Model):
     @property
     def es_pack(self):
         return self.tipo_producto == 'PACK'
+
+    @classmethod
+    def estados_suspendidos(cls):
+        return (
+            cls.ESTADO_SUSPENDIDO_VENTA,
+            cls.ESTADO_SUSPENDIDO_COMPRA,
+        )
+
+    @classmethod
+    def estados_venta_habilitados(cls):
+        return (
+            cls.ESTADO_ACTIVO,
+            cls.ESTADO_SUSPENDIDO_COMPRA,
+        )
+
+    @classmethod
+    def estados_compra_habilitados(cls):
+        return (
+            cls.ESTADO_ACTIVO,
+            cls.ESTADO_SUSPENDIDO_VENTA,
+        )
+
+    @classmethod
+    def estados_precio_habilitados(cls):
+        return (
+            cls.ESTADO_ACTIVO,
+            cls.ESTADO_SUSPENDIDO_COMPRA,
+        )
+
+    @property
+    def catalogo_vigente(self) -> bool:
+        return self.estado_operativo != self.ESTADO_DESCONTINUADO
+
+    @property
+    def compra_habilitada(self) -> bool:
+        return self.estado_operativo in self.estados_compra_habilitados()
+
+    @property
+    def base_venta_habilitada(self) -> bool:
+        return self.estado_operativo in self.estados_venta_habilitados()
+
+    @property
+    def venta_habilitada(self) -> bool:
+        if not self.base_venta_habilitada:
+            return False
+        if not self.es_pack:
+            return True
+
+        componentes = getattr(self, "_prefetched_objects_cache", {}).get("componentes_pack")
+        if componentes is None:
+            componentes = self.componentes_pack.select_related("producto")
+        if not componentes:
+            return False
+        return all(
+            componente.producto.estado_operativo in self.estados_venta_habilitados()
+            for componente in componentes
+        )
+
+    @property
+    def precio_habilitado(self) -> bool:
+        if self.estado_operativo not in self.estados_precio_habilitados():
+            return False
+        return self.venta_habilitada
+
+    @property
+    def estado_badge_class(self) -> str:
+        if self.estado_operativo == self.ESTADO_ACTIVO:
+            return "bg-success"
+        if self.estado_operativo == self.ESTADO_DESCONTINUADO:
+            return "bg-dark"
+        return "bg-warning text-dark"
+
+    def actualizar_estado_operativo(self, estado: str, motivo: str = "", usuario=None):
+        self.estado_operativo = estado
+        self.motivo_estado = (motivo or "").strip()
+        self.fecha_estado = timezone.now()
+        self.usuario_estado = usuario
+        self.save(update_fields=["estado_operativo", "motivo_estado", "fecha_estado", "usuario_estado"])
+
+    def razones_bloqueo_eliminacion(self) -> list[str]:
+        razones = []
+        if self.stock_set.exists():
+            razones.append("Tiene movimientos de stock registrados.")
+        if self.recepcionlinea_set.exists():
+            razones.append("Tiene lineas de recepcion asociadas.")
+        if self.listaprecios_set.exists():
+            razones.append("Tiene precios asignados a clientes.")
+        if self.precios_predeterminados.exists():
+            razones.append("Tiene items en listas de precios predeterminadas.")
+        if self.lineas_pedido.exists():
+            razones.append("Tiene lineas de pedido asociadas.")
+        if self.utilidadproducto_set.exists():
+            razones.append("Tiene utilidades o ventas historicas asociadas.")
+        if self.codigos_proveedor.exists():
+            razones.append("Tiene codigos de proveedor asociados.")
+        if self.usado_en_packs.exists():
+            razones.append("Es componente de packs existentes.")
+        if self.componentes_pack.exists():
+            razones.append("Es un pack con componentes asociados.")
+        return razones
+
+    def puede_eliminarse_fisicamente(self) -> bool:
+        return not self.razones_bloqueo_eliminacion()
 
 
 class PackComponente(models.Model):
@@ -296,7 +424,7 @@ class CodigoProveedor(models.Model):
 
 class Stock(models.Model):
     """
-    Movimientos de inventario: ingreso, reserva, salida.
+    Movimientos vigentes de inventario.
     """
     UNIDAD_EMPAQUE = [
         ('PRIMARIO', 'Primario'),
@@ -305,7 +433,6 @@ class Stock(models.Model):
     ]
 
     MOVIMIENTO_CHOICES = [
-        ('RECEPCION', 'Recepción'),
         ('DISPONIBLE', 'Disponible'),
         ('RESERVA', 'Reserva'),
         ('DESPACHO', 'Despacho'),
@@ -316,7 +443,8 @@ class Stock(models.Model):
     qty = models.IntegerField()
     empaque = models.CharField(max_length=10)
     precio_unitario = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
-    fecha_movimiento = models.DateTimeField(auto_now_add=True)
+    fecha_movimiento = models.DateField(default=timezone.localdate, db_index=True)
+    fecha_reserva = models.DateField(null=True, blank=True, db_index=True)
     recepcion = models.ForeignKey('Recepcion', null=True, blank=True, on_delete=models.SET_NULL)
     pedido = models.ForeignKey('Pedido', null=True, blank=True, on_delete=models.SET_NULL)
     linea_pedido = models.ForeignKey(
@@ -326,6 +454,20 @@ class Stock(models.Model):
         on_delete=models.CASCADE,
         related_name='movimientos_stock',
     )
+    responsable = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='movimientos_stock',
+    )
+
+    class Meta:
+        ordering = ('fecha_movimiento', 'id')
+        indexes = [
+            models.Index(fields=['fecha_movimiento']),
+            models.Index(fields=['tipo_movimiento', 'fecha_movimiento']),
+        ]
 
     def __str__(self):
         referencia = None
@@ -338,22 +480,19 @@ class Stock(models.Model):
         return f"{detalle} - {referencia}" if referencia else detalle
 
 
-class MovimientoStockHistorico(models.Model):
+class RecepcionLinea(models.Model):
     """
-    Conserva el flujo operativo del stock por fila.
-
-    Se usa para no perder trazabilidad cuando un registro de stock cambia
-    de estado, por ejemplo desde RESERVA a DESPACHO.
+    Línea de detalle de una recepción antes de impactar el inventario.
     """
 
-    stock = models.ForeignKey(
-        "Stock",
+    recepcion = models.ForeignKey(
+        'Recepcion',
         on_delete=models.CASCADE,
-        related_name="historial_movimientos",
+        related_name='lineas',
     )
-    tipo_movimiento = models.CharField(max_length=10, choices=Stock.MOVIMIENTO_CHOICES)
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE)
     qty = models.IntegerField()
-    empaque = models.CharField(max_length=10)
+    empaque = models.CharField(max_length=10, choices=Stock.UNIDAD_EMPAQUE)
     precio_unitario = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -361,31 +500,18 @@ class MovimientoStockHistorico(models.Model):
         blank=True,
         validators=[MinValueValidator(0)],
     )
-    fecha_movimiento = models.DateTimeField(default=timezone.now, db_index=True)
-    responsable = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="movimientos_stock_historicos",
-    )
+    creado = models.DateTimeField(auto_now_add=True)
+    actualizado = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ("fecha_movimiento", "id")
+        ordering = ('id',)
         indexes = [
-            models.Index(fields=["fecha_movimiento"]),
-            models.Index(fields=["tipo_movimiento", "fecha_movimiento"]),
+            models.Index(fields=['recepcion']),
+            models.Index(fields=['producto']),
         ]
 
     def __str__(self):
-        referencia = None
-        if self.stock and self.stock.pedido_id:
-            referencia = f"Pedido #{self.stock.pedido_id}"
-        elif self.stock and self.stock.recepcion_id:
-            referencia = f"Recepcion #{self.stock.recepcion_id}"
-
-        detalle = f"{self.tipo_movimiento} - Stock #{self.stock_id} - {self.qty} ({self.empaque})"
-        return f"{detalle} - {referencia}" if referencia else detalle
+        return f"Recepcion #{self.recepcion_id} - {self.producto} - {self.qty} ({self.empaque})"
 
 class Cliente(models.Model):
     """

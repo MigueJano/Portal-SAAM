@@ -24,6 +24,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.pdfgen.canvas import Canvas
 
+from Apps.Pedidos.services import items_comerciales_pedido
+
 # --- Constantes Decimal ---
 DOS_DEC = Decimal('0.01')
 PESO    = Decimal('1')      # redondeo a peso
@@ -64,15 +66,10 @@ def _nombre_empaque_producto(producto, empaque):
 
 
 def _items_pedido_para_pdf(pedido, reservas):
-    lineas_manager = getattr(pedido, 'lineas', None)
-    if lineas_manager is not None and lineas_manager.exists():
-        items = []
-        for linea in lineas_manager.select_related(
-            'producto',
-            'producto__empaque_primario',
-            'producto__empaque_secundario',
-            'producto__empaque_terciario',
-        ).order_by('id'):
+    items = []
+    for item in items_comerciales_pedido(pedido):
+        if item["origen"] == "linea":
+            linea = item["linea"]
             cantidad = _to_decimal(linea.cantidad)
             precio_unitario = _to_decimal(linea.precio_unitario)
             items.append({
@@ -82,16 +79,16 @@ def _items_pedido_para_pdf(pedido, reservas):
                 'precio_unitario': precio_unitario,
                 'subtotal': cantidad * precio_unitario,
             })
-        return items
+            continue
 
-    items = []
-    for r in reservas:
-        qty = _to_decimal(getattr(r, 'qty', 0))
-        precio = _to_decimal(getattr(r, 'precio_unitario', 0))
+        legacy = item["legacy"]
+        producto = item["producto"]
+        qty = _to_decimal(legacy["qty_sum"])
+        precio = _to_decimal(legacy["precio_unitario"])
         items.append({
-            'nombre': r.producto.nombre_producto[:30],
+            'nombre': legacy["producto__nombre_producto"][:30],
             'cantidad': qty,
-            'empaque_nombre': _nombre_empaque_producto(r.producto, r.empaque),
+            'empaque_nombre': _nombre_empaque_producto(producto, legacy["empaque"]),
             'precio_unitario': precio,
             'subtotal': qty * precio,
         })

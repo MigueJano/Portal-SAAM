@@ -107,7 +107,7 @@ def _producto_ids_por_proveedor(proveedor_obj: Proveedor | None):
     """
     Devuelve IDs de productos COMPRADOS a un proveedor:
       1) Por mapeo explícito en CodigoProveedor (FK proveedor↔producto)
-      2) Por recepciones (Stock.tipo_movimiento='RECEPCION' con recepcion.proveedor)
+      2) Por compras ya disponibles en inventario (Stock.tipo_movimiento='DISPONIBLE' con recepcion.proveedor)
     Unión de ambas fuentes. Si no hay proveedor, devuelve None.
     """
     if not proveedor_obj:
@@ -118,7 +118,7 @@ def _producto_ids_por_proveedor(proveedor_obj: Proveedor | None):
     ).values_list('producto_id', flat=True)
 
     ids_por_recepcion = Stock.objects.filter(
-        tipo_movimiento='RECEPCION',
+        tipo_movimiento='DISPONIBLE',
         recepcion__proveedor=proveedor_obj
     ).values_list('producto_id', flat=True)
 

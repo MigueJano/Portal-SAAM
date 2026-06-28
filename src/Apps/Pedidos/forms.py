@@ -15,7 +15,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 # Modelos importados
 from .models import (
-    Producto, Proveedor, Contacto, Recepcion, Stock, Cliente, ListaPrecios,
+    Producto, Proveedor, Contacto, Recepcion, RecepcionLinea, Stock, Cliente, ListaPrecios,
     Subcategoria, Pedido, Cotizacion, CategoriaEmpaque, Venta
 )
 
@@ -133,6 +133,49 @@ class CrearPackForm(forms.ModelForm):
         if qs.exists():
             raise ValidationError("Ya existe un producto con este código interno.")
         return codigo
+
+class CambiarEstadoProductoForm(forms.Form):
+    estado_operativo = forms.ChoiceField(
+        choices=Producto.ESTADO_OPERATIVO_CHOICES,
+        label='Estado operativo',
+    )
+    motivo_estado = forms.CharField(
+        label='Motivo',
+        required=False,
+        max_length=255,
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.producto = kwargs.pop('producto')
+        super().__init__(*args, **kwargs)
+        self.fields['estado_operativo'].initial = self.producto.estado_operativo
+        self.fields['motivo_estado'].initial = self.producto.motivo_estado
+        self.fields['estado_operativo'].widget.attrs.update({'class': 'form-select'})
+        self.fields['motivo_estado'].widget.attrs.update({'class': 'form-control'})
+
+    def clean(self):
+        cleaned_data = super().clean()
+        nuevo_estado = cleaned_data.get('estado_operativo')
+        motivo = (cleaned_data.get('motivo_estado') or '').strip()
+
+        if not nuevo_estado:
+            self.add_error('estado_operativo', "Debes seleccionar un estado.")
+            return cleaned_data
+
+        if nuevo_estado != Producto.ESTADO_ACTIVO and not motivo:
+            self.add_error('motivo_estado', "Debes indicar un motivo para suspender o descontinuar el producto.")
+
+        return cleaned_data
+
+    def save(self, usuario=None):
+        self.producto.actualizar_estado_operativo(
+            self.cleaned_data['estado_operativo'],
+            motivo=self.cleaned_data.get('motivo_estado', ''),
+            usuario=usuario,
+        )
+        return self.producto
+
 
 class CrearContactoForm(forms.ModelForm):
     class Meta:
@@ -310,7 +353,7 @@ class CrearRecepcionProductoForm(forms.ModelForm):
     """
 
     class Meta:
-        model = Stock
+        model = RecepcionLinea
         fields = ['producto', 'qty', 'empaque', 'precio_unitario']
         widgets = {
             'producto': forms.Select(attrs={'class': 'form-select form-select-sm'}),
@@ -339,7 +382,10 @@ class CrearRecepcionProductoForm(forms.ModelForm):
         """
         self.documento = kwargs.pop('documento', None)
         super().__init__(*args, **kwargs)
-        self.fields['producto'].queryset = Producto.objects.filter(tipo_producto='SIMPLE').order_by('nombre_producto')
+        self.fields['producto'].queryset = Producto.objects.filter(
+            tipo_producto='SIMPLE',
+            estado_operativo__in=Producto.estados_compra_habilitados(),
+        ).order_by('nombre_producto')
         self.fields['empaque'].widget.choices = Stock.UNIDAD_EMPAQUE
 
     def clean_qty(self):
@@ -366,6 +412,13 @@ class CrearRecepcionProductoForm(forms.ModelForm):
             raise ValidationError("El precio unitario debe ser un número positivo.")
         return precio.quantize(DOS_DECIMALES, rounding=ROUND_HALF_UP)
 
+    def clean(self):
+        cleaned_data = super().clean()
+        producto = cleaned_data.get('producto')
+        if producto and not producto.compra_habilitada:
+            self.add_error('producto', "El producto no estÃ¡ habilitado para nuevas recepciones.")
+        return cleaned_data
+
     def save(self, commit=True):
         """
         Guarda la instancia del producto asociado a la recepción.
@@ -375,10 +428,9 @@ class CrearRecepcionProductoForm(forms.ModelForm):
             commit (bool): Si True, guarda la instancia en la base de datos.
 
         Returns:
-            Stock: Instancia guardada del modelo Stock.
+            RecepcionLinea: Instancia guardada del detalle de recepción.
         """
         instancia = super().save(commit=False)
-        instancia.tipo_movimiento = 'RECEPCION'
         instancia.recepcion = self.documento
 
         if instancia.precio_unitario and self.documento and getattr(self.documento, 'incluir_iva', False):
@@ -493,6 +545,8 @@ class ListaPreciosForm(forms.ModelForm):
 
         if not producto:
             self.add_error('nombre_producto', "Debe seleccionar un producto.")
+        elif not producto.precio_habilitado:
+            self.add_error('nombre_producto', "El producto no estÃ¡ habilitado para nuevos precios.")
 
         if not empaque:
             self.add_error('empaque', "Debe seleccionar un empaque.")

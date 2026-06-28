@@ -96,7 +96,12 @@
       <div class="card shadow dashboard-card">
         <div class="card-body">
           <div class="dashboard-card-header">
-            <h5 class="card-title text-success dashboard-card-title">Pedidos Pendientes ({{ cantidad_pedidos_pendiente }})</h5>
+            <h5 class="card-title text-success dashboard-card-title">
+              Pedidos Pendientes ({{ cantidad_pedidos_pendiente }})
+              <span class="d-block fs-6 fw-normal text-body-secondary mt-1">
+                Total adeudado: ${{ monto_pedidos_pendientes|floatformat:0|formatear_miles }}
+              </span>
+            </h5>
             <a
               href="{% url 'crear_pedido' %}"
               class="btn btn-sm btn-outline-success rounded-circle d-inline-flex align-items-center justify-content-center dashboard-card-action"
@@ -126,7 +131,14 @@
     <div>
       <div class="card shadow dashboard-card">
         <div class="card-body">
-          <h5 class="card-title text-warning">Pendientes de Pago ({{ cantidad_pedidos_no_pagados }})</h5>
+          <div class="dashboard-card-header">
+            <h5 class="card-title text-warning dashboard-card-title">
+              Pendientes de Pago ({{ cantidad_pedidos_no_pagados }})
+              <span class="d-block fs-6 fw-normal text-body-secondary mt-1">
+                Total adeudado: ${{ monto_pedidos_no_pagados|floatformat:0|formatear_miles }}
+              </span>
+            </h5>
+          </div>
           {% for p in pedidos_no_pagados %}
             <a href="{% url 'detalle_pedido' p.id %}" class="text-decoration-none text-dark">
               <div class="border p-2 rounded mb-2 bg-light-subtle">

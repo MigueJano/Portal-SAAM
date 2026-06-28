@@ -11,17 +11,17 @@
       </div>
     </div>
     <a
-      href="{% url 'dashboard_inventario' %}?year={{ year }}&month={{ month }}&stock_view={{ stock_view }}"
+      href="{% url 'stock_productos' %}?year={{ year }}&month={{ month }}&stock_view={{ stock_view }}{% if search_term %}&q={{ search_term|urlencode }}{% endif %}"
       class="btn btn-outline-secondary"
     >
-      Volver a inventario
+      Volver a stock
     </a>
   </div>
 
   <div class="alert alert-light border mb-3">
     La columna Fecha prioriza la fecha del documento de recepci&oacute;n y la fecha de cierre de venta; si no existe ese respaldo, usa la fecha del movimiento.
     El flujo se muestra desde el registro m&aacute;s antiguo al m&aacute;s reciente seg&uacute;n esa referencia.
-    Entradas suman al subtotal, despachos restan y las reservas mantienen el subtotal mientras no se finalizan.
+    El hist&oacute;rico muestra solo entradas y salidas; las reservas pendientes se descuentan del stock disponible del resumen.
     En movimientos antiguos puede aparecer "Sin responsable registrado" cuando ese dato no exist&iacute;a en el sistema.
   </div>
 
@@ -53,7 +53,7 @@
     <div class="col-md-3">
       <div class="card border-primary h-100">
         <div class="card-body">
-          <div class="text-muted small">Subtotal Final</div>
+          <div class="text-muted small">Stock Disponible</div>
           <div class="h5 mb-0 text-primary">{{ subtotal_final|formatear_miles }}</div>
         </div>
       </div>

@@ -140,7 +140,7 @@ def _fecha_corte_periodo(periodo: Periodo | None) -> date | None:
 def _stock_qs(tipo: str, *, fecha_corte: date | None = None):
     qs = Stock.objects.filter(tipo_movimiento=tipo)
     if fecha_corte:
-        qs = qs.filter(fecha_movimiento__date__lte=fecha_corte)
+        qs = qs.filter(fecha_movimiento__lte=fecha_corte)
     return qs
 
 
@@ -277,7 +277,7 @@ def filas_stock_contable(periodo: Periodo | None = None) -> list[dict]:
         qty_ingresado = int(ingresos.get(prod.id, 0))
         qty_res = int(reservas.get(prod.id, 0))
         qty_des = int(despachos.get(prod.id, 0))
-        qty_disp = qty_ingresado + qty_res - qty_des
+        qty_disp = qty_ingresado - qty_res - qty_des
 
         costo_compra = costos_compra.get(prod.id, ZERO)
         total_producto = _q2(Decimal(qty_disp) * costo_compra)

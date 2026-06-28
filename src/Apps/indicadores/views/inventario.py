@@ -1,31 +1,20 @@
+from datetime import date
 from decimal import Decimal
+import unicodedata
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Case, Count, F, IntegerField, Sum, Value, When
-from django.db.models.functions import Coalesce
-from django.shortcuts import get_object_or_404, render
-from django.utils import timezone
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
-from Apps.Pedidos.models import MovimientoStockHistorico, Producto, Stock, Venta
+from Apps.Pedidos.models import Producto, Stock, Venta
 from Apps.indicadores.services.contabilidad import _normalizar_precio_unidad_primaria, filas_stock_contable
 from .common import periodo_desde_request
 
-
-def _qty_unidad_expr():
-    return Case(
-        When(
-            empaque__iexact="TERCIARIO",
-            then=F("qty") * F("producto__qty_terciario") * F("producto__qty_secundario"),
-        ),
-        When(empaque__iexact="SECUNDARIO", then=F("qty") * F("producto__qty_secundario")),
-        When(empaque__iexact="PRIMARIO", then=F("qty")),
-        default=Value(0),
-        output_field=IntegerField(),
-    )
+INVENTARIO_TEMPLATE = "views/producto/stock_productos.html"
 
 
 def _stock_relacion(movimiento):
-    return getattr(movimiento, "stock", None) or movimiento
+    return movimiento
 
 
 def _producto_movimiento(movimiento):
@@ -62,13 +51,13 @@ def _normalizar_precio_movimiento(movimiento) -> Decimal:
     return _normalizar_precio_unidad_primaria(base)
 
 
-def _tipo_transaccion_label(movimiento, *, reserva_pendiente: bool = False) -> str:
+def _tipo_transaccion_label(movimiento) -> str:
     base_rel = _stock_relacion(movimiento)
 
-    if movimiento.tipo_movimiento in {"DISPONIBLE", "RECEPCION"}:
+    if movimiento.tipo_movimiento == "DISPONIBLE":
         base = "Entrada"
     elif movimiento.tipo_movimiento == "RESERVA":
-        base = "Reserva pendiente" if reserva_pendiente else "Reserva"
+        base = "Reserva"
     elif movimiento.tipo_movimiento == "DESPACHO":
         base = "Salida - Despacho"
     else:
@@ -125,103 +114,114 @@ def _fecha_referencia_movimiento(movimiento, ventas_por_pedido):
     if venta and venta.fecha_venta:
         return venta.fecha_venta, fecha_movimiento
 
-    fecha_fallback = timezone.localdate(fecha_movimiento) if fecha_movimiento else None
-    return fecha_fallback, fecha_movimiento
+    if getattr(base_rel, "fecha_reserva", None):
+        return base_rel.fecha_reserva, fecha_movimiento
+
+    if getattr(base_rel, "pedido_id", None) and base_rel.pedido and base_rel.pedido.fecha_pedido:
+        return base_rel.pedido.fecha_pedido, fecha_movimiento
+
+    return fecha_movimiento, fecha_movimiento
 
 
-def _delta_subtotal(tipo_movimiento: str, cantidad: int, *, es_legado: bool = False) -> int:
+def _sort_key_fuente(item):
+    fecha_base = item["fecha"] or item["fecha_movimiento"] or getattr(item["obj"], "fecha_reserva", None) or date.min
+    fecha_movimiento = item["fecha_movimiento"] or getattr(item["obj"], "fecha_reserva", None) or fecha_base
+    return (
+        fecha_base,
+        fecha_movimiento,
+        item["sort_id"],
+    )
+
+
+def _delta_subtotal(tipo_movimiento: str, cantidad: int) -> int:
     if tipo_movimiento == "DESPACHO":
         return -cantidad
     if tipo_movimiento == "RESERVA":
         return 0
-    if tipo_movimiento == "RECEPCION":
-        return cantidad
     if tipo_movimiento == "DISPONIBLE":
-        return cantidad if es_legado else 0
+        return cantidad
     return 0
 
 
-@login_required
-def dashboard_inventario(request):
+def _normalizar_texto_busqueda(valor) -> str:
+    texto = str(valor or "").strip().casefold()
+    return "".join(
+        caracter
+        for caracter in unicodedata.normalize("NFKD", texto)
+        if not unicodedata.combining(caracter)
+    )
+
+
+def _coincide_busqueda_stock(row: dict, termino: str) -> bool:
+    termino_normalizado = _normalizar_texto_busqueda(termino)
+    if not termino_normalizado:
+        return True
+
+    return (
+        termino_normalizado in _normalizar_texto_busqueda(row.get("codigo_interno"))
+        or termino_normalizado in _normalizar_texto_busqueda(row.get("producto"))
+    )
+
+
+def render_informe_inventario(request):
     periodo, inicio, fin, meses = periodo_desde_request(request)
 
+    minimos = {
+        p.codigo_producto_interno: int(p.qty_minima or 0)
+        for p in Producto.objects.only("codigo_producto_interno", "qty_minima")
+    }
+
     filtro_stock = request.GET.get("stock_view", "todos")
-    stock_rows_base = filas_stock_contable(periodo)
+    search_term = (request.GET.get("q") or "").strip()
+    stock_rows_base = [
+        row
+        for row in filas_stock_contable(periodo)
+        if _coincide_busqueda_stock(row, search_term)
+    ]
+    for row in stock_rows_base:
+        qty_minima = int(minimos.get(row["codigo_interno"], 0))
+        row["qty_minima"] = qty_minima
+        row["es_critico"] = row["cantidad_disponible_uprim"] <= qty_minima
+
     if filtro_stock == "con_stock":
         stock_rows = [row for row in stock_rows_base if row["cantidad_disponible_uprim"] > 0]
     else:
         filtro_stock = "todos"
         stock_rows = stock_rows_base
 
-    minimos = {
-        p.codigo_producto_interno: int(p.qty_minima or 0)
-        for p in Producto.objects.only("codigo_producto_interno", "qty_minima")
-    }
-    criticos = [
-        row
-        for row in stock_rows
-        if row["cantidad_disponible_uprim"] <= int(minimos.get(row["codigo_interno"], 0))
-    ]
-    criticos.sort(key=lambda row: row["cantidad_disponible_uprim"] - int(minimos.get(row["codigo_interno"], 0)))
-
     total_stock_ref = sum((row["total_producto"] for row in stock_rows), start=Decimal("0.00"))
     kpis = {
         "productos_total": len(stock_rows),
-        "productos_criticos": len(criticos),
         "unidades_disponibles": sum((row["cantidad_disponible_uprim"] for row in stock_rows), start=0),
-        "unidades_despachadas": sum((row["cantidad_despachada_uprim"] for row in stock_rows), start=0),
+        "unidades_reservadas": sum((row["cantidad_reservada_uprim"] for row in stock_rows), start=0),
         "valor_total_inventario": total_stock_ref,
     }
 
-    movimientos_qs = Stock.objects.filter(fecha_movimiento__date__range=(inicio, fin)).annotate(
-        qty_unidad=_qty_unidad_expr()
-    )
-    tipo_labels = dict(Stock.MOVIMIENTO_CHOICES)
-
-    movimientos_tipo = list(
-        movimientos_qs.values("tipo_movimiento")
-        .annotate(
-            movimientos=Count("id"),
-            unidades=Coalesce(Sum("qty_unidad"), Value(0, output_field=IntegerField())),
-        )
-        .order_by("tipo_movimiento")
-    )
-    for row in movimientos_tipo:
-        row["tipo_label"] = tipo_labels.get(row["tipo_movimiento"], row["tipo_movimiento"])
-
-    movimientos_rows = list(
-        movimientos_qs.values(
-            "producto__codigo_producto_interno",
-            "producto__nombre_producto",
-            "tipo_movimiento",
-        )
-        .annotate(
-            movimientos=Count("id"),
-            unidades=Coalesce(Sum("qty_unidad"), Value(0, output_field=IntegerField())),
-        )
-        .order_by("producto__nombre_producto", "tipo_movimiento")
-    )
-    for row in movimientos_rows:
-        row["tipo_label"] = tipo_labels.get(row["tipo_movimiento"], row["tipo_movimiento"])
-
     return render(
         request,
-        "indicadores/inventario.html",
+        INVENTARIO_TEMPLATE,
         {
             "periodo": periodo,
             "meses": meses,
             "inicio": inicio,
             "fin": fin,
             "filtro_stock": filtro_stock,
+            "search_term": search_term,
             "productos_total_general": len(stock_rows_base),
             "productos_con_stock": sum(1 for row in stock_rows_base if row["cantidad_disponible_uprim"] > 0),
             "kpis": kpis,
             "stock_rows": stock_rows,
-            "criticos_rows": criticos[:20],
-            "movimientos_tipo": movimientos_tipo,
-            "movimientos_rows": movimientos_rows,
         },
     )
+
+
+@login_required
+def dashboard_inventario(request):
+    destino = reverse("stock_productos")
+    query = request.GET.urlencode()
+    if query:
+        destino = f"{destino}?{query}"
+    return redirect(destino)
 
 
 @login_required
@@ -230,39 +230,21 @@ def flujo_inventario_producto(request, producto_id):
         Producto.objects.select_related("empaque_primario", "empaque_secundario", "empaque_terciario"),
         pk=producto_id,
     )
-    historico = list(
-        MovimientoStockHistorico.objects.filter(stock__producto=producto)
-        .select_related(
-            "responsable",
-            "stock__producto",
-            "stock__recepcion__proveedor",
-            "stock__pedido__nombre_cliente",
-        )
-        .order_by("fecha_movimiento", "id")
-    )
-    legacy = list(
+    movimientos = list(
         Stock.objects.filter(producto=producto)
-        .select_related("producto", "recepcion__proveedor", "pedido__nombre_cliente")
-        .annotate(historial_count=Count("historial_movimientos"))
-        .filter(historial_count=0)
+        .select_related("responsable", "producto", "recepcion__proveedor", "pedido__nombre_cliente")
         .order_by("fecha_movimiento", "id")
     )
 
     pedido_ids = {
-        pedido_id
-        for pedido_id in [
-            *(
-                getattr(_stock_relacion(movimiento), "pedido_id", None)
-                for movimiento in historico
-            ),
-            *(getattr(movimiento, "pedido_id", None) for movimiento in legacy),
-        ]
-        if pedido_id
+        movimiento.pedido_id
+        for movimiento in movimientos
+        if movimiento.pedido_id
     }
     ventas_por_pedido = _ventas_por_pedido_ids(pedido_ids)
 
     fuentes = []
-    for movimiento in historico:
+    for movimiento in movimientos:
         fecha_referencia, fecha_movimiento = _fecha_referencia_movimiento(movimiento, ventas_por_pedido)
         fuentes.append(
             {
@@ -270,56 +252,43 @@ def flujo_inventario_producto(request, producto_id):
                 "fecha": fecha_referencia,
                 "fecha_movimiento": fecha_movimiento,
                 "sort_id": movimiento.id,
-                "es_legado": False,
-            }
-        )
-    for movimiento in legacy:
-        fecha_referencia, fecha_movimiento = _fecha_referencia_movimiento(movimiento, ventas_por_pedido)
-        fuentes.append(
-            {
-                "obj": movimiento,
-                "fecha": fecha_referencia,
-                "fecha_movimiento": fecha_movimiento,
-                "sort_id": movimiento.id,
-                "es_legado": True,
             }
         )
 
-    fuentes.sort(
-        key=lambda item: (
-            item["fecha"] or timezone.localdate(item["fecha_movimiento"]),
-            item["fecha_movimiento"],
-            item["sort_id"],
-        )
+    fuentes.sort(key=_sort_key_fuente)
+
+    reservas_pendientes = sum(
+        _qty_unidad_movimiento(fuente["obj"])
+        for fuente in fuentes
+        if fuente["obj"].tipo_movimiento == "RESERVA"
+        and getattr(_stock_relacion(fuente["obj"]), "tipo_movimiento", "") == "RESERVA"
     )
 
     movimientos_rows = []
     subtotal = 0
     subtotal_entradas = 0
     subtotal_salidas = 0
-    reservas_pendientes = 0
 
     for fuente in fuentes:
         movimiento = fuente["obj"]
+        if movimiento.tipo_movimiento == "RESERVA":
+            continue
+
         cantidad = _qty_unidad_movimiento(movimiento)
         valor_unitario = _normalizar_precio_movimiento(movimiento)
         total = (Decimal(cantidad) * valor_unitario).quantize(Decimal("0.01"))
-        base_rel = _stock_relacion(movimiento)
-        reserva_pendiente = movimiento.tipo_movimiento == "RESERVA" and getattr(base_rel, "tipo_movimiento", "") == "RESERVA"
-        delta = _delta_subtotal(movimiento.tipo_movimiento, cantidad, es_legado=fuente["es_legado"])
+        delta = _delta_subtotal(movimiento.tipo_movimiento, cantidad)
 
         if delta > 0:
             subtotal_entradas += delta
         elif delta < 0:
             subtotal_salidas += abs(delta)
-        if reserva_pendiente:
-            reservas_pendientes += cantidad
 
         subtotal += delta
 
         if movimiento.tipo_movimiento == "DESPACHO":
             fecha_class = "text-danger"
-        elif movimiento.tipo_movimiento in {"DISPONIBLE", "RECEPCION"}:
+        elif movimiento.tipo_movimiento == "DISPONIBLE":
             fecha_class = "text-success"
         else:
             fecha_class = "text-warning"
@@ -328,7 +297,7 @@ def flujo_inventario_producto(request, producto_id):
             {
                 "movimiento_id": movimiento.id,
                 "fecha": fuente["fecha"],
-                "transaccion": _tipo_transaccion_label(movimiento, reserva_pendiente=reserva_pendiente),
+                "transaccion": _tipo_transaccion_label(movimiento),
                 "cantidad": cantidad,
                 "valor": valor_unitario,
                 "total": total,
@@ -336,10 +305,12 @@ def flujo_inventario_producto(request, producto_id):
                 "cliente_proveedor": _cliente_proveedor_label(movimiento),
                 "responsable": _responsable_label(movimiento),
                 "es_salida": movimiento.tipo_movimiento == "DESPACHO",
-                "es_reserva": movimiento.tipo_movimiento == "RESERVA",
+                "es_reserva": False,
                 "fecha_class": fecha_class,
             }
         )
+
+    stock_disponible = subtotal - reservas_pendientes
 
     return render(
         request,
@@ -350,9 +321,10 @@ def flujo_inventario_producto(request, producto_id):
             "subtotal_entradas": subtotal_entradas,
             "subtotal_salidas": subtotal_salidas,
             "reservas_pendientes": reservas_pendientes,
-            "subtotal_final": subtotal,
+            "subtotal_final": stock_disponible,
             "year": request.GET.get("year", ""),
             "month": request.GET.get("month", ""),
             "stock_view": request.GET.get("stock_view", "todos"),
+            "search_term": (request.GET.get("q") or "").strip(),
         },
     )

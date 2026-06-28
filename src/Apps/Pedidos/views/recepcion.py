@@ -24,14 +24,13 @@ from Apps.Pedidos.models import (
     Producto,
     Proveedor,
     Recepcion,
+    RecepcionLinea,
     Stock,
 )
-from Apps.Pedidos.services import registrar_movimiento_stock
 from Apps.Pedidos.utils import eliminar_generica
 
 # --- Constantes Decimal ---
 DOS_DEC = Decimal("0.01")
-IVA_FACTOR = Decimal("1.19")
 
 
 def _total_neto_desde_lineas(recepcion):
@@ -39,7 +38,7 @@ def _total_neto_desde_lineas(recepcion):
         F("qty") * F("precio_unitario"),
         output_field=DecimalField(max_digits=14, decimal_places=2),
     )
-    total = Stock.objects.filter(recepcion=recepcion).aggregate(total=Sum(expr))["total"]
+    total = RecepcionLinea.objects.filter(recepcion=recepcion).aggregate(total=Sum(expr))["total"]
     return (total or Decimal("0.00")).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
 
 
@@ -129,25 +128,7 @@ def crear_recepcion_productos(request, recepcion_id):
     if request.method == "POST":
         form = CrearRecepcionProductoForm(request.POST, documento=recepcion)
         if form.is_valid():
-            linea = form.save(commit=False)
-
-            # Normaliza el precio unitario a neto si el valor ingresado venia con IVA.
-            incluye_iva = bool(request.POST.get("precio_incluye_iva"))
-            if linea.precio_unitario is None:
-                linea.precio_unitario = Decimal("0.00")
-            else:
-                linea.precio_unitario = Decimal(linea.precio_unitario)
-
-            if incluye_iva:
-                linea.precio_unitario = (linea.precio_unitario / IVA_FACTOR).quantize(
-                    DOS_DEC, rounding=ROUND_HALF_UP
-                )
-
-            linea.recepcion = recepcion
-            linea.save()
-            registrar_movimiento_stock(linea, responsable=request.user)
-
-            # El neto del documento se deriva de la suma de lineas, no por acumulacion.
+            form.save()
             _sincronizar_totales_recepcion(recepcion)
 
             messages.success(request, "Producto agregado a la recepcion.")
@@ -155,13 +136,16 @@ def crear_recepcion_productos(request, recepcion_id):
     else:
         form = CrearRecepcionProductoForm(documento=recepcion)
 
-    productos_disponibles = Producto.objects.filter(tipo_producto="SIMPLE").order_by("nombre_producto")
+    productos_disponibles = Producto.objects.filter(
+        tipo_producto="SIMPLE",
+        estado_operativo__in=Producto.estados_compra_habilitados(),
+    ).order_by("nombre_producto")
     codigos_qs = CodigoProveedor.objects.filter(proveedor=recepcion.proveedor).values(
         "codigo_proveedor",
         "producto_id",
     )
     codigos_proveedor = list(codigos_qs)
-    productos_agregados = Stock.objects.filter(recepcion=recepcion)
+    productos_agregados = RecepcionLinea.objects.filter(recepcion=recepcion).select_related("producto")
 
     return render(
         request,
@@ -180,7 +164,7 @@ def crear_recepcion_productos(request, recepcion_id):
 
 def recepcion_productos_historico(request, documentoid):
     documento = get_object_or_404(Recepcion, pk=documentoid)
-    recepciones = Stock.objects.filter(recepcion=documento)
+    recepciones = RecepcionLinea.objects.filter(recepcion=documento).select_related("producto")
 
     if request.method == "POST":
         if documento.estado_recepcion == "Finalizado":
@@ -189,6 +173,7 @@ def recepcion_productos_historico(request, documentoid):
         form = CrearRecepcionProductoForm(request.POST, documento=documento)
         if form.is_valid():
             form.save()
+            _sincronizar_totales_recepcion(documento)
             messages.success(request, "Producto agregado correctamente.")
             return redirect("crear_recepcion_productos", recepcion_id=documento.id)
         for field, errors in form.errors.items():
@@ -221,7 +206,7 @@ def lista_recepcion_historico(request):
 
 @require_POST
 def eliminar_recepcion_producto(request, producto_id):
-    producto = get_object_or_404(Stock, id=producto_id)
+    producto = get_object_or_404(RecepcionLinea, id=producto_id)
     documento = producto.recepcion
     if documento.estado_recepcion == "Finalizado":
         return _redirigir_recepcion_finalizada(request, documento)
@@ -236,7 +221,7 @@ def eliminar_recepcion(request, id):
     if recepcion.estado_recepcion == "Finalizado":
         return _redirigir_recepcion_finalizada(request, recepcion)
 
-    if Stock.objects.filter(recepcion=recepcion, tipo_movimiento="RECEPCION").exists():
+    if RecepcionLinea.objects.filter(recepcion=recepcion).exists():
         messages.error(request, "No se puede eliminar: existen productos asociados.")
         return redirect("lista_recepcion")
     return eliminar_generica(request, Recepcion, id, "lista_recepcion")
@@ -250,8 +235,28 @@ def finalizar_recepcion(request, id):
     if request.method == "POST":
         _sincronizar_totales_recepcion(documento)
 
-        productos_asociados = Stock.objects.filter(recepcion=documento, tipo_movimiento="RECEPCION")
-        productos_asociados.update(tipo_movimiento="DISPONIBLE")
+        responsable = getattr(request, "user", None)
+        if not getattr(responsable, "is_authenticated", False):
+            responsable = None
+
+        lineas = list(
+            RecepcionLinea.objects.filter(recepcion=documento).select_related("producto")
+        )
+        Stock.objects.bulk_create(
+            [
+                Stock(
+                    tipo_movimiento="DISPONIBLE",
+                    producto=linea.producto,
+                    qty=linea.qty,
+                    empaque=linea.empaque,
+                    precio_unitario=linea.precio_unitario,
+                    fecha_movimiento=documento.fecha_recepcion,
+                    recepcion=documento,
+                    responsable=responsable,
+                )
+                for linea in lineas
+            ]
+        )
 
         documento.estado_recepcion = "Finalizado"
         documento.save(update_fields=["estado_recepcion"])

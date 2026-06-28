@@ -11,7 +11,7 @@ from decimal import Decimal
 from .models import (
     Proveedor, Contacto, Recepcion, Producto, CodigoProveedor, Stock, ListaPrecios, Cliente,
     Pedido, Venta, Categoria, Subcategoria, Cotizacion, CategoriaEmpaque,
-    EntregaPedido, ListaPreciosPredeterminada, ListaPreciosPredItem, MovimientoStockHistorico,
+    EntregaPedido, ListaPreciosPredeterminada, ListaPreciosPredItem, RecepcionLinea,
     UtilidadProducto,
 )
 
@@ -48,6 +48,15 @@ class EntregaPedidoInline(admin.TabularInline):
             return format_html('<a href="{}" target="_blank">Ver Foto</a>', obj.foto.url)
         return "—"
     foto_link.short_description = "Foto"
+
+
+class RecepcionLineaInline(admin.TabularInline):
+    model = RecepcionLinea
+    extra = 0
+    fields = ('id', 'producto', 'qty', 'empaque', 'precio_unitario', 'creado')
+    readonly_fields = ('id', 'creado')
+    autocomplete_fields = ('producto',)
+    show_change_link = True
 
 
 # ---------- ModelAdmins ----------
@@ -96,10 +105,10 @@ class ContactoAdmin(admin.ModelAdmin):
 
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nombre_producto', 'codigo_producto_interno','categoria_producto', 'subcategoria_producto', 'qty_unidad', 'medida',
+    list_display = ('id', 'nombre_producto', 'codigo_producto_interno', 'estado_operativo', 'categoria_producto', 'subcategoria_producto', 'qty_unidad', 'medida',
                     'empaque_primario', 'empaque_secundario', 'empaque_terciario')
     search_fields = ('nombre_producto', 'codigo_producto_interno', 'codigo_producto_proveedor')
-    list_filter = ('categoria_producto', 'subcategoria_producto', 'medida')
+    list_filter = ('estado_operativo', 'categoria_producto', 'subcategoria_producto', 'medida')
     ordering = ('-id',)
     autocomplete_fields = ('categoria_producto', 'subcategoria_producto',
                            'empaque_primario', 'empaque_secundario', 'empaque_terciario')
@@ -128,29 +137,30 @@ class RecepcionAdmin(admin.ModelAdmin):
     date_hierarchy = 'fecha_recepcion'
     ordering = ('-id',)
     autocomplete_fields = ('proveedor',)
+    inlines = [RecepcionLineaInline]
 
 
 @admin.register(Stock)
 class StockAdmin(admin.ModelAdmin):
     list_display = ('id', 'tipo_movimiento', 'producto', 'qty', 'empaque', 'precio_unitario',
-                    'fecha_movimiento', 'recepcion', 'pedido')
+                    'fecha_movimiento', 'fecha_reserva', 'recepcion', 'pedido', 'responsable')
     search_fields = ('producto__nombre_producto', 'recepcion__num_documento_recepcion', 'pedido__id')
     list_filter = ('tipo_movimiento', 'empaque', 'fecha_movimiento', 'producto')
     date_hierarchy = 'fecha_movimiento'
     ordering = ('-id',)
-    autocomplete_fields = ('producto', 'recepcion', 'pedido')
-    list_select_related = ('producto', 'recepcion', 'pedido')
+    autocomplete_fields = ('producto', 'recepcion', 'pedido', 'responsable')
+    list_select_related = ('producto', 'recepcion', 'pedido', 'responsable')
 
 
-@admin.register(MovimientoStockHistorico)
-class MovimientoStockHistoricoAdmin(admin.ModelAdmin):
-    list_display = ('id', 'tipo_movimiento', 'stock', 'qty', 'empaque', 'precio_unitario', 'fecha_movimiento', 'responsable')
-    search_fields = ('stock__producto__nombre_producto', 'stock__recepcion__num_documento_recepcion', 'stock__pedido__id', 'responsable__username')
-    list_filter = ('tipo_movimiento', 'empaque', 'fecha_movimiento')
-    date_hierarchy = 'fecha_movimiento'
+@admin.register(RecepcionLinea)
+class RecepcionLineaAdmin(admin.ModelAdmin):
+    list_display = ('id', 'recepcion', 'producto', 'qty', 'empaque', 'precio_unitario', 'creado')
+    search_fields = ('recepcion__num_documento_recepcion', 'producto__nombre_producto')
+    list_filter = ('empaque', 'creado')
+    date_hierarchy = 'creado'
     ordering = ('-id',)
-    autocomplete_fields = ('stock', 'responsable')
-    list_select_related = ('stock__producto', 'stock__recepcion', 'stock__pedido', 'responsable')
+    autocomplete_fields = ('recepcion', 'producto')
+    list_select_related = ('recepcion', 'producto')
 
 
 @admin.register(ListaPrecios)

@@ -54,6 +54,8 @@ def resolver_codigo_proveedor(request):
         return JsonResponse({'ok': False, 'error': 'Código no encontrado'}, status=404)
 
     p: Producto = cp.producto
+    if not p.compra_habilitada:
+        return JsonResponse({'ok': False, 'error': 'El producto no estÃ¡ habilitado para nuevas recepciones.'}, status=400)
 
     empaques = []
     if getattr(p, 'empaque_primario_id', None):

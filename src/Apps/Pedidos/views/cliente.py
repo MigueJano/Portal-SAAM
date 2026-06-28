@@ -148,6 +148,16 @@ def _precio_esta_desactualizado(fecha_desde, today=None) -> bool:
     return fecha_alerta <= (today or timezone.localdate())
 
 
+def _productos_habilitados_para_precio():
+    productos = (
+        Producto.objects
+        .filter(estado_operativo__in=Producto.estados_precio_habilitados())
+        .prefetch_related('componentes_pack__producto')
+        .order_by('nombre_producto')
+    )
+    return [producto for producto in productos if producto.precio_habilitado]
+
+
 def asignar_precios(request, cliente_id):
     """
     Asignar precios personalizados a un cliente:
@@ -176,7 +186,14 @@ def asignar_precios(request, cliente_id):
         )
         .order_by('nombre_producto__nombre_producto', 'empaque')
     )
-    productos = Producto.objects.all().order_by('nombre_producto')
+    productos = _productos_habilitados_para_precio()
+    if (
+        precio_en_edicion
+        and precio_en_edicion.nombre_producto_id
+        and all(producto.id != precio_en_edicion.nombre_producto_id for producto in productos)
+    ):
+        productos = productos + [precio_en_edicion.nombre_producto]
+        productos.sort(key=lambda producto: producto.nombre_producto.casefold())
 
     # Listas predeterminadas activas para el selector
     from Apps.Pedidos.models import ListaPreciosPredeterminada  # evitar import circular si lo hubiera
@@ -253,12 +270,18 @@ def asignar_precios(request, cliente_id):
                 return redirect('asignar_precios', cliente_id=cliente.id)
 
             try:
-                importar_desde_predeterminada(
+                stats = importar_desde_predeterminada(
                     cliente_id=cliente.id,
                     lista_pred_id=int(lista_pred_id),
                     vig_override=vig_override
                 )
-                messages.success(request, "Precios importados y lista asociada al cliente.")
+                messages.success(
+                    request,
+                    (
+                        "Precios importados y lista asociada al cliente. "
+                        f"Productos omitidos por estado: {stats.get('skipped_disabled', 0)}."
+                    ),
+                )
             except Exception as e:
                 messages.error(request, f"No se pudo importar: {e}")
             return redirect('asignar_precios', cliente_id=cliente.id)
@@ -440,7 +463,8 @@ def _costo_por_empaque(c_unit: Decimal, emp: str, qs: Decimal, qt: Decimal) -> D
 def bulk_25_por_categoria(request, cliente_id: int, categoria_id: int):
     cliente = get_object_or_404(Cliente, pk=cliente_id)
     productos = Producto.objects.filter(
-        categoria_producto_id=categoria_id
+        categoria_producto_id=categoria_id,
+        estado_operativo__in=Producto.estados_precio_habilitados(),
     ).only('id', 'qty_secundario', 'qty_terciario')
 
     vigencia_date = date(date.today().year, 12, 31)
@@ -449,6 +473,9 @@ def bulk_25_por_categoria(request, cliente_id: int, categoria_id: int):
     creados = actualizados = omitidos = 0
 
     for p in productos:
+        if not p.precio_habilitado:
+            omitidos += 1
+            continue
         c_unit = _costo_unitario_desde_stock(p)
         if c_unit <= 0:
             omitidos += 1

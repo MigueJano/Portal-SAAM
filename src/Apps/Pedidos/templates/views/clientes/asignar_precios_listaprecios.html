@@ -30,6 +30,10 @@
   </div>
 {% endif %}
 
+<div class="alert alert-secondary py-2 mt-3">
+  Solo se muestran productos habilitados para nuevos precios. Los items hist&oacute;ricos bloqueados se mantienen visibles en la tabla.
+</div>
+
 <form method="post" class="row g-3">
   {% csrf_token %}
 
@@ -98,7 +102,12 @@
   <tbody>
     {% for item in precios %}
     <tr{% if item.alerta_bajo_costo %} class="table-danger"{% elif item.precio_desactualizado %} class="table-warning"{% endif %}>
-      <td>{{ item.nombre_producto.nombre_producto }}</td>
+      <td>
+        {% if not item.nombre_producto.precio_habilitado %}
+          <span class="badge bg-warning text-dark me-1">Bloqueado</span>
+        {% endif %}
+        {{ item.nombre_producto.nombre_producto }}
+      </td>
       <td class="text-center">
         {% if item.empaque == 'PRIMARIO' and item.nombre_producto.empaque_primario %}
           {{ item.nombre_producto.empaque_primario.nombre }}

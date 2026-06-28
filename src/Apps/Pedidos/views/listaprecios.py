@@ -88,6 +88,16 @@ def _costo_por_empaque(costo_unitario: Decimal, producto: Producto, empaque: str
     return _round2(costo_unitario)
 
 
+def _productos_habilitados_para_precio():
+    productos = (
+        Producto.objects
+        .filter(estado_operativo__in=Producto.estados_precio_habilitados())
+        .prefetch_related("componentes_pack__producto")
+        .order_by("nombre_producto")
+    )
+    return [producto for producto in productos if producto.precio_habilitado]
+
+
 # =============================================================================
 # Listar / Crear / Editar listas de precios
 # =============================================================================
@@ -180,7 +190,10 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
         precio_neto = precio_neto.quantize(DOS_DEC, rounding=ROUND_HALF_UP)
         iva, total  = _calcular_iva_total(precio_neto)
 
-        producto = get_object_or_404(Producto, id=producto_id)
+        producto = get_object_or_404(Producto.objects.prefetch_related("componentes_pack__producto"), id=producto_id)
+        if not producto.precio_habilitado:
+            messages.error(request, "El producto no estÃ¡ habilitado para nuevos precios.")
+            return redirect(reverse("asignar_precios_listaprecios", args=[lista.id]))
 
         try:
             with transaction.atomic():
@@ -200,7 +213,10 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
                     sync_stats = sincronizar_lista_predeterminada_a_clientes_asociados(lista)
                     messages.success(
                         request,
-                        f"Precio actualizado exitosamente. Sincronizados {sync_stats['clientes']} clientes asociados.",
+                        (
+                            f"Precio actualizado exitosamente. Sincronizados {sync_stats['clientes']} clientes asociados. "
+                            f"Productos omitidos por estado: {sync_stats.get('skipped_disabled', 0)}."
+                        ),
                     )
                 else:
                     ListaPreciosPredItem.objects.create(
@@ -215,7 +231,10 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
                     sync_stats = sincronizar_lista_predeterminada_a_clientes_asociados(lista)
                     messages.success(
                         request,
-                        f"Precio agregado exitosamente. Sincronizados {sync_stats['clientes']} clientes asociados.",
+                        (
+                            f"Precio agregado exitosamente. Sincronizados {sync_stats['clientes']} clientes asociados. "
+                            f"Productos omitidos por estado: {sync_stats.get('skipped_disabled', 0)}."
+                        ),
                     )
         except IntegrityError:
             messages.error(request, "No se pudo guardar el precio. Verifica duplicados o datos.")
@@ -223,7 +242,7 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
         return redirect(reverse("asignar_precios_listaprecios", args=[lista.id]))
 
     # GET
-    productos = Producto.objects.all().order_by("nombre_producto")
+    productos = _productos_habilitados_para_precio()
     precios   = list(
         ListaPreciosPredItem.objects
         .select_related(
@@ -294,7 +313,10 @@ def eliminar_precio_listaprecios(request, item_id: int):
         sync_stats = sincronizar_lista_predeterminada_a_clientes_asociados(lista)
         messages.success(
             request,
-            f"Ítem eliminado. Sincronizados {sync_stats['clientes']} clientes asociados.",
+            (
+                f"Ítem eliminado. Sincronizados {sync_stats['clientes']} clientes asociados. "
+                f"Productos omitidos por estado: {sync_stats.get('skipped_disabled', 0)}."
+            ),
         )
     except IntegrityError:
         messages.error(request, "No se pudo eliminar el ítem. Intenta nuevamente.")
@@ -310,7 +332,8 @@ def sincronizar_clientes_listaprecios(request, listaprecios_id: int):
         (
             f"Sincronización masiva completada. "
             f"Clientes: {stats['clientes']}, creados: {stats['created']}, "
-            f"actualizados: {stats['updated']}, eliminados: {stats['deleted']}."
+            f"actualizados: {stats['updated']}, eliminados: {stats['deleted']}, "
+            f"omitidos por estado: {stats.get('skipped_disabled', 0)}."
         ),
     )
     return redirect(reverse("asignar_precios_listaprecios", args=[lista.id]))

@@ -14,6 +14,46 @@ from Apps.Pedidos.services.listaprecios_alertas import (
     filas_precios_cliente,
 )
 
+IVA_RATE = Decimal('0.19')
+DOS_DEC = Decimal('0.01')
+
+
+def _calcular_total_pedido_dashboard(pedido, movimiento_principal):
+    if pedido.lineas.exists():
+        total_neto = sum(
+            (
+                Decimal(linea.cantidad or 0) * Decimal(linea.precio_unitario or 0)
+                for linea in pedido.lineas.all()
+            ),
+            start=Decimal('0'),
+        )
+    else:
+        reservas = Stock.objects.filter(
+            pedido=pedido,
+            precio_unitario__isnull=False,
+        )
+        if movimiento_principal == 'DESPACHO':
+            reservas = list(reservas.filter(tipo_movimiento='DESPACHO'))
+            if not reservas:
+                reservas = list(
+                    Stock.objects.filter(
+                        pedido=pedido,
+                        precio_unitario__isnull=False,
+                        tipo_movimiento__in=['RESERVA', 'DESPACHO'],
+                    )
+                )
+        else:
+            reservas = list(reservas.filter(tipo_movimiento='RESERVA'))
+
+        total_neto = sum(
+            (Decimal(reserva.qty or 0) * Decimal(reserva.precio_unitario or 0) for reserva in reservas),
+            start=Decimal('0'),
+        )
+
+    total_neto = Decimal(total_neto).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
+    iva = (total_neto * IVA_RATE).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
+    return (total_neto + iva).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
+
 
 def home(request):
     """
@@ -34,22 +74,26 @@ def home(request):
     pedidos_qs = Pedido.objects.filter(estado_pedido='Pendiente').order_by('-fecha_pedido')
     pedidos = list(pedidos_qs)
     cantidad_pedidos_pendiente = len(pedidos)
+    monto_pedidos_pendientes = Decimal('0.00')
 
     # Calcular total de cada pedido pendiente
     for pedido in pedidos:
-        reservas = Stock.objects.filter(pedido=pedido, tipo_movimiento='RESERVA')
-        total_pedido = sum(r.qty * (r.precio_unitario or 0) for r in reservas)
-        total_pedido_iva = Decimal(total_pedido) * Decimal('1.19')
-        pedido.total_pedido_pendiente = total_pedido_iva.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        pedido.total_pedido_pendiente = _calcular_total_pedido_dashboard(
+            pedido,
+            movimiento_principal='RESERVA',
+        )
+        monto_pedidos_pendientes += pedido.total_pedido_pendiente
 
     pedidos_no_pagados = list(Pedido.objects.filter(estado_pedido='Entregado').order_by('-fecha_pedido'))
+    monto_pedidos_no_pagados = Decimal('0.00')
 
     # Calcular total de cada pedido entregado no pagado
     for pedido in pedidos_no_pagados:
-        reservas = Stock.objects.filter(pedido=pedido, tipo_movimiento='DESPACHO')
-        total_pedido_no_pagado = sum(r.qty * (r.precio_unitario or 0) for r in reservas)
-        total_pedido_no_pagado_iva = Decimal(total_pedido_no_pagado) * Decimal('1.19')
-        pedido.total_pedido_no_pagado = total_pedido_no_pagado_iva.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        pedido.total_pedido_no_pagado = _calcular_total_pedido_dashboard(
+            pedido,
+            movimiento_principal='DESPACHO',
+        )
+        monto_pedidos_no_pagados += pedido.total_pedido_no_pagado
 
     cantidad_pedidos_no_pagados = len(pedidos_no_pagados)
 
@@ -71,6 +115,8 @@ def home(request):
         'pedidos_no_pagados': pedidos_no_pagados,
         'cantidad_pedidos_pendiente': cantidad_pedidos_pendiente,
         'cantidad_pedidos_no_pagados': cantidad_pedidos_no_pagados,
+        'monto_pedidos_pendientes': monto_pedidos_pendientes,
+        'monto_pedidos_no_pagados': monto_pedidos_no_pagados,
         'precios_cliente_bajo_costo': precios_cliente_bajo_costo_preview,
         'cantidad_precios_cliente_bajo_costo': cantidad_precios_cliente_bajo_costo,
         'precios_cliente_bajo_costo_restantes': max(

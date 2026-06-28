@@ -65,6 +65,7 @@ urlpatterns = [
     path("productos/crear-pack/", _private(views.crear_pack), name="crear_pack"),
     path("productos/editar/<int:id>/", _private(views.editar_producto), name="editar_producto"),
     path("productos/editar-pack/<int:id>/", _private(views.editar_pack), name="editar_pack"),
+    path("productos/estado/<int:id>/", _private(views.cambiar_estado_producto), name="cambiar_estado_producto"),
     path("productos/eliminar/<int:id>/", _private(views.eliminar_producto), name="eliminar_producto"),
     path("productos/lista-precios/", _private(views.lista_precios), name="lista_precios"),
 

@@ -31,8 +31,7 @@ from Apps.Pedidos.services import (
     desglose_ingreso_pack,
     es_pack,
     factor_empaque,
-    registrar_movimiento_stock,
-    registrar_movimientos_stock,
+    items_comerciales_pedido,
     stock_cache_simple,
     stock_disponible_pack,
     validar_stock_pack,
@@ -77,6 +76,22 @@ def _nombre_empaque(producto: Producto, empaque: str) -> str:
 
 def _tipo_linea_desde_producto(producto: Producto) -> str:
     return 'PACK' if es_pack(producto) else 'PRODUCTO'
+
+
+def _precios_vendibles_cliente(cliente):
+    precios = list(
+        ListaPrecios.objects
+        .filter(nombre_cliente=cliente)
+        .select_related(
+            'nombre_producto',
+            'nombre_producto__empaque_primario',
+            'nombre_producto__empaque_secundario',
+            'nombre_producto__empaque_terciario',
+        )
+        .prefetch_related('nombre_producto__componentes_pack__producto')
+        .order_by('nombre_producto__nombre_producto')
+    )
+    return [precio for precio in precios if precio.nombre_producto.venta_habilitada]
 
 
 def _linea_pedido_existente(pedido: Pedido, producto: Producto, empaque: str, precio_unitario: Decimal):
@@ -166,89 +181,50 @@ def _resumen_linea_producto(linea: PedidoLinea) -> dict:
     }
 
 
+def _resumen_stock_legacy(row: dict, producto: Producto) -> dict:
+    precio_venta = Decimal(row["precio_unitario"] or 0)
+    qty = int(row["qty_sum"] or 0)
+    factor_venta = Decimal(factor_empaque(producto, row["empaque"]))
+    subtotal = Decimal(qty) * precio_venta
+    precio_compra_unitario = costo_maximo_unitario(producto)
+    qty_unidades = Decimal(qty) * factor_venta
+    costo_total = qty_unidades * precio_compra_unitario
+    ganancia = subtotal - costo_total
+    ganancia_pct = Decimal("0")
+    if costo_total > 0:
+        ganancia_pct = ((ganancia / costo_total) * CIEN).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
+
+    return {
+        "linea_id": None,
+        "legacy_producto_id": row["producto"],
+        "nombre": row["producto__nombre_producto"],
+        "cantidad": qty,
+        "empaque": row["empaque"],
+        "empaque_display": _nombre_empaque(producto, row["empaque"]),
+        "precio_unitario": precio_venta.quantize(PESO, rounding=ROUND_HALF_UP),
+        "subtotal": subtotal.quantize(PESO, rounding=ROUND_HALF_UP),
+        "precio_compra": precio_compra_unitario.quantize(PESO, rounding=ROUND_HALF_UP),
+        "ganancia": ganancia.quantize(PESO, rounding=ROUND_HALF_UP),
+        "ganancia_pct": ganancia_pct,
+        "es_pack": False,
+    }
+
+
 def _detalle_lineas_pedido(pedido: Pedido) -> tuple[list[dict], Decimal, Decimal, Decimal, Decimal]:
-    lineas = list(
-        pedido.lineas
-        .select_related(
-            'producto',
-            'producto__empaque_primario',
-            'producto__empaque_secundario',
-            'producto__empaque_terciario',
-        )
-        .order_by('id')
-    )
-
-    if lineas:
-        filas = []
-        total_neto = Decimal('0')
-        ganancia_total = Decimal('0')
-        for linea in lineas:
-            fila = _resumen_linea_pack(linea) if linea.tipo_linea == 'PACK' else _resumen_linea_producto(linea)
-            filas.append(fila)
-            total_neto += Decimal(fila['subtotal'])
-            ganancia_total += Decimal(fila['ganancia'])
-
-        total_neto = total_neto.quantize(PESO, rounding=ROUND_HALF_UP)
-        iva = (total_neto * IVA_RATE).quantize(PESO, rounding=ROUND_HALF_UP)
-        total = (total_neto + iva).quantize(PESO, rounding=ROUND_HALF_UP)
-        return filas, total_neto, iva, total, ganancia_total.quantize(PESO, rounding=ROUND_HALF_UP)
-
-    if pedido.estado_pedido == 'Entregado':
-        base_qs = Stock.objects.filter(pedido=pedido, tipo_movimiento='DESPACHO')
-        if not base_qs.exists():
-            base_qs = Stock.objects.filter(pedido=pedido, tipo_movimiento__in=['RESERVA', 'DESPACHO'])
-    else:
-        base_qs = Stock.objects.filter(pedido=pedido, tipo_movimiento='RESERVA')
-
-    reservas = list(
-        base_qs
-        .values(
-            'producto',
-            'producto__nombre_producto',
-            'empaque',
-            'precio_unitario',
-            'producto__empaque_primario__nombre',
-            'producto__empaque_secundario__nombre',
-            'producto__empaque_terciario__nombre'
-        )
-        .annotate(qty_sum=Sum('qty'))
-        .order_by('producto')
-    )
-
     filas = []
-    total_neto = Decimal('0')
-    ganancia_total = Decimal('0')
-    for r in reservas:
-        producto = Producto.objects.get(id=r['producto'])
-        precio_venta = Decimal(r['precio_unitario'] or 0)
-        qty = int(r['qty_sum'] or 0)
-        factor_venta = Decimal(factor_empaque(producto, r['empaque']))
-        subtotal = Decimal(qty) * precio_venta
-        precio_venta_unitario = (precio_venta / factor_venta).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
-        precio_compra_unitario = costo_maximo_unitario(producto)
-        qty_unidades = Decimal(qty) * factor_venta
-        costo_total = qty_unidades * precio_compra_unitario
-        ganancia = subtotal - costo_total
-        ganancia_pct = Decimal('0')
-        if costo_total > 0:
-            ganancia_pct = ((ganancia / costo_total) * CIEN).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
+    total_neto = Decimal("0")
+    ganancia_total = Decimal("0")
 
-        filas.append({
-            'linea_id': None,
-            'legacy_producto_id': r['producto'],
-            'nombre': r['producto__nombre_producto'],
-            'cantidad': qty,
-            'empaque': r['empaque'],
-            'empaque_display': _nombre_empaque(producto, r['empaque']),
-            'precio_unitario': precio_venta.quantize(PESO, rounding=ROUND_HALF_UP),
-            'subtotal': subtotal.quantize(PESO, rounding=ROUND_HALF_UP),
-            'precio_compra': precio_compra_unitario.quantize(PESO, rounding=ROUND_HALF_UP),
-            'ganancia': ganancia.quantize(PESO, rounding=ROUND_HALF_UP),
-            'ganancia_pct': ganancia_pct,
-            'es_pack': False,
-        })
-        total_neto += subtotal
-        ganancia_total += ganancia
+    for item in items_comerciales_pedido(pedido):
+        if item["origen"] == "linea":
+            linea = item["linea"]
+            fila = _resumen_linea_pack(linea) if linea.tipo_linea == "PACK" else _resumen_linea_producto(linea)
+        else:
+            fila = _resumen_stock_legacy(item["legacy"], item["producto"])
+
+        filas.append(fila)
+        total_neto += Decimal(fila["subtotal"])
+        ganancia_total += Decimal(fila["ganancia"])
 
     total_neto = total_neto.quantize(PESO, rounding=ROUND_HALF_UP)
     iva = (total_neto * IVA_RATE).quantize(PESO, rounding=ROUND_HALF_UP)
@@ -330,10 +306,7 @@ def agregar_productos_pedido(request, pedido_id):
     """
     pedido = get_object_or_404(Pedido, id=pedido_id)
     cliente = pedido.nombre_cliente
-    precios = (ListaPrecios.objects
-               .filter(nombre_cliente=cliente)
-               .select_related('nombre_producto')
-               .order_by('nombre_producto__nombre_producto'))
+    precios = _precios_vendibles_cliente(cliente)
     ProductoFormSet = formset_factory(ProductoReservaForm, extra=0)
 
     if request.method == 'POST':
@@ -349,10 +322,18 @@ def agregar_productos_pedido(request, pedido_id):
                 if qty <= 0:
                     continue
 
-                producto = Producto.objects.get(id=form.cleaned_data['producto_id'])
+                producto = (
+                    Producto.objects
+                    .prefetch_related('componentes_pack__producto')
+                    .get(id=form.cleaned_data['producto_id'])
+                )
                 empaque = form.cleaned_data['empaque']
                 precio_unitario = Decimal(form.cleaned_data['precio_unitario'])
                 empaque_normalizado = _empaque_normalizado(empaque)
+
+                if not producto.venta_habilitada:
+                    errores.append(f"El producto {producto.nombre_producto} no estÃ¡ habilitado para nuevas ventas.")
+                    continue
 
                 total_neto += Decimal(qty) * precio_unitario
                 acciones.append({
@@ -402,31 +383,27 @@ def agregar_productos_pedido(request, pedido_id):
 
                     if es_pack(producto):
                         for item in componentes_pack(producto):
-                            reserva = Stock.objects.create(
+                            Stock.objects.create(
                                 tipo_movimiento='RESERVA',
                                 producto=item.producto,
                                 qty=item.cantidad * qty,
                                 empaque=item.empaque,
                                 precio_unitario=None,
+                                fecha_movimiento=timezone.localdate(),
                                 pedido=pedido,
                                 linea_pedido=linea,
-                            )
-                            registrar_movimiento_stock(
-                                reserva,
                                 responsable=_responsable_desde_request(request),
                             )
                     else:
-                        reserva = Stock.objects.create(
+                        Stock.objects.create(
                             tipo_movimiento='RESERVA',
                             producto=producto,
                             qty=qty,
                             empaque=empaque,
                             precio_unitario=precio_unitario,
+                            fecha_movimiento=timezone.localdate(),
                             pedido=pedido,
-                            linea_pedido=linea
-                        )
-                        registrar_movimiento_stock(
-                            reserva,
+                            linea_pedido=linea,
                             responsable=_responsable_desde_request(request),
                         )
 
@@ -687,14 +664,12 @@ def finalizar_pedido(request, pedido_id):
             pedido.estado_pedido = 'Entregado'
             pedido.save(update_fields=['estado_pedido'])
 
-            reservas_list = list(reservas)
-            registrar_movimientos_stock(
-                reservas_list,
+            reservas.update(
                 tipo_movimiento='DESPACHO',
+                fecha_reserva=F('fecha_movimiento'),
+                fecha_movimiento=fecha.date(),
                 responsable=_responsable_desde_request(request),
-                fecha_movimiento=timezone.now(),
             )
-            reservas.update(tipo_movimiento='DESPACHO')
     except Exception as e:
         messages.error(request, f"No se pudo registrar la entrega: {e}")
         return redirect('detalle_pedido', pedido_id=pedido.id)

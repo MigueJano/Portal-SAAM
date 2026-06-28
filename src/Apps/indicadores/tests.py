@@ -30,7 +30,6 @@ class IndicadoresViewsTests(TestCase):
         self.urls = [
             reverse("dashboard_financiero_simple"),
             reverse("dashboard_ventas"),
-            reverse("dashboard_inventario"),
             reverse("dashboard_operaciones"),
             reverse("dashboard_estrategia"),
             reverse("dashboard_estrategia_precios"),
@@ -50,6 +49,18 @@ class IndicadoresViewsTests(TestCase):
             resp = self.client.get(url)
             self.assertEqual(resp.status_code, 200)
 
+    def test_dashboard_inventario_redirige_a_stock_productos(self):
+        self.client.force_login(self.user)
+        resp = self.client.get(
+            reverse("dashboard_inventario"),
+            data={"year": 2026, "month": 5, "stock_view": "todos"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(
+            resp.url,
+            f'{reverse("stock_productos")}?year=2026&month=5&stock_view=todos',
+        )
+
     def test_menu_contabilidad_en_indicadores(self):
         self.client.force_login(self.user)
         resp = self.client.get(reverse("home"))
@@ -57,6 +68,8 @@ class IndicadoresViewsTests(TestCase):
         self.assertContains(resp, "Contabilidad Pro Pyme", count=1)
         self.assertContains(resp, "Listas de Precios Vigentes", count=1)
         self.assertContains(resp, "Precios por Cliente", count=1)
+        self.assertNotContains(resp, reverse("dashboard_inventario"))
+        self.assertContains(resp, reverse("stock_productos"))
         self.assertContains(resp, "css/style_base.css?v=")
         self.assertContains(resp, "css/colors.css?v=")
 
