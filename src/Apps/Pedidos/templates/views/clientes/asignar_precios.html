@@ -76,6 +76,10 @@
     </div>
   </div>
 
+  <div class="col-12">
+    {% include "views/clientes/partials/calculadora_precios_simple.html" with calculadora_target="precio_venta" calculadora_compra_span="precio_minimo" %}
+  </div>
+
   <!-- Botones (guardar uno) -->
   <div class="col-12 d-flex justify-content-end gap-2 mt-2">
     <button type="submit" name="accion" value="guardar_uno" class="btn btn-outline-success btn-sm">
@@ -136,6 +140,7 @@
       <th>Compra</th>
       <th>Precio Neto</th>
       <th>Dif.</th>
+      <th>Margen</th>
       <th>IVA</th>
       <th>Total</th>
       <th>Desde</th>
@@ -180,6 +185,13 @@
           <span class="{% if item.alerta_bajo_costo %}text-danger{% else %}text-success{% endif %} fw-semibold">
             {% if item.diferencia_compra_venta > 0 %}+{% elif item.diferencia_compra_venta < 0 %}-{% endif %}${{ item.diferencia_compra_venta|floatformat:0|formatear_miles|cut:'-' }}
           </span>
+        {% else %}
+          <span class="text-muted">-</span>
+        {% endif %}
+      </td>
+      <td class="text-center"{% if item.tiene_margen_ganancia %} data-order="{{ item.margen_ganancia }}"{% endif %}>
+        {% if item.tiene_margen_ganancia %}
+          <span class="badge {{ item.badge_margen_ganancia }}">{{ item.margen_ganancia|floatformat:2 }}%</span>
         {% else %}
           <span class="text-muted">-</span>
         {% endif %}
@@ -317,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // DataTable
   $('#tabla-filtros').DataTable({
-    order: [[7, 'asc']], // Desde
+    order: [[8, 'asc']], // Desde
     language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json" },
     autoWidth: false,
     scrollX: true
@@ -335,4 +347,5 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 </script>
+{% include "views/clientes/partials/calculadora_precios_simple_script.html" %}
 {% endblock script %}

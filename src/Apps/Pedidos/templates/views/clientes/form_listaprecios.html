@@ -39,6 +39,10 @@
     >
   </div>
 
+  <div class="mb-4">
+    {% include "views/clientes/partials/calculadora_precios_simple.html" %}
+  </div>
+
   <!-- Botones -->
   <div class="d-flex justify-content-end gap-2 mt-3">
     <button type="submit" class="btn btn-outline-success">Guardar</button>
@@ -47,4 +51,6 @@
 </form>
 {% endblock content %}
 
-{% block script %}{% endblock %}
+{% block script %}
+{% include "views/clientes/partials/calculadora_precios_simple_script.html" %}
+{% endblock %}

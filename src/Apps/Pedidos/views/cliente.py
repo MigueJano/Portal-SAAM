@@ -33,6 +33,8 @@ from decimal import Decimal, ROUND_HALF_UP
 
 DOS_DEC = Decimal('0.01')
 MESES_ALERTA_ACTUALIZACION = 6
+MARGEN_ALERTA_ROJA = Decimal('12')
+MARGEN_ALERTA_AMARILLA = Decimal('20')
 
 
 # ------------------------------------------------------------------
@@ -135,6 +137,24 @@ def _date_input_value(value) -> str:
     return str(value)
 
 
+def _calcular_margen_ganancia(precio_venta: Decimal, precio_compra: Decimal):
+    precio_compra = _round2(Decimal(precio_compra or 0))
+    if precio_compra <= 0:
+        return None
+    precio_venta = _round2(Decimal(precio_venta or 0))
+    return _round2(((precio_venta - precio_compra) / precio_compra) * Decimal('100'))
+
+
+def _badge_margen_ganancia(margen: Decimal | None) -> str:
+    if margen is None:
+        return ""
+    if margen < MARGEN_ALERTA_ROJA:
+        return "bg-danger"
+    if margen <= MARGEN_ALERTA_AMARILLA:
+        return "bg-warning text-dark"
+    return "bg-success"
+
+
 def _fecha_requiere_actualizacion(fecha_desde):
     if not fecha_desde:
         return None
@@ -229,12 +249,19 @@ def asignar_precios(request, cliente_id):
             item.diferencia_compra_venta = _round2(
                 Decimal(item.precio_venta or 0) - item.precio_compra_referencial
             )
+            item.margen_ganancia = _calcular_margen_ganancia(
+                item.precio_venta,
+                item.precio_compra_referencial,
+            )
         else:
             item.precio_compra_referencial = None
             item.diferencia_compra_venta = None
+            item.margen_ganancia = None
 
         item.tiene_precio_compra_referencial = item.precio_compra_referencial is not None
         item.tiene_diferencia_compra_venta = item.diferencia_compra_venta is not None
+        item.tiene_margen_ganancia = item.margen_ganancia is not None
+        item.badge_margen_ganancia = _badge_margen_ganancia(item.margen_ganancia)
         item.alerta_bajo_costo = (
             item.diferencia_compra_venta is not None and item.diferencia_compra_venta < 0
         )

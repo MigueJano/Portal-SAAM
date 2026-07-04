@@ -1,0 +1,131 @@
+<div
+  class="card shadow-sm js-precio-calculator"
+  data-target-input="{{ calculadora_target|default:'' }}"
+  data-cost-source="{{ calculadora_compra_span|default:'' }}"
+  data-iva-rate="0.19"
+>
+  <div class="card-body">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
+      <div>
+        <h5 class="card-title mb-1">Calculadora rapida</h5>
+        <p class="text-muted small mb-0">Operaciones basicas, conversion c/IVA y calculo por margen.</p>
+      </div>
+      <button
+        type="button"
+        class="btn btn-outline-secondary btn-sm align-self-start js-calculator-toggle"
+        aria-expanded="false"
+      >
+        Mostrar calculadora
+      </button>
+    </div>
+
+    <div class="js-calculator-panel mt-3" hidden>
+      <div class="d-flex flex-wrap gap-2 justify-content-lg-end mb-3">
+        {% if calculadora_compra_span %}
+          <button type="button" class="btn btn-outline-secondary btn-sm js-calculator-use-cost">Usar compra</button>
+        {% endif %}
+        {% if calculadora_target %}
+          <button type="button" class="btn btn-outline-primary btn-sm js-calculator-apply">Usar como precio neto</button>
+        {% endif %}
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <label class="form-label small text-muted mb-1" for="calculator_display">Operacion</label>
+          <input
+            id="calculator_display"
+            type="text"
+            class="form-control form-control-lg text-end font-monospace js-calculator-display"
+            value="0"
+            inputmode="decimal"
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <div class="small text-muted mt-2 js-cost-source-label">
+            {% if calculadora_compra_span %}
+              Compra actual detectada: -
+            {% else %}
+              Costo sugerido no disponible en esta vista.
+            {% endif %}
+          </div>
+
+          <div class="row g-2 mt-1">
+            <div class="col-3"><button type="button" class="btn btn-outline-danger w-100 js-calculator-action" data-action="clear">C</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-secondary w-100 js-calculator-action" data-action="delete">DEL</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-info w-100 js-calculator-action" data-action="add-iva">c/IVA</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-info w-100 js-calculator-action" data-action="remove-iva">S/IVA</button></div>
+
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="7">7</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="8">8</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="9">9</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="/">/</button></div>
+
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="4">4</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="5">5</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="6">6</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="*">*</button></div>
+
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="1">1</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="2">2</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="3">3</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="-">-</button></div>
+
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="0">0</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="00">00</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token=".">.</button></div>
+            <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 js-calculator-action" data-token="+">+</button></div>
+
+            <div class="col-12"><button type="button" class="btn btn-success w-100 js-calculator-action" data-action="equals">=</button></div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="row g-2">
+            <div class="col-sm-6">
+              <label class="form-label small text-muted mb-1" for="calculator_cost">Costo base</label>
+              <div class="input-group input-group-sm">
+                <span class="input-group-text">$</span>
+                <input id="calculator_cost" type="number" min="0" step="0.01" class="form-control js-margin-cost" placeholder="0.00">
+              </div>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small text-muted mb-1" for="calculator_margin">Margen</label>
+              <div class="input-group input-group-sm">
+                <input id="calculator_margin" type="number" step="0.01" class="form-control js-margin-percent" value="25">
+                <span class="input-group-text">%</span>
+              </div>
+            </div>
+            <div class="col-12 d-flex flex-wrap gap-2">
+              <button type="button" class="btn btn-outline-success btn-sm js-calc-margin">Calcular neto por margen</button>
+            </div>
+          </div>
+
+          <div class="row g-2 mt-2">
+            <div class="col-4">
+              <div class="border rounded p-2 h-100">
+                <div class="small text-muted">Neto</div>
+                <div class="fw-semibold js-result-neto">$0,00</div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="border rounded p-2 h-100">
+                <div class="small text-muted">IVA</div>
+                <div class="fw-semibold js-result-iva">$0,00</div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="border rounded p-2 h-100">
+                <div class="small text-muted">Total</div>
+                <div class="fw-semibold js-result-total">$0,00</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="small text-muted mt-3 js-margin-status">
+            Margen actual: -
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

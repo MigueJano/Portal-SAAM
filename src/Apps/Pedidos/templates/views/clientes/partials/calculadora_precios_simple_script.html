@@ -1,0 +1,299 @@
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const widgets = document.querySelectorAll('.js-precio-calculator');
+  if (!widgets.length) {
+    return;
+  }
+
+  const OPERATOR_PATTERN = /[+\-*/]$/;
+
+  function round2(value) {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  function formatCurrency(value) {
+    return new Intl.NumberFormat('es-CL', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value);
+  }
+
+  function formatPlain(value) {
+    return round2(value).toString();
+  }
+
+  function parseLocalizedNumber(raw) {
+    if (raw === null || raw === undefined) {
+      return null;
+    }
+
+    const text = String(raw).trim();
+    if (!text || text === '-') {
+      return null;
+    }
+
+    const normalized = text
+      .replace(/\$/g, '')
+      .replace(/\s/g, '')
+      .replace(/\./g, '')
+      .replace(',', '.');
+    const value = Number(normalized);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function safeEvaluate(expression) {
+    const sanitized = String(expression || '')
+      .replace(/,/g, '.')
+      .replace(/\s+/g, '');
+
+    if (!sanitized) {
+      return null;
+    }
+
+    if (!/^[0-9+\-*/().]+$/.test(sanitized)) {
+      return null;
+    }
+
+    try {
+      const result = Function(`"use strict"; return (${sanitized});`)();
+      return Number.isFinite(result) ? result : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  widgets.forEach(widget => {
+    const display = widget.querySelector('.js-calculator-display');
+    const costSourceLabel = widget.querySelector('.js-cost-source-label');
+    const costInput = widget.querySelector('.js-margin-cost');
+    const marginInput = widget.querySelector('.js-margin-percent');
+    const marginStatus = widget.querySelector('.js-margin-status');
+    const resultNeto = widget.querySelector('.js-result-neto');
+    const resultIva = widget.querySelector('.js-result-iva');
+    const resultTotal = widget.querySelector('.js-result-total');
+    const applyButton = widget.querySelector('.js-calculator-apply');
+    const useCostButton = widget.querySelector('.js-calculator-use-cost');
+    const calcMarginButton = widget.querySelector('.js-calc-margin');
+    const toggleButton = widget.querySelector('.js-calculator-toggle');
+    const panel = widget.querySelector('.js-calculator-panel');
+
+    const targetId = widget.dataset.targetInput || '';
+    const costSourceId = widget.dataset.costSource || '';
+    const ivaRate = Number(widget.dataset.ivaRate || '0.19');
+    const ivaFactor = 1 + ivaRate;
+    const targetInput = targetId ? document.getElementById(targetId) : null;
+    const costSourceEl = costSourceId ? document.getElementById(costSourceId) : null;
+
+    function getCurrentValue() {
+      return safeEvaluate(display.value);
+    }
+
+    function readCostSourceValue() {
+      return costSourceEl ? parseLocalizedNumber(costSourceEl.textContent) : null;
+    }
+
+    function updateCostSourceLabel() {
+      if (!costSourceLabel) {
+        return;
+      }
+      if (!costSourceEl) {
+        costSourceLabel.textContent = 'Costo sugerido no disponible en esta vista.';
+        return;
+      }
+      const value = readCostSourceValue();
+      costSourceLabel.textContent = value === null
+        ? 'Compra actual detectada: -'
+        : `Compra actual detectada: $${formatCurrency(value)}`;
+    }
+
+    function updateSummary() {
+      const currentValue = getCurrentValue();
+      if (currentValue === null) {
+        resultNeto.textContent = '-';
+        resultIva.textContent = '-';
+        resultTotal.textContent = '-';
+        marginStatus.textContent = 'Margen actual: ingresa una operacion valida.';
+        return;
+      }
+
+      const neto = round2(currentValue);
+      const iva = round2(neto * ivaRate);
+      const total = round2(neto + iva);
+
+      resultNeto.textContent = `$${formatCurrency(neto)}`;
+      resultIva.textContent = `$${formatCurrency(iva)}`;
+      resultTotal.textContent = `$${formatCurrency(total)}`;
+
+      const cost = Number(costInput.value);
+      if (Number.isFinite(cost) && cost > 0) {
+        const margin = round2(((neto - cost) / cost) * 100);
+        marginStatus.textContent = `Margen actual: ${formatCurrency(margin)}% sobre un costo base de $${formatCurrency(cost)}.`;
+      } else {
+        marginStatus.textContent = 'Margen actual: ingresa un costo base para estimarlo.';
+      }
+    }
+
+    function setPanelExpanded(expanded) {
+      if (!panel || !toggleButton) {
+        return;
+      }
+      panel.hidden = !expanded;
+      toggleButton.textContent = expanded ? 'Ocultar calculadora' : 'Mostrar calculadora';
+      toggleButton.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    }
+
+    function setDisplayValue(value) {
+      display.value = formatPlain(value);
+      updateSummary();
+    }
+
+    function insertToken(token) {
+      const current = display.value || '';
+      if (token === '.' && OPERATOR_PATTERN.test(current)) {
+        display.value += '0.';
+        updateSummary();
+        return;
+      }
+
+      if (OPERATOR_PATTERN.test(current) && OPERATOR_PATTERN.test(token)) {
+        display.value = `${current.slice(0, -1)}${token}`;
+        updateSummary();
+        return;
+      }
+
+      if (current === '0' && /^[0-9.]$/.test(token)) {
+        display.value = token === '.' ? '0.' : token;
+      } else {
+        display.value += token;
+      }
+      updateSummary();
+    }
+
+    function evaluateDisplay() {
+      const value = getCurrentValue();
+      if (value === null) {
+        return;
+      }
+      setDisplayValue(value);
+    }
+
+    function applyIva() {
+      const value = getCurrentValue();
+      if (value === null) {
+        return;
+      }
+      setDisplayValue(round2(value * ivaFactor));
+    }
+
+    function removeIva() {
+      const value = getCurrentValue();
+      if (value === null) {
+        return;
+      }
+      setDisplayValue(round2(value / ivaFactor));
+    }
+
+    function clearDisplay() {
+      display.value = '0';
+      updateSummary();
+    }
+
+    function deleteLast() {
+      display.value = display.value.length > 1 ? display.value.slice(0, -1) : '0';
+      updateSummary();
+    }
+
+    widget.querySelectorAll('.js-calculator-action').forEach(button => {
+      button.addEventListener('click', () => {
+        const { action, token } = button.dataset;
+        if (token !== undefined) {
+          insertToken(token);
+          return;
+        }
+
+        switch (action) {
+          case 'clear':
+            clearDisplay();
+            break;
+          case 'delete':
+            deleteLast();
+            break;
+          case 'equals':
+            evaluateDisplay();
+            break;
+          case 'add-iva':
+            applyIva();
+            break;
+          case 'remove-iva':
+            removeIva();
+            break;
+          default:
+            break;
+        }
+      });
+    });
+
+    display.addEventListener('input', () => {
+      display.value = display.value
+        .replace(/,/g, '.')
+        .replace(/[^0-9+\-*/().]/g, '');
+      updateSummary();
+    });
+
+    display.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        evaluateDisplay();
+      }
+    });
+
+    costInput.addEventListener('input', updateSummary);
+    marginInput.addEventListener('input', updateSummary);
+
+    calcMarginButton?.addEventListener('click', () => {
+      const cost = Number(costInput.value);
+      const margin = Number(marginInput.value);
+      if (!Number.isFinite(cost) || cost < 0 || !Number.isFinite(margin)) {
+        return;
+      }
+      setDisplayValue(round2(cost * (1 + (margin / 100))));
+    });
+
+    useCostButton?.addEventListener('click', () => {
+      const cost = readCostSourceValue();
+      if (cost === null) {
+        return;
+      }
+      costInput.value = formatPlain(cost);
+      setDisplayValue(cost);
+    });
+
+    applyButton?.addEventListener('click', () => {
+      const value = getCurrentValue();
+      if (value === null || !targetInput) {
+        return;
+      }
+      targetInput.value = round2(value).toFixed(2);
+      targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+      targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    toggleButton?.addEventListener('click', () => {
+      setPanelExpanded(panel?.hidden);
+    });
+
+    if (costSourceEl && typeof MutationObserver !== 'undefined') {
+      const observer = new MutationObserver(updateCostSourceLabel);
+      observer.observe(costSourceEl, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
+    }
+
+    updateCostSourceLabel();
+    updateSummary();
+    setPanelExpanded(false);
+  });
+});
+</script>
