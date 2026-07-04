@@ -6,6 +6,7 @@ from io import BytesIO, StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from xml.etree import ElementTree as ET
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -17,9 +18,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from Apps.Pedidos.models import (
+    BoletaElectronica,
     Categoria,
     CategoriaEmpaque,
     Cliente,
+    ConfiguracionBoletaSii,
     Cotizacion,
     EntregaPedido,
     ListaPrecios,
@@ -190,6 +193,114 @@ class RedondeoSiiFormattingTests(SimpleTestCase):
         self.assertEqual(formatear_miles_punto(Decimal("10.49")), "10")
         self.assertEqual(formatear_miles_punto(Decimal("10.50")), "11")
         self.assertEqual(formatear_miles_punto(Decimal("1238.50")), "1.239")
+
+
+class SiiSetPruebaBoletaTests(SimpleTestCase):
+    def test_parsea_casos_boleta_exento_unidad_y_referencia(self):
+        from Apps.Pedidos.services import parse_set_prueba_boleta, totales_boleta_set_case
+
+        text = """
+CASO-1
+==========
+Item                    Cantidad    Precio Unitario con IVA
+Cambio de aceite        1           19900
+Alineacion y balanceo   1           9900
+
+CASO-4
+=========
+Item                    Cantidad    Precio Unitario con IVA
+item afecto 1           8           1590
+item exento 2           2           1000
+
+OBSERVACION: "El item 1 es un servicio afecto. El item 2 es un servicio exento."
+
+CASO-5
+=========
+Item                    Cantidad    Precio Unitario con IVA
+Arroz                   5           700
+"""
+
+        cases = parse_set_prueba_boleta(text)
+
+        self.assertEqual([case.codigo for case in cases], ["CASO-1", "CASO-4", "CASO-5"])
+        self.assertTrue(cases[1].items[1].exento)
+        self.assertEqual(cases[2].items[0].unidad_medida, "Kg")
+        self.assertEqual(
+            totales_boleta_set_case(cases[1]),
+            {
+                "monto_neto": Decimal("10689"),
+                "iva": Decimal("2031"),
+                "monto_exento": Decimal("2000"),
+                "monto_total": Decimal("14720"),
+            },
+        )
+
+
+class GenerarSetPruebaBoletaCommandTests(TestCase):
+    def test_generar_set_prueba_be_crea_xmls_desde_txt_sii(self):
+        ConfiguracionBoletaSii.objects.create(
+            nombre="Principal",
+            activa=True,
+            ambiente=ConfiguracionBoletaSii.AMBIENTE_CERTIFICACION,
+            habilita_boleta=True,
+            rut_emisor="22222222-2",
+            razon_social="SAAM Demo SpA",
+            giro="Servicios logistica",
+            acteco_principal="521900",
+            direccion_origen="Av. Apoquindo 1234",
+            comuna_origen="Las Condes",
+            ciudad_origen="Santiago",
+            resolucion_numero=80,
+            resolucion_fecha=datetime(2024, 1, 15).date(),
+            ruta_caf_tipo_39="caf/tipo39.xml",
+        )
+        txt = """
+CASO-4
+=========
+Item                    Cantidad    Precio Unitario con IVA
+item afecto 1           8           1590
+item exento 2           2           1000
+"""
+        with TemporaryDirectory() as tmpdir:
+            input_path = Path(tmpdir) / "set_be.txt"
+            output_dir = Path(tmpdir) / "out"
+            input_path.write_text(txt, encoding="utf-8")
+
+            out = StringIO()
+            call_command(
+                "generar_set_prueba_be",
+                input=str(input_path),
+                output=str(output_dir),
+                folio_inicial=10,
+                fecha_emision="2026-06-30",
+                stdout=out,
+            )
+
+            xml_path = output_dir / "boleta_caso-4_folio_10.xml"
+            sobre_path = output_dir / "sobre_set_boletas.xml"
+            rcof_path = output_dir / "rcof_set_boletas.xml"
+            self.assertTrue(xml_path.exists())
+            self.assertTrue(sobre_path.exists())
+            self.assertTrue(rcof_path.exists())
+
+            root = ET.fromstring(xml_path.read_bytes())
+            self.assertEqual(root.findtext("./Documento/Referencia/CodRef"), "SET")
+            self.assertEqual(root.findtext("./Documento/Referencia/RazonRef"), "CASO-4")
+            self.assertEqual(root.findtext("./Documento/Encabezado/Totales/MntExe"), "2000")
+            self.assertEqual(root.findtext("./Documento/Detalle[2]/IndExe"), "1")
+
+            ns = {"sii": "http://www.sii.cl/SiiDte"}
+            sobre = ET.fromstring(sobre_path.read_bytes())
+            self.assertEqual(sobre.findtext("./sii:SetDTE/sii:Caratula/sii:SubTotDTE/sii:NroDTE", namespaces=ns), "1")
+            self.assertEqual(sobre.findtext("./sii:SetDTE/sii:DTE/sii:Documento/sii:Referencia/sii:RazonRef", namespaces=ns), "CASO-4")
+
+            rcof = ET.fromstring(rcof_path.read_bytes())
+            self.assertEqual(rcof.findtext("./sii:DocumentoConsumoFolios/sii:Resumen/sii:TipoDocumento", namespaces=ns), "39")
+            self.assertEqual(rcof.findtext("./sii:DocumentoConsumoFolios/sii:Resumen/sii:FoliosUtilizados", namespaces=ns), "1")
+            self.assertEqual(rcof.findtext("./sii:DocumentoConsumoFolios/sii:Resumen/sii:MntTotal", namespaces=ns), "14720")
+            self.assertIn("Sobre unico:", out.getvalue())
+            self.assertIn("RCOF/RDV:", out.getvalue())
+            self.assertIn("XMLs generados: 1", out.getvalue())
 
 
 class RecepcionTotalesTests(TestCase):
@@ -2695,3 +2806,442 @@ class ProductoEstadoVentaTests(ProductoEstadoBaseTests):
         producto_ids = {precio.nombre_producto_id for precio in resp.context["productos"]}
         self.assertIn(self.producto_activo.id, producto_ids)
         self.assertNotIn(self.producto_suspendido.id, producto_ids)
+
+
+class BoletaElectronicaFlowTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("boleta_user", password="test123")
+        self.client.force_login(self.user)
+
+        self.emp_p = CategoriaEmpaque.objects.create(nombre="Unidad Boleta", nivel="PRIMARIO")
+        self.emp_s = CategoriaEmpaque.objects.create(nombre="Caja Boleta", nivel="SECUNDARIO")
+        self.emp_t = CategoriaEmpaque.objects.create(nombre="Pallet Boleta", nivel="TERCIARIO")
+        self.categoria = Categoria.objects.create(categoria="Categoria Boleta")
+        self.subcategoria = Subcategoria.objects.create(
+            categoria=self.categoria,
+            subcategoria="Subcategoria Boleta",
+        )
+        self.cliente_obj = Cliente.objects.create(
+            nombre_cliente="Cliente Boleta",
+            rut_cliente="11111111-1",
+            razon_social="Cliente Boleta SpA",
+            giro_cliente="Venta de insumos",
+            direccion_cliente="Direccion Cliente 123",
+            direccion_bodega_cliente="Bodega Cliente 123",
+            comuna_cliente="Santiago",
+            ciudad_cliente="Santiago",
+            cliente_activo=True,
+            telefono_cliente="+56912345678",
+            correo_cliente="cliente.boleta@example.com",
+            categoria="PYME",
+        )
+        self.producto = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="BOL001",
+            nombre_producto="Producto Boleta",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+            empaque_primario=self.emp_p,
+            empaque_secundario=self.emp_s,
+            empaque_terciario=self.emp_t,
+        )
+        self.pedido = Pedido.objects.create(
+            nombre_cliente=self.cliente_obj,
+            fecha_pedido=datetime(2026, 6, 30).date(),
+            estado_pedido="Entregado",
+            comentario_pedido="Pedido para boleta",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DESPACHO",
+            producto=self.producto,
+            qty=2,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("1000.00"),
+            pedido=self.pedido,
+        )
+
+    def test_finalizar_venta_boleta_genera_documento_xml(self):
+        ConfiguracionBoletaSii.objects.create(
+            nombre="Principal",
+            activa=True,
+            ambiente=ConfiguracionBoletaSii.AMBIENTE_CERTIFICACION,
+            habilita_boleta=True,
+            habilita_factura=True,
+            rut_emisor="22222222-2",
+            razon_social="SAAM Demo SpA",
+            giro="Servicios logistica",
+            acteco_principal="521900",
+            direccion_origen="Av. Apoquindo 1234",
+            comuna_origen="Las Condes",
+            ciudad_origen="Santiago",
+            resolucion_numero=80,
+            resolucion_fecha=datetime(2024, 1, 15).date(),
+            correo_intercambio="dte@saam.cl",
+            ruta_caf_tipo_33="caf/tipo33.xml",
+            ruta_caf_tipo_39="caf/tipo39.xml",
+        )
+
+        with TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root):
+                resp = self.client.post(
+                    reverse("finalizar_venta", args=[self.pedido.id]),
+                    data={
+                        "fecha_venta": "2026-06-30",
+                        "documento_pedido": "Boleta",
+                        "num_documento": "",
+                    },
+                )
+
+                venta = Venta.objects.get(pedidoid=self.pedido)
+                self.assertRedirects(resp, reverse("detalle_venta", args=[venta.id]))
+
+                boleta = BoletaElectronica.objects.get(venta=venta)
+                self.assertEqual(venta.num_documento, None)
+                self.assertEqual(boleta.estado, BoletaElectronica.ESTADO_XML_PREPARADO)
+                self.assertTrue(boleta.xml_borrador.name.endswith(".xml"))
+                self.assertEqual(boleta.payload["meta"]["tipo_dte"], 39)
+                self.assertEqual(boleta.payload["receptor"]["rut"], "11111111-1")
+                self.assertEqual(boleta.payload["receptor"]["nombre"], "Cliente Boleta SpA")
+                self.assertEqual(len(boleta.payload["detalle"]), 1)
+
+    def test_generar_documento_boleta_sin_configuracion_queda_incompleta(self):
+        venta = Venta.objects.create(
+            pedidoid=self.pedido,
+            fecha_venta=datetime(2026, 6, 30).date(),
+            documento_pedido="Boleta",
+            num_documento=None,
+            venta_neto_pedido=Decimal("2000.00"),
+            venta_iva_pedido=Decimal("380.00"),
+            venta_total_pedido=Decimal("2380.00"),
+            ganancia_total=Decimal("500.00"),
+            ganancia_porcentaje=Decimal("25.00"),
+        )
+        self.pedido.estado_pedido = "Finalizado"
+        self.pedido.save(update_fields=["estado_pedido"])
+
+        with TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root):
+                resp = self.client.post(reverse("generar_documento_venta", args=[venta.id]))
+
+        self.assertRedirects(resp, reverse("detalle_venta", args=[venta.id]))
+
+        boleta = BoletaElectronica.objects.get(venta=venta)
+        self.assertEqual(boleta.estado, BoletaElectronica.ESTADO_DATOS_INCOMPLETOS)
+        self.assertIn(
+            "No existe una configuracion SII activa para boleta electronica.",
+            boleta.errores_validacion,
+        )
+
+    def test_generar_documento_boleta_no_duplica_expediente(self):
+        ConfiguracionBoletaSii.objects.create(
+            nombre="Principal",
+            activa=True,
+            ambiente=ConfiguracionBoletaSii.AMBIENTE_CERTIFICACION,
+            habilita_boleta=True,
+            habilita_factura=False,
+            rut_emisor="22222222-2",
+            razon_social="SAAM Demo SpA",
+            giro="Servicios logistica",
+            direccion_origen="Av. Apoquindo 1234",
+            comuna_origen="Las Condes",
+            ciudad_origen="Santiago",
+            ruta_caf_tipo_39="caf/tipo39.xml",
+        )
+        venta = Venta.objects.create(
+            pedidoid=self.pedido,
+            fecha_venta=datetime(2026, 6, 30).date(),
+            documento_pedido="Boleta",
+            num_documento=None,
+            venta_neto_pedido=Decimal("2000.00"),
+            venta_iva_pedido=Decimal("380.00"),
+            venta_total_pedido=Decimal("2380.00"),
+            ganancia_total=Decimal("500.00"),
+            ganancia_porcentaje=Decimal("25.00"),
+        )
+
+        with TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root):
+                resp_1 = self.client.post(reverse("generar_documento_venta", args=[venta.id]))
+                resp_2 = self.client.post(reverse("generar_documento_venta", args=[venta.id]))
+
+        self.assertRedirects(resp_1, reverse("detalle_venta", args=[venta.id]))
+        self.assertRedirects(resp_2, reverse("detalle_venta", args=[venta.id]))
+        self.assertEqual(BoletaElectronica.objects.filter(venta=venta).count(), 1)
+        boleta = BoletaElectronica.objects.get(venta=venta)
+        self.assertEqual(boleta.estado, BoletaElectronica.ESTADO_XML_PREPARADO)
+
+    def test_boleta_bajo_135_uf_configurado_no_exige_rut_receptor(self):
+        ConfiguracionBoletaSii.objects.create(
+            nombre="Principal",
+            activa=True,
+            ambiente=ConfiguracionBoletaSii.AMBIENTE_CERTIFICACION,
+            habilita_boleta=True,
+            rut_emisor="22222222-2",
+            razon_social="SAAM Demo SpA",
+            giro="Servicios logistica",
+            direccion_origen="Av. Apoquindo 1234",
+            comuna_origen="Las Condes",
+            ciudad_origen="Santiago",
+            ruta_caf_tipo_39="caf/tipo39.xml",
+            monto_identificacion_receptor_boleta=Decimal("5000000.00"),
+        )
+        cliente = Cliente.objects.create(
+            nombre_cliente="Consumidor Menor",
+            rut_cliente="123",
+            razon_social="",
+            giro_cliente="",
+            direccion_cliente="",
+            direccion_bodega_cliente="",
+            comuna_cliente="",
+            ciudad_cliente="",
+            cliente_activo=True,
+            telefono_cliente="",
+            correo_cliente="",
+            categoria="PERSONA NATURAL",
+        )
+        pedido = Pedido.objects.create(
+            nombre_cliente=cliente,
+            fecha_pedido=datetime(2026, 6, 30).date(),
+            estado_pedido="Finalizado",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DESPACHO",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("1000.00"),
+            pedido=pedido,
+        )
+        venta = Venta.objects.create(
+            pedidoid=pedido,
+            fecha_venta=datetime(2026, 6, 30).date(),
+            documento_pedido="Boleta",
+            num_documento=None,
+            venta_neto_pedido=Decimal("1000.00"),
+            venta_iva_pedido=Decimal("190.00"),
+            venta_total_pedido=Decimal("1190.00"),
+            ganancia_total=Decimal("100.00"),
+            ganancia_porcentaje=Decimal("10.00"),
+        )
+
+        with TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root):
+                resp = self.client.post(reverse("generar_documento_venta", args=[venta.id]))
+
+        self.assertRedirects(resp, reverse("detalle_venta", args=[venta.id]))
+        boleta = BoletaElectronica.objects.get(venta=venta)
+        self.assertEqual(boleta.estado, BoletaElectronica.ESTADO_XML_PREPARADO)
+        self.assertEqual(boleta.payload["receptor"]["rut"], "66666666-6")
+        self.assertFalse(boleta.payload["receptor"]["identificacion_obligatoria"])
+
+    def test_boleta_sobre_135_uf_configurado_exige_rut_receptor_valido(self):
+        ConfiguracionBoletaSii.objects.create(
+            nombre="Principal",
+            activa=True,
+            ambiente=ConfiguracionBoletaSii.AMBIENTE_CERTIFICACION,
+            habilita_boleta=True,
+            rut_emisor="22222222-2",
+            razon_social="SAAM Demo SpA",
+            giro="Servicios logistica",
+            direccion_origen="Av. Apoquindo 1234",
+            comuna_origen="Las Condes",
+            ciudad_origen="Santiago",
+            ruta_caf_tipo_39="caf/tipo39.xml",
+            monto_identificacion_receptor_boleta=Decimal("1000.00"),
+        )
+        cliente = Cliente.objects.create(
+            nombre_cliente="Consumidor Mayor",
+            rut_cliente="123",
+            razon_social="",
+            giro_cliente="",
+            direccion_cliente="",
+            direccion_bodega_cliente="",
+            comuna_cliente="",
+            ciudad_cliente="",
+            cliente_activo=True,
+            telefono_cliente="",
+            correo_cliente="",
+            categoria="PERSONA NATURAL",
+        )
+        pedido = Pedido.objects.create(
+            nombre_cliente=cliente,
+            fecha_pedido=datetime(2026, 6, 30).date(),
+            estado_pedido="Finalizado",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DESPACHO",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("1000.00"),
+            pedido=pedido,
+        )
+        venta = Venta.objects.create(
+            pedidoid=pedido,
+            fecha_venta=datetime(2026, 6, 30).date(),
+            documento_pedido="Boleta",
+            num_documento=None,
+            venta_neto_pedido=Decimal("1000.00"),
+            venta_iva_pedido=Decimal("190.00"),
+            venta_total_pedido=Decimal("1190.00"),
+            ganancia_total=Decimal("100.00"),
+            ganancia_porcentaje=Decimal("10.00"),
+        )
+
+        with TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root):
+                resp = self.client.post(reverse("generar_documento_venta", args=[venta.id]))
+
+        self.assertRedirects(resp, reverse("detalle_venta", args=[venta.id]))
+        boleta = BoletaElectronica.objects.get(venta=venta)
+        self.assertEqual(boleta.estado, BoletaElectronica.ESTADO_DATOS_INCOMPLETOS)
+        self.assertIn(
+            "La boleta supera el monto configurado para 135 UF y el RUT del receptor no es valido.",
+            boleta.errores_validacion,
+        )
+
+
+class ConfiguracionDashboardTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user("staff_config", password="test123", is_staff=True)
+        self.regular = User.objects.create_user("regular_config", password="test123", is_staff=False)
+
+    def test_staff_ve_link_de_configuracion_en_topbar(self):
+        self.client.force_login(self.staff)
+
+        resp = self.client.get(reverse("home"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, reverse("configuracion"))
+
+    def test_staff_puede_abrir_pantalla_configuracion(self):
+        ConfiguracionBoletaSii.objects.create(
+            nombre="Principal",
+            activa=True,
+            ambiente=ConfiguracionBoletaSii.AMBIENTE_CERTIFICACION,
+            habilita_boleta=True,
+            habilita_factura=True,
+            rut_emisor="22222222-2",
+            razon_social="SAAM Demo SpA",
+            giro="Servicios logistica",
+            acteco_principal="521900",
+            direccion_origen="Av. Apoquindo 1234",
+            comuna_origen="Las Condes",
+            ciudad_origen="Santiago",
+            correo_intercambio="dte@saam.cl",
+            ruta_caf_tipo_33="caf/tipo33.xml",
+            ruta_caf_tipo_39="caf/tipo39.xml",
+        )
+        self.client.force_login(self.staff)
+
+        resp = self.client.get(reverse("configuracion"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Configuraciones Registradas")
+        self.assertContains(resp, "Principal")
+        self.assertContains(resp, "Factura 33")
+        self.assertContains(resp, "sii-help-icon")
+        self.assertContains(resp, "Se obtiene desde Mi SII")
+        self.assertContains(resp, "No ingresar claves ni contrasenas")
+        self.assertContains(resp, "Timbraje electronico")
+
+    def test_staff_puede_crear_configuracion_desde_formulario_html(self):
+        self.client.force_login(self.staff)
+
+        resp = self.client.post(
+            reverse("configuracion"),
+            data={
+                "nombre": "Formulario SAAM",
+                "activa": "on",
+                "ambiente": ConfiguracionBoletaSii.AMBIENTE_CERTIFICACION,
+                "habilita_boleta": "on",
+                "habilita_factura": "on",
+                "rut_emisor": "22222222-2",
+                "razon_social": "SAAM Demo SpA",
+                "giro": "Servicios logistica",
+                "acteco_principal": "521900",
+                "direccion_origen": "Av. Apoquindo 1234",
+                "comuna_origen": "Las Condes",
+                "ciudad_origen": "Santiago",
+                "resolucion_numero": "80",
+                "resolucion_fecha": "2024-01-15",
+                "certificado_alias": "cert-saam",
+                "correo_intercambio": "dte@saam.cl",
+                "ruta_caf_tipo_33": "caf/tipo33.xml",
+                "ruta_caf_tipo_39": "caf/tipo39.xml",
+                "observaciones": "Configuracion creada por formulario.",
+            },
+        )
+
+        self.assertRedirects(resp, reverse("configuracion"))
+        cfg = ConfiguracionBoletaSii.objects.get(nombre="Formulario SAAM")
+        self.assertEqual(cfg.rut_emisor, "22222222-2")
+        self.assertTrue(cfg.activa)
+        self.assertTrue(cfg.habilita_factura)
+        self.assertEqual(cfg.ruta_caf_tipo_33, "caf/tipo33.xml")
+
+    def test_staff_puede_editar_configuracion_desde_formulario_html(self):
+        cfg = ConfiguracionBoletaSii.objects.create(
+            nombre="Editable",
+            activa=True,
+            ambiente=ConfiguracionBoletaSii.AMBIENTE_CERTIFICACION,
+            habilita_boleta=True,
+            habilita_factura=False,
+            rut_emisor="22222222-2",
+            razon_social="SAAM Demo SpA",
+            giro="Servicios logistica",
+            acteco_principal="521900",
+            direccion_origen="Av. Apoquindo 1234",
+            comuna_origen="Las Condes",
+            ciudad_origen="Santiago",
+            correo_intercambio="dte@saam.cl",
+            ruta_caf_tipo_33="",
+            ruta_caf_tipo_39="caf/tipo39.xml",
+        )
+        self.client.force_login(self.staff)
+
+        resp = self.client.post(
+            reverse("configuracion"),
+            data={
+                "config_id": str(cfg.id),
+                "nombre": "Editable v2",
+                "ambiente": ConfiguracionBoletaSii.AMBIENTE_PRODUCCION,
+                "habilita_boleta": "on",
+                "habilita_factura": "on",
+                "rut_emisor": "22222222-2",
+                "razon_social": "SAAM Produccion SpA",
+                "giro": "Servicios portuarios",
+                "acteco_principal": "522090",
+                "direccion_origen": "Av. Providencia 1000",
+                "comuna_origen": "Providencia",
+                "ciudad_origen": "Santiago",
+                "resolucion_numero": "81",
+                "resolucion_fecha": "2024-02-01",
+                "certificado_alias": "cert-prod",
+                "correo_intercambio": "dte-prod@saam.cl",
+                "ruta_caf_tipo_33": "caf/produccion33.xml",
+                "ruta_caf_tipo_39": "caf/produccion39.xml",
+                "observaciones": "Actualizada por formulario.",
+            },
+        )
+
+        self.assertRedirects(resp, reverse("configuracion"))
+        cfg.refresh_from_db()
+        self.assertEqual(cfg.nombre, "Editable v2")
+        self.assertEqual(cfg.ambiente, ConfiguracionBoletaSii.AMBIENTE_PRODUCCION)
+        self.assertEqual(cfg.comuna_origen, "Providencia")
+        self.assertTrue(cfg.habilita_factura)
+        self.assertEqual(cfg.ruta_caf_tipo_33, "caf/produccion33.xml")
+
+    def test_usuario_no_staff_no_puede_abrir_configuracion(self):
+        self.client.force_login(self.regular)
+
+        resp = self.client.get(reverse("configuracion"))
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/admin/login/", resp.url)

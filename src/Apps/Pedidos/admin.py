@@ -12,7 +12,7 @@ from .models import (
     Proveedor, Contacto, Recepcion, Producto, CodigoProveedor, Stock, ListaPrecios, Cliente,
     Pedido, Venta, Categoria, Subcategoria, Cotizacion, CategoriaEmpaque,
     EntregaPedido, ListaPreciosPredeterminada, ListaPreciosPredItem, RecepcionLinea,
-    UtilidadProducto,
+    UtilidadProducto, ConfiguracionBoletaSii, BoletaElectronica,
 )
 
 # ---------- Inlines ----------
@@ -122,8 +122,11 @@ class CodigoProveedorAdmin(admin.ModelAdmin):
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nombre_cliente', 'rut_cliente', 'categoria', 'cliente_activo', 'telefono_cliente', 'correo_cliente')
-    search_fields = ('nombre_cliente', 'rut_cliente', 'correo_cliente')
+    list_display = (
+        'id', 'nombre_cliente', 'rut_cliente', 'razon_social', 'giro_cliente',
+        'categoria', 'cliente_activo', 'telefono_cliente', 'correo_cliente'
+    )
+    search_fields = ('nombre_cliente', 'rut_cliente', 'razon_social', 'correo_cliente')
     list_filter = ('cliente_activo', 'categoria')
     ordering = ('-id',)
 
@@ -210,6 +213,30 @@ class VentaAdmin(admin.ModelAdmin):
     date_hierarchy = 'fecha_venta'
     ordering = ('-id',)
     autocomplete_fields = ('pedidoid',)
+
+
+@admin.register(ConfiguracionBoletaSii)
+class ConfiguracionBoletaSiiAdmin(admin.ModelAdmin):
+    list_display = (
+        'id', 'nombre', 'activa', 'ambiente', 'habilita_boleta', 'habilita_factura', 'rut_emisor', 'razon_social',
+        'comuna_origen', 'ciudad_origen', 'monto_identificacion_receptor_boleta', 'actualizado'
+    )
+    search_fields = ('nombre', 'rut_emisor', 'razon_social', 'giro')
+    list_filter = ('activa', 'ambiente', 'habilita_boleta', 'habilita_factura')
+    ordering = ('-activa', 'nombre', '-id')
+
+
+@admin.register(BoletaElectronica)
+class BoletaElectronicaAdmin(admin.ModelAdmin):
+    list_display = (
+        'id', 'venta', 'estado', 'tipo_dte', 'folio', 'ambiente',
+        'configuracion', 'preparada_en'
+    )
+    search_fields = ('venta__id', 'venta__pedidoid__id', 'idempotency_key')
+    list_filter = ('estado', 'ambiente', 'tipo_dte')
+    ordering = ('-actualizado', '-id')
+    readonly_fields = ('payload', 'errores_validacion', 'preparada_en', 'creado', 'actualizado')
+    autocomplete_fields = ('venta', 'configuracion', 'preparada_por')
 
 
 @admin.register(EntregaPedido)

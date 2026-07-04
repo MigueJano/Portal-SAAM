@@ -7,15 +7,49 @@ y funciones de búsqueda general.
 Fecha de documentación: 2025-08-08
 """
 
-from django.shortcuts import render
+from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib import messages
+from django.db.models import Q
+from django.shortcuts import get_object_or_404, redirect, render
 from decimal import Decimal, ROUND_HALF_UP
-from Apps.Pedidos.models import Recepcion, Pedido, Stock
+from Apps.Pedidos.models import (
+    BoletaElectronica,
+    Cliente,
+    ConfiguracionBoletaSii,
+    Pedido,
+    Recepcion,
+    Stock,
+)
+from Apps.Pedidos.forms import ConfiguracionBoletaSiiForm
 from Apps.Pedidos.services.listaprecios_alertas import (
     filas_precios_cliente,
 )
 
 IVA_RATE = Decimal('0.19')
 DOS_DEC = Decimal('0.01')
+
+SII_CONFIG_FIELD_HELP = {
+    "nombre": "Nombre interno para distinguir configuraciones, por ejemplo Principal Certificacion o SAAM Produccion. Lo define SAAM.",
+    "activa": "Marca esta configuracion como la que SAAM usara para generar DTE. Recomiendo mantener solo una activa.",
+    "ambiente": "Usa Certificacion para pruebas SII y Produccion solo cuando SII autorice la salida real.",
+    "habilita_boleta": "Activa emision de boleta electronica tipo 39. Debe coincidir con el modelo de emision declarado ante SII.",
+    "habilita_factura": "Activa factura electronica tipo 33. Requiere autorizacion SII y CAF tipo 33.",
+    "rut_emisor": "RUT de la empresa emisora. Se obtiene desde Mi SII, e-RUT o datos del contribuyente.",
+    "razon_social": "Razon social exacta registrada ante SII. Revisar en Mi SII o situacion tributaria.",
+    "giro": "Giro registrado ante SII. Usar el texto completo, idealmente sin abreviaciones.",
+    "acteco_principal": "Codigo de actividad economica declarado ante SII. Se obtiene desde actividades economicas o Mi SII.",
+    "direccion_origen": "Direccion tributaria de casa matriz o sucursal emisora registrada en SII.",
+    "comuna_origen": "Comuna asociada a la direccion o sucursal emisora registrada en SII.",
+    "ciudad_origen": "Ciudad asociada a la direccion o sucursal emisora registrada en SII.",
+    "resolucion_numero": "Numero de resolucion o autorizacion como emisor electronico entregado por SII al certificar/autorizar.",
+    "resolucion_fecha": "Fecha de la resolucion o autorizacion SII asociada al emisor electronico.",
+    "certificado_alias": "Nombre interno para identificar el certificado digital. No ingresar claves ni contrasenas en este formulario.",
+    "correo_intercambio": "Correo tributario/DTE definido por la empresa para intercambio y recepcion de documentos.",
+    "ruta_caf_tipo_33": "Ruta o referencia del archivo CAF XML tipo 33 para facturas. Se obtiene en SII, Timbraje electronico.",
+    "ruta_caf_tipo_39": "Ruta o referencia del archivo CAF XML tipo 39 para boletas. Se obtiene en SII, Timbraje electronico.",
+    "monto_identificacion_receptor_boleta": "Monto en CLP equivalente a 135 UF. Sobre este valor la boleta debe identificar receptor/pagador. Si queda en 0 no fuerza identificacion.",
+    "observaciones": "Notas internas: responsable, estado de certificacion, certificado asociado o comentarios operativos.",
+}
 
 
 def _calcular_total_pedido_dashboard(pedido, movimiento_principal):
@@ -123,4 +157,67 @@ def home(request):
             cantidad_precios_cliente_bajo_costo - len(precios_cliente_bajo_costo_preview),
             0,
         ),
+    })
+
+
+@staff_member_required
+def configuracion(request):
+    config_id = request.GET.get("editar") or request.POST.get("config_id")
+    config_en_edicion = None
+    if str(config_id).isdigit():
+        config_en_edicion = get_object_or_404(ConfiguracionBoletaSii, pk=int(config_id))
+
+    if request.method == "POST":
+        form = ConfiguracionBoletaSiiForm(request.POST, instance=config_en_edicion)
+        if form.is_valid():
+            configuracion_guardada = form.save(commit=False)
+            configuracion_guardada.save()
+            if configuracion_guardada.activa:
+                (
+                    ConfiguracionBoletaSii.objects
+                    .exclude(pk=configuracion_guardada.pk)
+                    .filter(activa=True)
+                    .update(activa=False)
+                )
+            messages.success(request, "Configuracion de boleta guardada correctamente.")
+            return redirect("configuracion")
+        messages.error(request, "Revisa el formulario de configuracion.")
+    else:
+        form = ConfiguracionBoletaSiiForm(instance=config_en_edicion)
+
+    configuracion_activa = (
+        ConfiguracionBoletaSii.objects
+        .filter(activa=True)
+        .order_by("id")
+        .first()
+    )
+    configuraciones = list(
+        ConfiguracionBoletaSii.objects
+        .order_by("-activa", "nombre", "id")[:5]
+    )
+    boletas_pendientes = list(
+        BoletaElectronica.objects
+        .select_related("venta", "venta__pedidoid", "venta__pedidoid__nombre_cliente")
+        .exclude(estado=BoletaElectronica.ESTADO_ENVIADA)
+        .order_by("-actualizado", "-id")[:8]
+    )
+    clientes_incompletos = Cliente.objects.filter(
+        Q(razon_social="") |
+        Q(giro_cliente="") |
+        Q(direccion_cliente="") |
+        Q(comuna_cliente="") |
+        Q(ciudad_cliente="")
+    ).count()
+
+    return render(request, "./views/dashboard/config.html", {
+        "form": form,
+        "config_en_edicion": config_en_edicion,
+        "configuracion_activa": configuracion_activa,
+        "configuraciones": configuraciones,
+        "boletas_pendientes": boletas_pendientes,
+        "clientes_incompletos": clientes_incompletos,
+        "sii_field_help": SII_CONFIG_FIELD_HELP,
+        "total_configuraciones": ConfiguracionBoletaSii.objects.count(),
+        "total_boletas": BoletaElectronica.objects.count(),
+        "configuraciones_habilitan_factura": ConfiguracionBoletaSii.objects.filter(habilita_factura=True).count(),
     })

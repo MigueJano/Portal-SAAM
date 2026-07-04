@@ -526,8 +526,12 @@ class Cliente(models.Model):
 
     nombre_cliente = models.CharField(max_length=50)
     rut_cliente = models.CharField(max_length=20, unique=True)
+    razon_social = models.CharField(max_length=120, blank=True, default="")
+    giro_cliente = models.CharField(max_length=120, blank=True, default="")
     direccion_cliente = models.CharField(max_length=100)
     direccion_bodega_cliente = models.CharField(max_length=100)
+    comuna_cliente = models.CharField(max_length=80, blank=True, default="")
+    ciudad_cliente = models.CharField(max_length=80, blank=True, default="")
     cliente_activo = models.BooleanField(default=True)
     telefono_cliente = models.CharField(max_length=30)
     correo_cliente = models.CharField(max_length=50)
@@ -542,6 +546,10 @@ class Cliente(models.Model):
 
     def __str__(self):
         return f"{self.nombre_cliente} ({self.rut_cliente})"
+
+    @property
+    def nombre_tributario(self) -> str:
+        return (self.razon_social or self.nombre_cliente).strip()
 
 class ListaPrecios(models.Model):
     """
@@ -675,7 +683,7 @@ class Venta(models.Model):
     pedidoid = models.ForeignKey(Pedido, on_delete=models.CASCADE)
     fecha_venta = models.DateField()
     documento_pedido = models.CharField(max_length=20, choices=DOCUMENTO_PEDIDO_CHOICES)
-    num_documento = models.IntegerField()
+    num_documento = models.IntegerField(null=True, blank=True)
     venta_neto_pedido = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
     venta_iva_pedido = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
     venta_total_pedido = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
@@ -689,8 +697,128 @@ class Venta(models.Model):
             partes.append(self.pedidoid.referencia_pedido())
             if self.pedidoid.nombre_cliente_id:
                 partes.append(str(self.pedidoid.nombre_cliente))
-        partes.append(f"{self.documento_pedido} #{self.num_documento}")
+        documento = f"{self.documento_pedido} #{self.num_documento}" if self.num_documento else f"{self.documento_pedido} sin folio"
+        partes.append(documento)
         return " - ".join(partes)
+
+
+class ConfiguracionBoletaSii(models.Model):
+    AMBIENTE_CERTIFICACION = "CERTIFICACION"
+    AMBIENTE_PRODUCCION = "PRODUCCION"
+    AMBIENTE_CHOICES = [
+        (AMBIENTE_CERTIFICACION, "Certificacion"),
+        (AMBIENTE_PRODUCCION, "Produccion"),
+    ]
+
+    nombre = models.CharField(max_length=80, default="Principal")
+    activa = models.BooleanField(default=True)
+    ambiente = models.CharField(
+        max_length=20,
+        choices=AMBIENTE_CHOICES,
+        default=AMBIENTE_CERTIFICACION,
+    )
+    habilita_boleta = models.BooleanField(default=True)
+    habilita_factura = models.BooleanField(default=False)
+    rut_emisor = models.CharField(max_length=20)
+    razon_social = models.CharField(max_length=120)
+    giro = models.CharField(max_length=120)
+    acteco_principal = models.CharField(max_length=20, blank=True, default="")
+    direccion_origen = models.CharField(max_length=120)
+    comuna_origen = models.CharField(max_length=80)
+    ciudad_origen = models.CharField(max_length=80)
+    resolucion_numero = models.PositiveIntegerField(null=True, blank=True)
+    resolucion_fecha = models.DateField(null=True, blank=True)
+    certificado_alias = models.CharField(max_length=120, blank=True, default="")
+    correo_intercambio = models.EmailField(blank=True, default="")
+    ruta_caf_tipo_33 = models.CharField(max_length=255, blank=True, default="")
+    ruta_caf_tipo_39 = models.CharField(max_length=255, blank=True, default="")
+    monto_identificacion_receptor_boleta = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    observaciones = models.TextField(blank=True, default="")
+    creado = models.DateTimeField(auto_now_add=True)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Configuracion SII DTE"
+        verbose_name_plural = "Configuraciones SII DTE"
+        ordering = ("-activa", "nombre", "id")
+
+    def __str__(self):
+        return f"{self.nombre} - {self.rut_emisor} ({self.ambiente})"
+
+    @property
+    def tipos_documento_habilitados(self) -> list[str]:
+        tipos = []
+        if self.habilita_boleta:
+            tipos.append("Boleta 39")
+        if self.habilita_factura:
+            tipos.append("Factura 33")
+        return tipos
+
+
+class BoletaElectronica(models.Model):
+    ESTADO_BORRADOR = "BORRADOR"
+    ESTADO_DATOS_INCOMPLETOS = "DATOS_INCOMPLETOS"
+    ESTADO_XML_PREPARADO = "XML_PREPARADO"
+    ESTADO_PENDIENTE_ENVIO = "PENDIENTE_ENVIO"
+    ESTADO_ENVIADA = "ENVIADA"
+    ESTADO_RECHAZADA = "RECHAZADA"
+    ESTADO_CHOICES = [
+        (ESTADO_BORRADOR, "Borrador"),
+        (ESTADO_DATOS_INCOMPLETOS, "Datos incompletos"),
+        (ESTADO_XML_PREPARADO, "XML preparado"),
+        (ESTADO_PENDIENTE_ENVIO, "Pendiente envio"),
+        (ESTADO_ENVIADA, "Enviada"),
+        (ESTADO_RECHAZADA, "Rechazada"),
+    ]
+
+    venta = models.OneToOneField(
+        Venta,
+        on_delete=models.CASCADE,
+        related_name="boleta_electronica",
+    )
+    configuracion = models.ForeignKey(
+        ConfiguracionBoletaSii,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="boletas",
+    )
+    estado = models.CharField(max_length=24, choices=ESTADO_CHOICES, default=ESTADO_BORRADOR)
+    tipo_dte = models.PositiveSmallIntegerField(default=39)
+    folio = models.PositiveIntegerField(null=True, blank=True)
+    ambiente = models.CharField(max_length=20, blank=True, default="")
+    idempotency_key = models.CharField(max_length=80, unique=True)
+    payload = models.JSONField(default=dict, blank=True)
+    errores_validacion = models.JSONField(default=list, blank=True)
+    xml_borrador = models.FileField(upload_to="dte/boletas/%Y/%m/", blank=True, null=True)
+    preparada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="boletas_preparadas",
+    )
+    preparada_en = models.DateTimeField(null=True, blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-actualizado", "-id")
+        verbose_name = "Boleta electronica"
+        verbose_name_plural = "Boletas electronicas"
+
+    def __str__(self):
+        return f"Boleta electronica venta #{self.venta_id} [{self.estado}]"
+
+    @property
+    def tiene_errores(self) -> bool:
+        return bool(self.errores_validacion)
 
 class UtilidadProducto(models.Model):
     # Enlace directo a la venta (muy conveniente para reportes)

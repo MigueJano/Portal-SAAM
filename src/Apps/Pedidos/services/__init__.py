@@ -1,8 +1,19 @@
+from .boleta import generar_boleta_desde_venta, nombre_archivo_xml, preparar_boleta_desde_venta
 from .listaprecios_sync import (
     sincronizar_lista_predeterminada_a_cliente,
     sincronizar_lista_predeterminada_a_clientes_asociados,
 )
 from .pedido_items import items_comerciales_pedido
+from .sii_set_pruebas import (
+    generar_archivos_set_boleta,
+    parse_set_prueba_boleta,
+    parse_set_prueba_boleta_file,
+    render_rcof_set_boleta_xml,
+    render_boleta_set_xml,
+    render_sobre_set_boleta_xml,
+    totales_boleta_set_case,
+    totales_set_boleta,
+)
 from .packs import (
     cantidad_primaria,
     componentes_pack,
@@ -28,12 +39,23 @@ __all__ = [
     "es_pack",
     "factor_empaque",
     "items_comerciales_pedido",
+    "generar_boleta_desde_venta",
+    "generar_archivos_set_boleta",
+    "nombre_archivo_xml",
+    "parse_set_prueba_boleta",
+    "parse_set_prueba_boleta_file",
+    "preparar_boleta_desde_venta",
     "q2",
+    "render_rcof_set_boleta_xml",
+    "render_boleta_set_xml",
+    "render_sobre_set_boleta_xml",
     "sincronizar_lista_predeterminada_a_cliente",
     "sincronizar_lista_predeterminada_a_clientes_asociados",
     "snapshot_pack",
     "stock_cache_simple",
     "stock_disponible_pack",
     "stock_disponible_primario",
+    "totales_boleta_set_case",
+    "totales_set_boleta",
     "validar_stock_pack",
 ]

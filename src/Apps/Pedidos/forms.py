@@ -10,13 +10,14 @@ de negocio como IVA o empaques.
 
 from django import forms
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from Apps.Pedidos.utils import validar_rut
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 # Modelos importados
 from .models import (
     Producto, Proveedor, Contacto, Recepcion, RecepcionLinea, Stock, Cliente, ListaPrecios,
-    Subcategoria, Pedido, Cotizacion, CategoriaEmpaque, Venta
+    Subcategoria, Pedido, Cotizacion, CategoriaEmpaque, Venta, ConfiguracionBoletaSii
 )
 
 #Constantes
@@ -455,8 +456,12 @@ class ClienteForm(forms.ModelForm):
         fields = [
             'nombre_cliente',
             'rut_cliente',
+            'razon_social',
+            'giro_cliente',
             'direccion_cliente',
             'direccion_bodega_cliente',
+            'comuna_cliente',
+            'ciudad_cliente',
             'cliente_activo',
             'telefono_cliente',
             'correo_cliente',
@@ -494,6 +499,21 @@ class ClienteForm(forms.ModelForm):
             raise ValidationError("Ya existe un cliente con este RUT.")
 
         return rut
+
+    def clean_razon_social(self):
+        razon_social = (self.cleaned_data.get('razon_social') or '').strip()
+        if razon_social:
+            return razon_social
+        return (self.cleaned_data.get('nombre_cliente') or '').strip()
+
+    def clean_giro_cliente(self):
+        return (self.cleaned_data.get('giro_cliente') or '').strip()
+
+    def clean_comuna_cliente(self):
+        return (self.cleaned_data.get('comuna_cliente') or '').strip()
+
+    def clean_ciudad_cliente(self):
+        return (self.cleaned_data.get('ciudad_cliente') or '').strip()
 
 class ListaPreciosForm(forms.ModelForm):
     """
@@ -792,7 +812,7 @@ class FinalizarVentaForm(forms.ModelForm):
                 attrs={'type': 'date', 'class': 'form-control'}
             ),
             'documento_pedido': forms.Select(attrs={'class': 'form-select'}),
-            'num_documento': forms.NumberInput(attrs={'class': 'form-control'}),
+            'num_documento': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -801,15 +821,166 @@ class FinalizarVentaForm(forms.ModelForm):
         """
         self.pedido = kwargs.pop('pedido', None)  # <-- Recibe el objeto Pedido desde la vista
         super().__init__(*args, **kwargs)
+        self.fields['num_documento'].required = False
+        self.fields['fecha_venta'].initial = self.fields['fecha_venta'].initial or timezone.localdate()
+        self.fields['documento_pedido'].initial = self.fields['documento_pedido'].initial or 'Boleta'
 
     def clean(self):
         """
         Validación del formulario para evitar ventas duplicadas por pedido.
         """
         cleaned_data = super().clean()
+        documento = cleaned_data.get('documento_pedido')
+        num_documento = cleaned_data.get('num_documento')
 
         # Validar que no exista ya una venta para este pedido
         if self.pedido and Venta.objects.filter(pedidoid=self.pedido).exists():
             raise forms.ValidationError("Ya existe una venta registrada para este pedido.")
+
+        if documento != 'Boleta' and not num_documento:
+            self.add_error('num_documento', "Debes ingresar el numero del documento.")
+
+        if num_documento is not None and num_documento <= 0:
+            self.add_error('num_documento', "El numero del documento debe ser mayor a cero.")
+
+        if documento == 'Boleta':
+            cleaned_data['num_documento'] = None
+
+        return cleaned_data
+
+
+class ConfiguracionBoletaSiiForm(forms.ModelForm):
+    class Meta:
+        model = ConfiguracionBoletaSii
+        fields = [
+            'nombre',
+            'activa',
+            'ambiente',
+            'habilita_boleta',
+            'habilita_factura',
+            'rut_emisor',
+            'razon_social',
+            'giro',
+            'acteco_principal',
+            'direccion_origen',
+            'comuna_origen',
+            'ciudad_origen',
+            'resolucion_numero',
+            'resolucion_fecha',
+            'certificado_alias',
+            'correo_intercambio',
+            'ruta_caf_tipo_33',
+            'ruta_caf_tipo_39',
+            'monto_identificacion_receptor_boleta',
+            'observaciones',
+        ]
+        labels = {
+            'nombre': 'Nombre de la configuracion',
+            'activa': 'Configurar como activa',
+            'ambiente': 'Ambiente',
+            'habilita_boleta': 'Habilitar boleta electronica',
+            'habilita_factura': 'Habilitar factura electronica',
+            'rut_emisor': 'RUT emisor',
+            'razon_social': 'Razon social',
+            'giro': 'Giro',
+            'acteco_principal': 'Acteco principal',
+            'direccion_origen': 'Direccion origen',
+            'comuna_origen': 'Comuna origen',
+            'ciudad_origen': 'Ciudad origen',
+            'resolucion_numero': 'Numero resolucion',
+            'resolucion_fecha': 'Fecha resolucion',
+            'certificado_alias': 'Alias certificado',
+            'correo_intercambio': 'Correo intercambio DTE',
+            'ruta_caf_tipo_33': 'Ruta o referencia CAF tipo 33',
+            'ruta_caf_tipo_39': 'Ruta o referencia CAF tipo 39',
+            'monto_identificacion_receptor_boleta': 'Monto CLP para identificar receptor boleta',
+            'observaciones': 'Observaciones',
+        }
+        widgets = {
+            'nombre': forms.TextInput(attrs={'class': 'form-control'}),
+            'activa': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'ambiente': forms.Select(attrs={'class': 'form-select'}),
+            'habilita_boleta': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'habilita_factura': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'rut_emisor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '11.111.111-1'}),
+            'razon_social': forms.TextInput(attrs={'class': 'form-control'}),
+            'giro': forms.TextInput(attrs={'class': 'form-control'}),
+            'acteco_principal': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej: 521900'}),
+            'direccion_origen': forms.TextInput(attrs={'class': 'form-control'}),
+            'comuna_origen': forms.TextInput(attrs={'class': 'form-control'}),
+            'ciudad_origen': forms.TextInput(attrs={'class': 'form-control'}),
+            'resolucion_numero': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
+            'resolucion_fecha': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'certificado_alias': forms.TextInput(attrs={'class': 'form-control'}),
+            'correo_intercambio': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'dte@empresa.cl'}),
+            'ruta_caf_tipo_33': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'caf/tipo33.xml'}),
+            'ruta_caf_tipo_39': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'caf/tipo39.xml'}),
+            'monto_identificacion_receptor_boleta': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': '1'}),
+            'observaciones': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def clean_rut_emisor(self):
+        rut = (self.cleaned_data.get('rut_emisor') or '').strip()
+        if not validar_rut(rut):
+            raise ValidationError("RUT emisor invalido.")
+        return rut
+
+    def clean_nombre(self):
+        return (self.cleaned_data.get('nombre') or '').strip()
+
+    def clean_razon_social(self):
+        return (self.cleaned_data.get('razon_social') or '').strip()
+
+    def clean_giro(self):
+        return (self.cleaned_data.get('giro') or '').strip()
+
+    def clean_acteco_principal(self):
+        return (self.cleaned_data.get('acteco_principal') or '').strip()
+
+    def clean_direccion_origen(self):
+        return (self.cleaned_data.get('direccion_origen') or '').strip()
+
+    def clean_comuna_origen(self):
+        return (self.cleaned_data.get('comuna_origen') or '').strip()
+
+    def clean_ciudad_origen(self):
+        return (self.cleaned_data.get('ciudad_origen') or '').strip()
+
+    def clean_certificado_alias(self):
+        return (self.cleaned_data.get('certificado_alias') or '').strip()
+
+    def clean_correo_intercambio(self):
+        return (self.cleaned_data.get('correo_intercambio') or '').strip()
+
+    def clean_ruta_caf_tipo_33(self):
+        return (self.cleaned_data.get('ruta_caf_tipo_33') or '').strip()
+
+    def clean_ruta_caf_tipo_39(self):
+        return (self.cleaned_data.get('ruta_caf_tipo_39') or '').strip()
+
+    def clean_monto_identificacion_receptor_boleta(self):
+        monto = self.cleaned_data.get('monto_identificacion_receptor_boleta') or Decimal('0')
+        if monto < 0:
+            raise ValidationError("El monto no puede ser negativo.")
+        return monto.quantize(DOS_DECIMALES, rounding=ROUND_HALF_UP)
+
+    def clean_observaciones(self):
+        return (self.cleaned_data.get('observaciones') or '').strip()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        habilita_boleta = cleaned_data.get('habilita_boleta')
+        habilita_factura = cleaned_data.get('habilita_factura')
+        caf_33 = cleaned_data.get('ruta_caf_tipo_33')
+        caf_39 = cleaned_data.get('ruta_caf_tipo_39')
+
+        if not habilita_boleta and not habilita_factura:
+            raise ValidationError("Debes habilitar al menos boleta o factura.")
+
+        if habilita_boleta and not caf_39:
+            self.add_error('ruta_caf_tipo_39', "Debes informar el CAF tipo 39 para boleta.")
+
+        if habilita_factura and not caf_33:
+            self.add_error('ruta_caf_tipo_33', "Debes informar el CAF tipo 33 para factura.")
 
         return cleaned_data

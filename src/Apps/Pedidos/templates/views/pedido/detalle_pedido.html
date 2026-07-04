@@ -24,7 +24,7 @@
     </div>
 
     <div>
-      {% if pedido.estado_pedido != "Entregado" %}
+      {% if pedido.estado_pedido == "Pendiente" %}
         <a href="{% url 'agregar_productos_pedido' pedido.id %}" class="btn btn-outline-primary me-2">
           <i class="fas fa-box-open"></i> Agregar Productos
         </a>
@@ -34,11 +34,15 @@
         <i class="fas fa-file-pdf"></i>
       </a>
 
-      {% if pedido.estado_pedido == "Entregado" %}
-        <a href="{% url 'finalizar_venta' pedido.id %}" class="btn btn-outline-success me-2">
-          <i class="fas fa-check"></i> Finalizar Venta
+      {% if venta %}
+        <a href="{% url 'detalle_venta' venta.id %}" class="btn btn-outline-success me-2">
+          <i class="fas fa-file-invoice"></i> Ver documento
         </a>
-      {% else %}
+      {% elif pedido.estado_pedido == "Entregado" %}
+        <a href="{% url 'finalizar_venta' pedido.id %}" class="btn btn-outline-success me-2">
+          <i class="fas fa-check"></i> Confirmar pago
+        </a>
+      {% elif pedido.estado_pedido == "Pendiente" %}
         <button type="button" class="btn btn-outline-success me-2" data-bs-toggle="modal" data-bs-target="#modalEntrega">
           <i class="fas fa-check"></i> Entregar Pedido
         </button>
@@ -82,8 +86,8 @@
           <td class="text-center">${{ linea.subtotal|formatear_miles }}</td>
           <td class="text-center">${{ linea.ganancia|formatear_miles }} | {{ linea.ganancia_pct }}%</td>
           <td class="text-center">
-            {% if pedido.estado_pedido == "Entregado" %}
-              <button class="btn btn-sm btn-outline-secondary" title="No disponible en Entregado" disabled>
+            {% if pedido.estado_pedido != "Pendiente" %}
+              <button class="btn btn-sm btn-outline-secondary" title="No disponible en este estado" disabled>
                 <i class="fas fa-ban"></i>
               </button>
             {% elif linea.linea_id %}
@@ -148,7 +152,7 @@
   {% endif %}
   {% endwith %}
 
-{% if pedido.estado_pedido != "Entregado" %}
+{% if pedido.estado_pedido == "Pendiente" %}
 <div class="modal fade" id="modalEntrega" tabindex="-1" aria-labelledby="modalEntregaLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">

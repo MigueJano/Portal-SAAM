@@ -20,7 +20,14 @@ from django.db.models import Case, When, F, Value, CharField, ExpressionWrapper,
 from django.db.models.functions import Coalesce
 
 from Apps.Pedidos.models import Pedido, PedidoLinea, Stock, Venta, UtilidadProducto, EntregaPedido
-from Apps.Pedidos.services import costo_maximo_unitario, desglose_ingreso_pack, es_pack, factor_empaque
+from Apps.Pedidos.services import (
+    costo_maximo_unitario,
+    desglose_ingreso_pack,
+    es_pack,
+    factor_empaque,
+    generar_boleta_desde_venta,
+    nombre_archivo_xml,
+)
 
 from django.db import transaction
 from Apps.Pedidos.forms import FinalizarVentaForm
@@ -52,6 +59,19 @@ def _empaque_display_venta(producto, empaque):
         return 'Pack'
     return nivel
 
+
+def _generar_boleta_y_notificar(request, venta: Venta) -> None:
+    try:
+        boleta = generar_boleta_desde_venta(venta, usuario=request.user)
+    except Exception as exc:
+        messages.error(request, f"No se pudo generar la boleta electronica: {exc}")
+        return
+
+    if boleta.tiene_errores:
+        messages.warning(request, "El documento quedo pendiente por datos tributarios incompletos. Revisa el detalle de la venta.")
+    else:
+        messages.success(request, "Documento tributario generado correctamente.")
+
 def finalizar_venta(request, pedido_id):
     """
     Ahora finaliza la venta sumando todos los productos del pedido que estén DESPACHADOS.
@@ -60,9 +80,10 @@ def finalizar_venta(request, pedido_id):
     pedido = get_object_or_404(Pedido, id=pedido_id)
 
     # Evitar duplicados por pedido
-    if Venta.objects.filter(pedidoid=pedido).exists():
+    venta_existente = Venta.objects.filter(pedidoid=pedido).first()
+    if venta_existente:
         messages.info(request, "Este pedido ya tiene una venta registrada.")
-        return redirect('detalle_pedido', pedido_id=pedido.id)
+        return redirect('detalle_venta', venta_id=venta_existente.id)
 
     # Base: solo movimientos DESPACHADO del pedido
     despachados = Stock.objects.filter(pedido=pedido, tipo_movimiento='DESPACHO')
@@ -179,6 +200,8 @@ def finalizar_venta(request, pedido_id):
         venta.venta_total_pedido  = total
         venta.ganancia_total      = ganancia_total.quantize(DOS_DEC, rounding=ROUND_HALF_UP)
         venta.ganancia_porcentaje = ganancia_porcentaje
+        if venta.documento_pedido == 'Boleta':
+            venta.num_documento = None
         venta.save()
 
         ahora = timezone.now()
@@ -205,6 +228,11 @@ def finalizar_venta(request, pedido_id):
         pedido.estado_pedido = 'Finalizado'
         pedido.save(update_fields=['estado_pedido'])
 
+    if venta.documento_pedido == 'Boleta':
+        messages.success(request, "Pago confirmado y venta consolidada.")
+        _generar_boleta_y_notificar(request, venta)
+        return redirect('detalle_venta', venta_id=venta.id)
+
     messages.success(request, "Venta consolidada a partir de DESPACHADOS y registrada correctamente.")
     return redirect('lista_ventas')
 
@@ -218,6 +246,7 @@ def lista_ventas(request):
 
 def detalle_venta(request, venta_id):
     venta = get_object_or_404(Venta, pk=venta_id)
+    boleta = getattr(venta, 'boleta_electronica', None)
     lineas_comerciales = []
     for linea in _lineas_comerciales_venta(venta.pedidoid):
         lineas_comerciales.append({
@@ -297,6 +326,8 @@ def detalle_venta(request, venta_id):
 
     return render(request, './views/venta/detalle_venta.html', {
         'venta': venta,
+        'boleta': boleta,
+        'boleta_xml_nombre': nombre_archivo_xml(boleta) if boleta else "",
         'lineas_comerciales': lineas_comerciales,
         'productos': productos,
         'ingreso_total': ingreso_total,
@@ -304,3 +335,20 @@ def detalle_venta(request, venta_id):
         'ganancia_total_pct': ganancia_total_pct,
         'entregas': entregas,
     })
+
+
+def generar_documento_venta(request, venta_id):
+    venta = get_object_or_404(Venta, pk=venta_id)
+
+    if request.method != 'POST':
+        return redirect('detalle_venta', venta_id=venta.id)
+
+    if venta.documento_pedido != 'Boleta':
+        messages.error(request, "La generacion automatica esta disponible para boleta electronica en esta etapa.")
+        return redirect('detalle_venta', venta_id=venta.id)
+
+    _generar_boleta_y_notificar(request, venta)
+    return redirect('detalle_venta', venta_id=venta.id)
+
+
+preparar_boleta_electronica = generar_documento_venta

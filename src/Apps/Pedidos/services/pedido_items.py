@@ -9,7 +9,7 @@ def _legacy_stock_base_qs(pedido: Pedido):
         linea_pedido__isnull=True,
     )
 
-    if pedido.estado_pedido == "Entregado":
+    if pedido.estado_pedido in {"Entregado", "Finalizado", "Pagado"}:
         despacho_qs = qs.filter(tipo_movimiento="DESPACHO")
         if despacho_qs.exists():
             return despacho_qs

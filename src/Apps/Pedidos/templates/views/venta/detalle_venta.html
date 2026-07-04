@@ -9,48 +9,99 @@
     <p><strong>N° Pedido:</strong> {{ venta.pedidoid.id }}</p>
     <p><strong>Cliente:</strong> {{ venta.pedidoid.nombre_cliente }}</p>
     <p><strong>Fecha de Venta:</strong> {{ venta.fecha_venta|date:"d-m-Y" }}</p>
-    <p><strong>Documento:</strong> {{ venta.get_documento_pedido_display }} N°{{ venta.num_documento }}</p>
+    <p>
+      <strong>Documento:</strong>
+      {{ venta.get_documento_pedido_display }}
+      {% if venta.num_documento %}
+        N°{{ venta.num_documento }}
+      {% else %}
+        <span class="text-muted">sin folio asignado</span>
+      {% endif %}
+    </p>
   </div>
 
-  {# --- Bloque PDF(s) de Recepción --- #}
-    {# --- Entregas (PDF y Foto) --- #}
+  {% if venta.documento_pedido == 'Boleta' %}
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+          <h5 class="card-title mb-1">Boleta electrónica</h5>
+          {% if boleta %}
+            <p class="mb-1"><strong>Estado:</strong> {{ boleta.get_estado_display }}</p>
+            <p class="mb-1"><strong>Ambiente:</strong> {{ boleta.ambiente|default:"Sin configuracion" }}</p>
+            <p class="mb-0"><strong>Clave idempotente:</strong> <code>{{ boleta.idempotency_key }}</code></p>
+          {% else %}
+            <p class="mb-0 text-muted">Aún no existe un expediente de boleta para esta venta.</p>
+          {% endif %}
+        </div>
+        <form method="post" action="{% url 'generar_documento_venta' venta.id %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-success">
+            {% if boleta %}Regenerar documento{% else %}Generar documento{% endif %}
+          </button>
+        </form>
+      </div>
+
+      {% if boleta and boleta.errores_validacion %}
+      <div class="alert alert-warning mt-3 mb-0">
+        <strong>Faltantes para generar documento:</strong>
+        <ul class="mb-0 mt-2">
+          {% for error in boleta.errores_validacion %}
+          <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if boleta and boleta.xml_borrador %}
+      <div class="mt-3">
+        <a href="{{ boleta.xml_borrador.url }}" target="_blank" class="btn btn-outline-primary btn-sm">
+          Descargar XML generado
+        </a>
+        <span class="text-muted small ms-2">{{ boleta_xml_nombre }}</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   {% if entregas %}
-      <div class="card mb-4">
-        <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-            <div>
-              <h5 class="card-title mb-1">Registro de Entrega</h5>
-              <small class="text-muted">Pedido N° {{ venta.pedidoid.id }}</small>
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <div>
+          <h5 class="card-title mb-1">Registro de Entrega</h5>
+          <small class="text-muted">Pedido N° {{ venta.pedidoid.id }}</small>
+        </div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        {% for e in entregas %}
+        <div class="d-flex align-items-center gap-2 border rounded px-2 py-1">
+          <div class="small">
+            <div><strong>Entrega #{{ e.id }}</strong></div>
+            <div class="text-muted">
+              {{ e.fecha_entrega|date:"d-m-Y H:i" }} - {{ e.nombre_receptor }} ({{ e.rut_receptor }})
             </div>
           </div>
 
-          <div class="d-flex flex-wrap gap-2">
-            {% for e in entregas %}
-              <div class="d-flex align-items-center gap-2 border rounded px-2 py-1">
-                <div class="small">
-                  <div><strong>Entrega #{{ e.id }}</strong></div>
-                  <div class="text-muted">
-                    {{ e.fecha_entrega|date:"d-m-Y H:i" }} — {{ e.nombre_receptor }} ({{ e.rut_receptor }})
-                  </div>
-                </div>
+          {% if e.archivo_pdf %}
+          <a href="{{ e.archivo_pdf.url }}" target="_blank" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-file-pdf"></i> PDF
+          </a>
+          {% endif %}
 
-                {% if e.archivo_pdf %}
-                  <a href="{{ e.archivo_pdf.url }}" target="_blank" class="btn btn-outline-danger btn-sm">
-                    <i class="bi bi-file-pdf"></i> PDF
-                  </a>
-                {% endif %}
-
-                {% if e.foto %}
-                  <a href="{{ e.foto.url }}" target="_blank" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-image"></i> Foto
-                  </a>
-                {% endif %}
-              </div>
-            {% endfor %}
-          </div>
+          {% if e.foto %}
+          <a href="{{ e.foto.url }}" target="_blank" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-image"></i> Foto
+          </a>
+          {% endif %}
         </div>
+        {% endfor %}
       </div>
-    {% endif %}
+    </div>
+  </div>
+  {% endif %}
 
   {% if lineas_comerciales %}
   <div class="card mb-4">
@@ -92,7 +143,7 @@
   </div>
   {% endif %}
 
-   <div class="table-responsive mb-4">
+  <div class="table-responsive mb-4">
     <table id="tabla-filtros" class="table table-striped table-hover align-middle">
       <thead class="table-light text-center">
         <tr>
@@ -111,16 +162,11 @@
         <tr class="text-center">
           <td class="text-start">{{ p.producto.nombre_producto }}</td>
           <td>{{ p.empaque_nombre }}</td>
-          {# Cantidad en la unidad de venta #}
-          <td>{{ p.cantidad_empaque|formatear_miles}}</td>
-          {# Precio por empaque (no por unidad primaria) #}
+          <td>{{ p.cantidad_empaque|formatear_miles }}</td>
           <td>${{ p.precio_venta_empaque|formatear_miles }}</td>
-          {# Total mantiene coherencia con pv_unitario_primario * cantidad_primaria #}
           <td>${{ p.total_linea|formatear_miles }}</td>
-          {# Utilidad total de la línea (unitaria * unidades primarias) #}
           <td>${{ p.utilidad|mul:p.cantidad|formatear_miles }}</td>
           <td>{{ p.utilidad_porcentaje|floatformat:1 }}%</td>
-          {# Precio compra por empaque #}
           <td>${{ p.precio_compra_empaque|formatear_miles }}</td>
         </tr>
         {% endfor %}

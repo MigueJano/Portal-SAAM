@@ -1,11 +1,381 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 
-{% block CSS %} 
-{% endblock CSS %} 
+{% block CSS %}
+<style>
+  .sii-help-icon {
+    align-items: center;
+    border: 1px solid #0d6efd;
+    border-radius: 50%;
+    color: #0d6efd;
+    cursor: help;
+    display: inline-flex;
+    font-size: 0.68rem;
+    font-weight: 700;
+    height: 1rem;
+    justify-content: center;
+    line-height: 1;
+    margin-left: 0.25rem;
+    vertical-align: text-top;
+    width: 1rem;
+  }
+</style>
+{% endblock CSS %}
 
-{% block content %} 
-<h1>config</h1>
-{% endblock content %} 
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+      <h1 class="h4 mb-1">Configuracion SII</h1>
+      <p class="text-muted mb-0">Administra el emisor SII/DTE para boletas y facturas desde SAAM.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-primary" href="{% url 'configuracion' %}#form-config">
+        Nueva Configuracion SII
+      </a>
+      <a class="btn btn-outline-secondary" href="{% url 'admin:index' %}">
+        Base de Datos
+      </a>
+    </div>
+  </div>
 
-{% block script %} 
-{% endblock script %}
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-muted small mb-2">Configuracion activa</div>
+          {% if configuracion_activa %}
+            <div class="fw-semibold">{{ configuracion_activa.nombre }}</div>
+            <div>{{ configuracion_activa.rut_emisor }}</div>
+            <div class="small text-muted">{{ configuracion_activa.get_ambiente_display }}</div>
+          {% else %}
+            <div class="text-danger">Sin configuracion activa</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-muted small mb-2">Configuraciones registradas</div>
+          <div class="h4 mb-0">{{ total_configuraciones }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-muted small mb-2">Configs con factura habilitada</div>
+          <div class="h4 mb-0">{{ configuraciones_habilitan_factura }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-muted small mb-2">Clientes con datos tributarios incompletos</div>
+          <div class="h4 mb-0">{{ clientes_incompletos }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <div class="card" id="form-config">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>
+            {% if config_en_edicion %}
+              Editar Configuracion SII
+            {% else %}
+              Nueva Configuracion SII
+            {% endif %}
+          </span>
+          {% if config_en_edicion %}
+            <a class="btn btn-sm btn-outline-secondary" href="{% url 'configuracion' %}#form-config">Cancelar edicion</a>
+          {% endif %}
+        </div>
+        <div class="card-body">
+          <form method="post" novalidate>
+            {% csrf_token %}
+            {% if config_en_edicion %}
+              <input type="hidden" name="config_id" value="{{ config_en_edicion.id }}">
+            {% endif %}
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+              {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="row g-3">
+              <div class="col-md-8">
+                <label for="{{ form.nombre.id_for_label }}" class="form-label">
+                  {{ form.nombre.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'nombre' }}">i</span>
+                </label>
+                {{ form.nombre }}
+                {{ form.nombre.errors }}
+              </div>
+              <div class="col-md-4">
+                <label for="{{ form.ambiente.id_for_label }}" class="form-label">
+                  {{ form.ambiente.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'ambiente' }}">i</span>
+                </label>
+                {{ form.ambiente }}
+                {{ form.ambiente.errors }}
+              </div>
+
+              <div class="col-md-4">
+                <div class="form-check mt-4">
+                  {{ form.habilita_boleta }}
+                  <label class="form-check-label" for="{{ form.habilita_boleta.id_for_label }}">
+                    {{ form.habilita_boleta.label }}
+                    <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'habilita_boleta' }}">i</span>
+                  </label>
+                </div>
+                {{ form.habilita_boleta.errors }}
+              </div>
+              <div class="col-md-4">
+                <div class="form-check mt-4">
+                  {{ form.habilita_factura }}
+                  <label class="form-check-label" for="{{ form.habilita_factura.id_for_label }}">
+                    {{ form.habilita_factura.label }}
+                    <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'habilita_factura' }}">i</span>
+                  </label>
+                </div>
+                {{ form.habilita_factura.errors }}
+              </div>
+              <div class="col-md-4 d-flex align-items-end">
+                <div class="form-check">
+                  {{ form.activa }}
+                  <label class="form-check-label" for="{{ form.activa.id_for_label }}">
+                    {{ form.activa.label }}
+                    <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'activa' }}">i</span>
+                  </label>
+                </div>
+                {{ form.activa.errors }}
+              </div>
+
+              <div class="col-md-6">
+                <label for="{{ form.rut_emisor.id_for_label }}" class="form-label">
+                  {{ form.rut_emisor.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'rut_emisor' }}">i</span>
+                </label>
+                {{ form.rut_emisor }}
+                {{ form.rut_emisor.errors }}
+              </div>
+              <div class="col-md-6">
+                <label for="{{ form.razon_social.id_for_label }}" class="form-label">
+                  {{ form.razon_social.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'razon_social' }}">i</span>
+                </label>
+                {{ form.razon_social }}
+                {{ form.razon_social.errors }}
+              </div>
+
+              <div class="col-md-8">
+                <label for="{{ form.giro.id_for_label }}" class="form-label">
+                  {{ form.giro.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'giro' }}">i</span>
+                </label>
+                {{ form.giro }}
+                {{ form.giro.errors }}
+              </div>
+              <div class="col-md-4">
+                <label for="{{ form.acteco_principal.id_for_label }}" class="form-label">
+                  {{ form.acteco_principal.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'acteco_principal' }}">i</span>
+                </label>
+                {{ form.acteco_principal }}
+                {{ form.acteco_principal.errors }}
+              </div>
+
+              <div class="col-md-6">
+                <label for="{{ form.direccion_origen.id_for_label }}" class="form-label">
+                  {{ form.direccion_origen.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'direccion_origen' }}">i</span>
+                </label>
+                {{ form.direccion_origen }}
+                {{ form.direccion_origen.errors }}
+              </div>
+              <div class="col-md-3">
+                <label for="{{ form.comuna_origen.id_for_label }}" class="form-label">
+                  {{ form.comuna_origen.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'comuna_origen' }}">i</span>
+                </label>
+                {{ form.comuna_origen }}
+                {{ form.comuna_origen.errors }}
+              </div>
+              <div class="col-md-3">
+                <label for="{{ form.ciudad_origen.id_for_label }}" class="form-label">
+                  {{ form.ciudad_origen.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'ciudad_origen' }}">i</span>
+                </label>
+                {{ form.ciudad_origen }}
+                {{ form.ciudad_origen.errors }}
+              </div>
+
+              <div class="col-md-4">
+                <label for="{{ form.resolucion_numero.id_for_label }}" class="form-label">
+                  {{ form.resolucion_numero.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'resolucion_numero' }}">i</span>
+                </label>
+                {{ form.resolucion_numero }}
+                {{ form.resolucion_numero.errors }}
+              </div>
+              <div class="col-md-4">
+                <label for="{{ form.resolucion_fecha.id_for_label }}" class="form-label">
+                  {{ form.resolucion_fecha.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'resolucion_fecha' }}">i</span>
+                </label>
+                {{ form.resolucion_fecha }}
+                {{ form.resolucion_fecha.errors }}
+              </div>
+              <div class="col-md-4">
+                <label for="{{ form.certificado_alias.id_for_label }}" class="form-label">
+                  {{ form.certificado_alias.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'certificado_alias' }}">i</span>
+                </label>
+                {{ form.certificado_alias }}
+                {{ form.certificado_alias.errors }}
+              </div>
+
+              <div class="col-md-6">
+                <label for="{{ form.correo_intercambio.id_for_label }}" class="form-label">
+                  {{ form.correo_intercambio.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'correo_intercambio' }}">i</span>
+                </label>
+                {{ form.correo_intercambio }}
+                {{ form.correo_intercambio.errors }}
+              </div>
+              <div class="col-md-6">
+                <label for="{{ form.ruta_caf_tipo_33.id_for_label }}" class="form-label">
+                  {{ form.ruta_caf_tipo_33.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'ruta_caf_tipo_33' }}">i</span>
+                </label>
+                {{ form.ruta_caf_tipo_33 }}
+                {{ form.ruta_caf_tipo_33.errors }}
+              </div>
+
+              <div class="col-md-6">
+                <label for="{{ form.ruta_caf_tipo_39.id_for_label }}" class="form-label">
+                  {{ form.ruta_caf_tipo_39.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'ruta_caf_tipo_39' }}">i</span>
+                </label>
+                {{ form.ruta_caf_tipo_39 }}
+                {{ form.ruta_caf_tipo_39.errors }}
+              </div>
+
+              <div class="col-md-6">
+                <label for="{{ form.monto_identificacion_receptor_boleta.id_for_label }}" class="form-label">
+                  {{ form.monto_identificacion_receptor_boleta.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'monto_identificacion_receptor_boleta' }}">i</span>
+                </label>
+                {{ form.monto_identificacion_receptor_boleta }}
+                <div class="form-text">Equivalente en CLP a 135 UF. Si queda en 0, no se fuerza identificacion para boletas normales.</div>
+                {{ form.monto_identificacion_receptor_boleta.errors }}
+              </div>
+
+              <div class="col-12">
+                <label for="{{ form.observaciones.id_for_label }}" class="form-label">
+                  {{ form.observaciones.label }}
+                  <span class="sii-help-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ sii_field_help|get_item:'observaciones' }}">i</span>
+                </label>
+                {{ form.observaciones }}
+                {{ form.observaciones.errors }}
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+              <button type="submit" class="btn btn-outline-success">
+                {% if config_en_edicion %}Guardar Cambios{% else %}Guardar Configuracion{% endif %}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card mb-4">
+        <div class="card-header">Configuraciones Registradas</div>
+        <div class="card-body">
+          {% if configuraciones %}
+            <div class="list-group list-group-flush">
+              {% for item in configuraciones %}
+              <div class="list-group-item px-0">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                  <div>
+                    <div class="fw-semibold">{{ item.nombre }}</div>
+                    <div class="small text-muted">{{ item.rut_emisor }} | {{ item.razon_social }}</div>
+                    <div class="small text-muted">{{ item.get_ambiente_display }} | {{ item.comuna_origen }}, {{ item.ciudad_origen }}</div>
+                    <div class="small text-muted">
+                      {% if item.tipos_documento_habilitados %}
+                        {{ item.tipos_documento_habilitados|join:", " }}
+                      {% else %}
+                        Sin tipos habilitados
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    {% if item.activa %}
+                      <span class="badge bg-success">Activa</span>
+                    {% else %}
+                      <span class="badge bg-secondary">Inactiva</span>
+                    {% endif %}
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'configuracion' %}?editar={{ item.id }}#form-config">
+                      Editar
+                    </a>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">Aun no hay configuraciones registradas.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>Boletas Preparadas</span>
+          <a class="btn btn-sm btn-outline-secondary" href="{% url 'admin:Pedidos_boletaelectronica_changelist' %}">
+            Ver Expedientes
+          </a>
+        </div>
+        <div class="card-body">
+          <div class="small text-muted mb-3">Total expedientes: {{ total_boletas }}</div>
+          {% if boletas_pendientes %}
+            <div class="list-group list-group-flush">
+              {% for boleta in boletas_pendientes %}
+              <div class="list-group-item px-0">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                  <div>
+                    <div class="fw-semibold">Venta #{{ boleta.venta_id }} | Pedido #{{ boleta.venta.pedidoid_id }}</div>
+                    <div class="small text-muted">{{ boleta.venta.pedidoid.nombre_cliente }}</div>
+                    <div class="small text-muted">{{ boleta.get_estado_display }} | {{ boleta.actualizado|date:"d-m-Y H:i" }}</div>
+                  </div>
+                  {% if boleta.estado == 'XML_PREPARADO' %}
+                    <span class="badge bg-primary">Lista</span>
+                  {% elif boleta.estado == 'DATOS_INCOMPLETOS' %}
+                    <span class="badge bg-warning text-dark">Incompleta</span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ boleta.estado }}</span>
+                  {% endif %}
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">No hay boletas pendientes o en preparacion.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}

@@ -20,8 +20,9 @@ from django.db.models import Sum, F, ExpressionWrapper, DecimalField
 from django.core.files.base import ContentFile
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
+from django.utils.cache import add_never_cache_headers
 
-from Apps.Pedidos.models import Pedido, PedidoLinea, Stock, Producto, ListaPrecios, EntregaPedido
+from Apps.Pedidos.models import Pedido, PedidoLinea, Stock, Producto, ListaPrecios, EntregaPedido, Venta
 from Apps.Pedidos.forms import PedidoForm, ProductoReservaForm
 from Apps.Pedidos.services import (
     cantidad_primaria,
@@ -461,9 +462,11 @@ def detalle_pedido(request, pedido_id):
     """
     pedido = get_object_or_404(Pedido, id=pedido_id)
     lineas, total_neto, iva, total, ganancia_total = _detalle_lineas_pedido(pedido)
+    venta = Venta.objects.filter(pedidoid=pedido).first()
 
     return render(request, './views/pedido/detalle_pedido.html', {
         'pedido': pedido,
+        'venta': venta,
         'lineas': lineas,
         'total_neto': total_neto,
         'iva': iva,
@@ -514,8 +517,9 @@ def exportar_pdf_pedido(request, pedido_id):
     else:
         reservas = Stock.objects.filter(pedido=pedido, tipo_movimiento='RESERVA')
 
-    pdf_buffer = generar_pdf_pedido(pedido, reservas)
-    return HttpResponse(pdf_buffer, content_type='application/pdf')
+    response = generar_pdf_pedido(pedido, reservas)
+    add_never_cache_headers(response)
+    return response
 
 def editar_pedido(request, pedido_id):
     """

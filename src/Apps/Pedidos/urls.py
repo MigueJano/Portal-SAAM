@@ -21,6 +21,7 @@ urlpatterns = [
     # Autenticacion y navegacion inicial
     path("inicio/", _private(views.home), name="home"),
     path("index/", _private(views.home), name="home"),
+    path("configuracion/", views.configuracion, name="configuracion"),
 
     # Proveedores
     path("proveedores/", _private(views.lista_proveedores), name="lista_proveedores"),
@@ -148,4 +149,6 @@ urlpatterns = [
     path("pedido/<int:pedido_id>/finalizar-venta/", _private(views.finalizar_venta), name="finalizar_venta"),
     path("ventas/", _private(views.lista_ventas), name="lista_ventas"),
     path("ventas/<int:venta_id>/detalle/", _private(views.detalle_venta), name="detalle_venta"),
+    path("ventas/<int:venta_id>/documento/generar/", _private(views.generar_documento_venta), name="generar_documento_venta"),
+    path("ventas/<int:venta_id>/boleta/preparar/", _private(views.preparar_boleta_electronica), name="preparar_boleta_electronica"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -2,15 +2,22 @@
 {% load custom_filters %}
 
 {% block content %}
-<h3>Finalizar Venta para Pedido N°{{ pedido.id }}</h3>
+<h3>Confirmar pago y generar documento para Pedido N°{{ pedido.id }}</h3>
 <p>Cliente: {{ pedido.nombre_cliente }}</p>
 
 <form method="post">
   {% csrf_token %}
   <div class="row g-3">
     <div class="col-md-4">{{ form.fecha_venta.label_tag }} {{ form.fecha_venta }}</div>
-    <div class="col-md-4">{{ form.documento_pedido.label_tag }} {{ form.documento_pedido }}</div>
-    <div class="col-md-4">{{ form.num_documento.label_tag }} {{ form.num_documento }}</div>
+    <div class="col-md-4">
+      {{ form.documento_pedido.label_tag }} {{ form.documento_pedido }}
+    </div>
+    <div class="col-md-4">
+      {{ form.num_documento.label_tag }} {{ form.num_documento }}
+      <small class="text-muted d-block mt-1" id="ayuda-num-documento">
+        Para boleta electronica, el folio queda pendiente hasta completar la emision SII con certificado y CAF.
+      </small>
+    </div>
   </div>
 
   <div class="d-flex justify-content-end gap-2 mt-4">
@@ -20,9 +27,37 @@
     <h4><strong>Total:</strong> ${{ total|formatear_miles }}</h4>
   </div>
   <div class="d-flex justify-content-end gap-2 mt-4">
-    <button type="submit" class="btn btn-outline-success me-2">Confirmar Venta</button>
+    <button type="submit" class="btn btn-outline-success me-2">Confirmar pago y generar documento</button>
     <a href="{% url 'detalle_pedido' pedido.id %}" class="btn btn-outline-secondary me-2">Cancelar</a>
   </div>
 
 </form>
+{% endblock %}
+
+{% block script %}
+<script>
+  (function boletaToggle() {
+    const docInput = document.getElementById('id_documento_pedido');
+    const numInput = document.getElementById('id_num_documento');
+    const help = document.getElementById('ayuda-num-documento');
+    if (!docInput || !numInput || !help) return;
+
+    function syncState() {
+      const esBoleta = docInput.value === 'Boleta';
+      numInput.disabled = esBoleta;
+      numInput.required = !esBoleta;
+      if (esBoleta) {
+        numInput.value = '';
+        numInput.placeholder = 'Pendiente de folio SII';
+        help.classList.remove('d-none');
+      } else {
+        numInput.placeholder = '';
+        help.classList.add('d-none');
+      }
+    }
+
+    docInput.addEventListener('change', syncState);
+    syncState();
+  })();
+</script>
 {% endblock %}

@@ -1,14 +1,13 @@
 {% extends "base.html" %}
 
-{% block CSS %} 
-{% endblock CSS %} 
+{% block CSS %}
+{% endblock CSS %}
 
-{% block content %} 
+{% block content %}
 <form method="post" novalidate>
   {% csrf_token %}
   <h1 class="h4 mt-4 mb-3">Editar Cliente</h1>
 
-  <!-- Nombre del cliente -->
   <div class="mb-3">
     <label for="nombre_cliente" class="form-label">Nombre del Cliente</label>
     <div class="input-group">
@@ -27,7 +26,6 @@
     </div>
   </div>
 
-  <!-- RUT del cliente -->
   <div class="mb-3">
     <label for="rut_cliente" class="form-label">RUT del Cliente</label>
     <div class="input-group">
@@ -46,7 +44,32 @@
     </div>
   </div>
 
-  <!-- Dirección -->
+  <div class="mb-3">
+    <label for="razon_social" class="form-label">Razón Social</label>
+    <input
+      type="text"
+      class="form-control"
+      id="razon_social"
+      name="razon_social"
+      value="{{ form.razon_social.value|default_if_none:'' }}"
+      placeholder="Comercial Ejemplo Ltda."
+      autocomplete="organization"
+    >
+  </div>
+
+  <div class="mb-3">
+    <label for="giro_cliente" class="form-label">Giro</label>
+    <input
+      type="text"
+      class="form-control"
+      id="giro_cliente"
+      name="giro_cliente"
+      value="{{ form.giro_cliente.value|default_if_none:'' }}"
+      placeholder="Ej: Comercialización de insumos"
+      autocomplete="organization-title"
+    >
+  </div>
+
   <div class="mb-3">
     <label for="direccion_cliente" class="form-label">Dirección</label>
     <input
@@ -60,7 +83,6 @@
     >
   </div>
 
-  <!-- Dirección Bodega -->
   <div class="mb-3">
     <label for="direccion_bodega_cliente" class="form-label">Dirección Bodega</label>
     <input
@@ -74,48 +96,71 @@
     >
   </div>
 
-  <!-- Cliente activo -->
+  <div class="row g-3 mb-3">
+    <div class="col-md-6">
+      <label for="comuna_cliente" class="form-label">Comuna</label>
+      <input
+        type="text"
+        class="form-control"
+        id="comuna_cliente"
+        name="comuna_cliente"
+        value="{{ form.comuna_cliente.value|default_if_none:'' }}"
+        placeholder="Ej: Santiago"
+        autocomplete="address-level2"
+      >
+    </div>
+    <div class="col-md-6">
+      <label for="ciudad_cliente" class="form-label">Ciudad</label>
+      <input
+        type="text"
+        class="form-control"
+        id="ciudad_cliente"
+        name="ciudad_cliente"
+        value="{{ form.ciudad_cliente.value|default_if_none:'' }}"
+        placeholder="Ej: Santiago"
+        autocomplete="address-level1"
+      >
+    </div>
+  </div>
+
   <div class="form-check mb-3">
     <input
       class="form-check-input"
       type="checkbox"
       id="cliente_activo"
       name="cliente_activo"
-      value="True" 
+      value="True"
       {% if form.cliente_activo.value %}checked{% endif %}
     >
     <label class="form-check-label" for="cliente_activo">Cliente Activo</label>
   </div>
 
-  <!-- Teléfono -->
   <div class="mb-3">
     <label for="telefono_cliente" class="form-label">Teléfono</label>
     <input
       type="tel"
       class="form-control"
       id="telefono_cliente"
-      name="telefono_cliente" 
+      name="telefono_cliente"
       value="{{ form.telefono_cliente.value|default_if_none:'' }}"
       placeholder="+56 9 1234 5678"
       autocomplete="tel"
     >
   </div>
 
-  <!-- Correo -->
   <div class="mb-3">
     <label for="correo_cliente" class="form-label">Correo Electrónico</label>
     <input
       type="email"
       class="form-control"
       id="correo_cliente"
-      name="correo_cliente" 
+      name="correo_cliente"
       value="{{ form.correo_cliente.value|default_if_none:'' }}"
       placeholder="contacto@cliente.cl"
       autocomplete="email"
     >
   </div>
 
-  <!-- Categoría -->
   <div class="mb-3">
     <label for="categoria" class="form-label">Categoría</label>
     <select class="form-control" id="categoria" name="categoria" required>
@@ -126,7 +171,6 @@
     </select>
   </div>
 
-  <!-- Botones -->
   <div class="d-flex justify-content-end gap-2 mt-3">
     <button type="submit" class="btn btn-outline-success me-2">Guardar</button>
     <a href="{% url 'lista_clientes' %}" class="btn btn-outline-secondary me-2">Cancelar</a>
@@ -135,7 +179,7 @@
     {% endif %}
   </div>
 </form>
-{% endblock content %} 
+{% endblock content %}
 
 {% block script %}
 <script
