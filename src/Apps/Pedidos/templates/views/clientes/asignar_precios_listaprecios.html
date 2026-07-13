@@ -24,6 +24,12 @@
   </form>
 </div>
 
+{% if item_en_edicion %}
+  <div class="alert alert-warning py-2 mt-3">
+    Editando precio de <strong>{{ item_en_edicion.nombre_producto.nombre_producto }}</strong>.
+  </div>
+{% endif %}
+
 {% if precios_desactualizados_count %}
   <div class="alert alert-warning py-2 mt-3">
     Hay {{ precios_desactualizados_count }} precio{{ precios_desactualizados_count|pluralize }} sin actualizar hace m&aacute;s de 6 meses.
@@ -36,14 +42,19 @@
 
 <form method="post" class="row g-3">
   {% csrf_token %}
+  {% if item_en_edicion %}
+    <input type="hidden" name="item_id" value="{{ item_en_edicion.id }}">
+    <input type="hidden" name="producto" value="{{ item_en_edicion.nombre_producto_id }}">
+    <input type="hidden" name="empaque" value="{{ item_en_edicion.empaque }}">
+  {% endif %}
 
   <!-- Producto -->
   <div class="col-md-5">
     <label for="producto" class="form-label">Producto</label>
-    <select name="producto" id="producto" class="form-select form-select-sm" required>
-      <option value="" disabled selected>Seleccione un producto</option>
+    <select {% if not item_en_edicion %}name="producto"{% endif %} id="producto" class="form-select form-select-sm" required{% if item_en_edicion %} disabled{% endif %}>
+      <option value="" disabled {% if not producto_form_value %}selected{% endif %}>Seleccione un producto</option>
       {% for prod in productos %}
-        <option value="{{ prod.id }}">{{ prod.nombre_producto }}</option>
+        <option value="{{ prod.id }}" {% if producto_form_value == prod.id|stringformat:'s' %}selected{% endif %}>{{ prod.nombre_producto }}</option>
       {% endfor %}
     </select>
   </div>
@@ -51,8 +62,21 @@
   <!-- Empaque -->
   <div class="col-md-2">
     <label for="empaque" class="form-label">Empaque</label>
-    <select name="empaque" id="empaque" class="form-select form-select-sm" required>
-      <option value="" disabled selected>Seleccione</option>
+    <select {% if not item_en_edicion %}name="empaque"{% endif %} id="empaque" class="form-select form-select-sm" required data-selected="{{ empaque_form_value }}"{% if item_en_edicion %} disabled{% endif %}>
+      <option value="" disabled {% if not empaque_form_value %}selected{% endif %}>Seleccione</option>
+      {% if item_en_edicion %}
+        <option value="{{ item_en_edicion.empaque }}" selected>
+          {% if item_en_edicion.empaque == 'PRIMARIO' and item_en_edicion.nombre_producto.empaque_primario %}
+            {{ item_en_edicion.nombre_producto.empaque_primario.nombre }}
+          {% elif item_en_edicion.empaque == 'SECUNDARIO' and item_en_edicion.nombre_producto.empaque_secundario %}
+            {{ item_en_edicion.nombre_producto.empaque_secundario.nombre }}
+          {% elif item_en_edicion.empaque == 'TERCIARIO' and item_en_edicion.nombre_producto.empaque_terciario %}
+            {{ item_en_edicion.nombre_producto.empaque_terciario.nombre }}
+          {% else %}
+            {{ item_en_edicion.empaque }}
+          {% endif %}
+        </option>
+      {% endif %}
     </select>
   </div>
 
@@ -60,7 +84,7 @@
   <div class="col-md-3">
     <label for="precio_venta" class="form-label">Precio Neto</label>
     <input type="number" name="precio_venta" id="precio_venta"
-           class="form-control form-control-sm" required min="0" step="0.01">
+           class="form-control form-control-sm" required min="0" step="0.01" value="{{ precio_venta_form_value }}">
     <div class="form-text text-danger small">
       Precio de compra (sin IVA): $<span id="precio_minimo">-</span>
     </div>
@@ -81,7 +105,10 @@
 
   <!-- Guardar y Cerrar -->
   <div class="col-12 d-flex justify-content-end gap-2 mt-2">
-    <button type="submit" class="btn btn-outline-success btn-sm">Guardar Precio</button>
+    <button type="submit" class="btn btn-outline-success btn-sm">{% if item_en_edicion %}Actualizar Precio{% else %}Guardar Precio{% endif %}</button>
+    {% if item_en_edicion %}
+      <a href="{% url 'asignar_precios_listaprecios' listaprecios.id %}" class="btn btn-outline-secondary btn-sm">Cancelar edici&oacute;n</a>
+    {% endif %}
     <a href="{% url 'lista_listaprecios' %}" class="btn btn-outline-secondary btn-sm">Cerrar</a>
   </div>
 </form>
@@ -111,7 +138,9 @@
         {% if not item.nombre_producto.precio_habilitado %}
           <span class="badge bg-warning text-dark me-1">Bloqueado</span>
         {% endif %}
-        {{ item.nombre_producto.nombre_producto }}
+        <a href="{% url 'asignar_precios_listaprecios' listaprecios.id %}?item_id={{ item.id }}" class="text-decoration-none">
+          {{ item.nombre_producto.nombre_producto }}
+        </a>
       </td>
       <td class="text-center">
         {% if item.empaque == 'PRIMARIO' and item.nombre_producto.empaque_primario %}
@@ -176,17 +205,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectProducto = document.getElementById('producto');
   const selectEmpaque  = document.getElementById('empaque');
   const precioSpan     = document.getElementById('precio_minimo');
+  let empaqueSeleccionadoInicial = selectEmpaque.dataset.selected || '';
 
   let precioPorUnidad = 0;
   let qtySecundario   = 1;
   let qtyTerciario    = 1;
 
-  // Cambia producto -> carga empaques y precio base compra
-  selectProducto.addEventListener('change', async () => {
-    const productoId = selectProducto.value;
-    if (!productoId) return;
-
-    // Empaques
+  async function cargarEmpaques(productoId) {
+    if (!productoId || selectEmpaque.disabled) return;
     try {
       const res = await fetch(`/ajax/empaques-producto/${productoId}/`);
       const data = await res.json();
@@ -194,17 +220,21 @@ document.addEventListener('DOMContentLoaded', () => {
         selectEmpaque.innerHTML = '<option value="" selected disabled>Seleccione</option>';
         data.empaques.forEach(e => {
           const o = document.createElement('option');
-          o.value = e.nivel;   // 'PRIMARIO' | 'SECUNDARIO' | 'TERCIARIO'
+          o.value = e.nivel;
           o.textContent = e.nombre;
+          if (empaqueSeleccionadoInicial && e.nivel === empaqueSeleccionadoInicial) {
+            o.selected = true;
+          }
           selectEmpaque.appendChild(o);
         });
-        precioSpan.textContent = '-';
       }
     } catch (e) {
       console.error('Error cargando empaques', e);
     }
+  }
 
-    // Precio base por unidad + factores
+  async function cargarPrecioBase(productoId) {
+    if (!productoId) return;
     try {
       const res2 = await fetch(`/ajax/precio-base-compra/${productoId}/`);
       const data2 = await res2.json();
@@ -212,7 +242,8 @@ document.addEventListener('DOMContentLoaded', () => {
         precioPorUnidad = Number(data2.precio_unitario) || 0;
         qtySecundario   = Number(data2.qty_secundario) || 1;
         qtyTerciario    = Number(data2.qty_terciario)  || 1;
-        calcularPrecioSugerido(selectEmpaque.value);
+        calcularPrecioSugerido(selectEmpaque.value || empaqueSeleccionadoInicial);
+        empaqueSeleccionadoInicial = '';
       } else {
         precioPorUnidad = 0;
         precioSpan.textContent = '-';
@@ -222,6 +253,16 @@ document.addEventListener('DOMContentLoaded', () => {
       precioPorUnidad = 0;
       precioSpan.textContent = '-';
     }
+  }
+
+  // Cambia producto -> carga empaques y precio base compra
+  selectProducto.addEventListener('change', async () => {
+    const productoId = selectProducto.value;
+    if (!productoId) return;
+    empaqueSeleccionadoInicial = '';
+    precioSpan.textContent = '-';
+    await cargarEmpaques(productoId);
+    await cargarPrecioBase(productoId);
   });
 
   // Cambia empaque -> recalcula sugerido
@@ -251,6 +292,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
+
+  if (selectProducto.value) {
+    if (!selectEmpaque.disabled) {
+      cargarEmpaques(selectProducto.value).then(() => cargarPrecioBase(selectProducto.value));
+    } else {
+      cargarPrecioBase(selectProducto.value);
+    }
+  }
 
   // DataTable
   $('#tabla-filtros').DataTable({

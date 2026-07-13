@@ -118,6 +118,13 @@ def _productos_habilitados_para_precio():
     return [producto for producto in productos if producto.precio_habilitado]
 
 
+def _url_asignar_listaprecios(listaprecios_id: int, *, item_id: int | None = None) -> str:
+    url = reverse("asignar_precios_listaprecios", args=[listaprecios_id])
+    if item_id:
+        return f"{url}?item_id={item_id}"
+    return url
+
+
 # =============================================================================
 # Listar / Crear / Editar listas de precios
 # =============================================================================
@@ -195,16 +202,37 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
     """
     lista = get_object_or_404(ListaPreciosPredeterminada, id=listaprecios_id)
     today = timezone.localdate()
+    item_id = request.GET.get("item_id") or request.POST.get("item_id") or ""
+    item_en_edicion = None
+    if str(item_id).isdigit():
+        item_en_edicion = get_object_or_404(
+            ListaPreciosPredItem.objects.select_related(
+                "nombre_producto",
+                "nombre_producto__empaque_primario",
+                "nombre_producto__empaque_secundario",
+                "nombre_producto__empaque_terciario",
+            ),
+            pk=int(item_id),
+            listaprecios=lista,
+        )
 
     if request.method == "POST":
         producto_id  = request.POST.get("producto")
         empaque      = (request.POST.get("empaque") or "").strip().upper()
         precio_neto  = _to_decimal(request.POST.get("precio_venta"))
         vigencia     = request.POST.get("vigencia")
+        redirect_url = _url_asignar_listaprecios(
+            lista.id,
+            item_id=item_en_edicion.id if item_en_edicion else None,
+        )
+
+        if item_en_edicion:
+            producto_id = str(item_en_edicion.nombre_producto_id)
+            empaque = item_en_edicion.empaque
 
         if not producto_id or not empaque or not vigencia:
             messages.error(request, "Producto, empaque y vigencia son obligatorios.")
-            return redirect(reverse("asignar_precios_listaprecios", args=[lista.id]))
+            return redirect(redirect_url)
 
         # Redondea neto a 2 decimales
         precio_neto = precio_neto.quantize(DOS_DEC, rounding=ROUND_HALF_UP)
@@ -213,13 +241,13 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
         producto = get_object_or_404(Producto.objects.prefetch_related("componentes_pack__producto"), id=producto_id)
         if not producto.precio_habilitado:
             messages.error(request, "El producto no estÃ¡ habilitado para nuevos precios.")
-            return redirect(reverse("asignar_precios_listaprecios", args=[lista.id]))
+            return redirect(redirect_url)
 
         try:
             with transaction.atomic():
                 # Si tienes unique_together = ('listaprecios','nombre_producto','empaque')
                 # usamos update-or-create semántico manual.
-                item: Optional[ListaPreciosPredItem] = (
+                item: Optional[ListaPreciosPredItem] = item_en_edicion or (
                     ListaPreciosPredItem.objects
                     .filter(listaprecios=lista, nombre_producto=producto, empaque=empaque)
                     .first()
@@ -259,10 +287,17 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
         except IntegrityError:
             messages.error(request, "No se pudo guardar el precio. Verifica duplicados o datos.")
 
-        return redirect(reverse("asignar_precios_listaprecios", args=[lista.id]))
+        return redirect(_url_asignar_listaprecios(lista.id))
 
     # GET
     productos = _productos_habilitados_para_precio()
+    if (
+        item_en_edicion
+        and item_en_edicion.nombre_producto_id
+        and all(producto.id != item_en_edicion.nombre_producto_id for producto in productos)
+    ):
+        productos = productos + [item_en_edicion.nombre_producto]
+        productos.sort(key=lambda producto: producto.nombre_producto.casefold())
     precios   = list(
         ListaPreciosPredItem.objects
         .select_related(
@@ -314,13 +349,21 @@ def asignar_precios_listaprecios(request, listaprecios_id: int):
             precios_desactualizados_count += 1
 
     vigencia_default = max((item.vigencia for item in precios if item.vigencia), default=None) or today
+    producto_form_value = str(item_en_edicion.nombre_producto_id) if item_en_edicion else ""
+    empaque_form_value = item_en_edicion.empaque if item_en_edicion else ""
+    precio_venta_form_value = str(item_en_edicion.precio_venta) if item_en_edicion else ""
+    vigencia_form_value = _date_input_value(item_en_edicion.vigencia if item_en_edicion else vigencia_default)
 
     ctx = {
         "listaprecios": lista,
         "productos": productos,
         "precios": precios,
         "clientes_asociados": clientes_asociados,
-        "vigencia_form_value": _date_input_value(vigencia_default),
+        "item_en_edicion": item_en_edicion,
+        "producto_form_value": producto_form_value,
+        "empaque_form_value": empaque_form_value,
+        "precio_venta_form_value": precio_venta_form_value,
+        "vigencia_form_value": vigencia_form_value,
         "today_input_value": _date_input_value(today),
         "precios_desactualizados_count": precios_desactualizados_count,
     }

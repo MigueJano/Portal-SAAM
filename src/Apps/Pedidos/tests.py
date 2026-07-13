@@ -2070,6 +2070,27 @@ class ListaPreciosSincronizacionTests(TestCase):
             'class="btn btn-outline-secondary js-set-hoy" data-target="vigencia" data-today="2026-05-15"',
         )
 
+    def test_asignar_precios_listaprecios_permita_abrir_item_en_edicion(self):
+        self.item.precio_venta = Decimal("1350.00")
+        self.item.precio_iva = Decimal("256.50")
+        self.item.precio_total = Decimal("1606.50")
+        self.item.vigencia = datetime(2026, 5, 8).date()
+        self.item.save(update_fields=["precio_venta", "precio_iva", "precio_total", "vigencia"])
+
+        resp = self.client.get(
+            f'{reverse("asignar_precios_listaprecios", args=[self.lista.id])}?item_id={self.item.id}'
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["item_en_edicion"].id, self.item.id)
+        self.assertEqual(resp.context["producto_form_value"], str(self.producto.id))
+        self.assertEqual(resp.context["empaque_form_value"], "PRIMARIO")
+        self.assertEqual(resp.context["precio_venta_form_value"], "1350.00")
+        self.assertEqual(resp.context["vigencia_form_value"], "2026-05-08")
+        self.assertContains(resp, "Editando precio de")
+        self.assertContains(resp, f'name="item_id" value="{self.item.id}"')
+        self.assertContains(resp, f'?item_id={self.item.id}')
+
     def test_actualizar_item_lista_sincroniza_clientes_asociados(self):
         for cliente in (self.cliente_a, self.cliente_b):
             self.client.post(
@@ -2083,6 +2104,7 @@ class ListaPreciosSincronizacionTests(TestCase):
         resp = self.client.post(
             reverse("asignar_precios_listaprecios", args=[self.lista.id]),
             data={
+                "item_id": str(self.item.id),
                 "producto": str(self.producto.id),
                 "empaque": "PRIMARIO",
                 "precio_venta": "1250.00",
@@ -2091,6 +2113,9 @@ class ListaPreciosSincronizacionTests(TestCase):
         )
 
         self.assertRedirects(resp, reverse("asignar_precios_listaprecios", args=[self.lista.id]))
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.precio_venta, Decimal("1250.00"))
+        self.assertEqual(self.item.vigencia, datetime(2026, 12, 31).date())
         self.assertEqual(
             ListaPrecios.objects.get(nombre_cliente=self.cliente_a, nombre_producto=self.producto, empaque="PRIMARIO").precio_venta,
             Decimal("1250.00"),
