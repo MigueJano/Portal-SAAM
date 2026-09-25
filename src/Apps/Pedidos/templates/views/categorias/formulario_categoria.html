@@ -102,16 +102,3 @@
 
 </div>
 {% endblock content %}
-
-{% block script %}
-<script>
-  $(function () {
-    $('#tabla-filtros').DataTable({
-      order: [[0, 'asc']],
-      language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json" },
-      autoWidth: false,
-      scrollX: true
-    });
-  });
-</script>
-{% endblock script %}

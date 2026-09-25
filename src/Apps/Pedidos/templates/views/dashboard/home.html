@@ -182,6 +182,42 @@
       </div>
     </div>
 
+    <!-- Cambios de Precio de Compra -->
+    <div>
+      <div class="card shadow dashboard-card">
+        <div class="card-body">
+          <div class="dashboard-card-header">
+            <h5 class="card-title text-info dashboard-card-title">
+              Cambios de Precio de Compra ({{ cantidad_cambios_precio_compra }})
+              <span class="d-block fs-6 fw-normal text-body-secondary mt-1">
+                Últimos cambios
+              </span>
+            </h5>
+          </div>
+
+          {% for row in cambios_precio_compra %}
+            <div class="border p-2 rounded mb-2 bg-light-subtle">
+              <strong>{{ row.producto }}</strong><br>
+              Fecha: {{ row.fecha_cambio|date:"d/m/Y" }}<br>
+              Diferencia:
+              <span class="{% if row.es_alza %}text-danger{% else %}text-success{% endif %} fw-semibold">
+                {% if row.es_alza %}+{% else %}-{% endif %}${{ row.diferencia_abs|floatformat:0|formatear_miles }}
+              </span>
+            </div>
+          {% empty %}
+            <p>No se detectaron cambios de precio de compra.</p>
+          {% endfor %}
+
+          {% if cambios_precio_compra_restantes %}
+            <p class="small text-muted mb-2">
+              Y {{ cambios_precio_compra_restantes }}
+              registro{% if cambios_precio_compra_restantes != 1 %}s{% endif %} más.
+            </p>
+          {% endif %}
+          <a href="{% url 'dashboard_estrategia_precios' %}?range_months=all" class="btn btn-outline-info btn-sm mt-2">Ver estrategia de precios</a>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

@@ -7,7 +7,12 @@
     <div>
       <h1 class="h4 mb-1">Detalle Historico de Precios</h1>
       <div class="small text-muted">
-        {{ producto.codigo_producto_interno }} - {{ producto.nombre_producto }} | {{ inicio|date:"d-m-Y" }} al {{ fin|date:"d-m-Y" }}
+        {{ producto.codigo_producto_interno }} - {{ producto.nombre_producto }} |
+        {% if range_months == "all" %}
+          todo el historial al {{ fin|date:"d-m-Y" }}
+        {% else %}
+          {{ inicio|date:"d-m-Y" }} al {{ fin|date:"d-m-Y" }}
+        {% endif %}
       </div>
     </div>
     <a
@@ -47,7 +52,9 @@
       <div class="card">
         <div class="card-body">
           <div class="small text-muted">Horizonte analizado</div>
-          <div class="fw-semibold">Ultimos {{ range_months }} meses</div>
+          <div class="fw-semibold">
+            {% if range_months == "all" %}Todo el historial{% else %}Ultimos {{ range_months }} meses{% endif %}
+          </div>
         </div>
       </div>
     </div>

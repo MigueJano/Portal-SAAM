@@ -707,6 +707,66 @@ class DashboardHomeTests(TestCase):
         self.assertContains(resp, reverse("dashboard_precios_cliente"))
         self.assertContains(resp, f'{reverse("asignar_precios", args=[self.cliente.id])}?precio_id={precio.id}')
 
+    def test_home_muestra_cambios_de_precio_compra_con_signo_y_color(self):
+        categoria = Categoria.objects.create(categoria="Higiene")
+        subcategoria = Subcategoria.objects.create(categoria=categoria, subcategoria="Panales")
+        producto = Producto.objects.create(
+            categoria_producto=categoria,
+            subcategoria_producto=subcategoria,
+            codigo_producto_interno="BBC-001",
+            nombre_producto="BABYSEC SUPER PREMIUM XXG 14UND",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=14,
+            medida="und",
+            qty_minima=1,
+        )
+
+        precios = [
+            (datetime(2026, 8, 1).date(), Decimal("1400.00")),
+            (datetime(2026, 8, 15).date(), Decimal("1600.00")),
+            (datetime(2026, 9, 1).date(), Decimal("1500.00")),
+        ]
+        for idx, (fecha, precio_compra) in enumerate(precios, start=1):
+            recepcion = Recepcion.objects.create(
+                proveedor=self.proveedor,
+                fecha_recepcion=fecha,
+                estado_recepcion="Finalizado",
+                documento_recepcion="Factura",
+                num_documento_recepcion=9200 + idx,
+                total_neto_recepcion=precio_compra,
+                iva_recepcion=Decimal("0.00"),
+                total_recepcion=precio_compra,
+                incluir_iva=True,
+                moneda_recepcion="CLP",
+            )
+            Stock.objects.create(
+                tipo_movimiento="DISPONIBLE",
+                producto=producto,
+                qty=1,
+                empaque="PRIMARIO",
+                precio_unitario=precio_compra,
+                fecha_movimiento=fecha,
+                recepcion=recepcion,
+            )
+
+        resp = self.client.get(reverse("home"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["cantidad_cambios_precio_compra"], 2)
+        self.assertContains(resp, "Cambios de Precio de Compra (2)")
+        self.assertContains(resp, "BABYSEC SUPER PREMIUM XXG 14UND")
+        self.assertContains(resp, "Fecha: 15/08/2026")
+        self.assertContains(resp, "+$200")
+        self.assertContains(resp, "-$100")
+        self.assertContains(resp, '<span class="text-danger fw-semibold">', html=False)
+        self.assertContains(resp, '<span class="text-success fw-semibold">', html=False)
+        self.assertContains(resp, reverse("dashboard_estrategia_precios"))
+        self.assertContains(resp, f'{reverse("dashboard_estrategia_precios")}?range_months=all')
+        self.assertNotContains(resp, "Precio anterior:")
+        self.assertNotContains(resp, "Precio nuevo:")
+
 
 class ListaPedidosTests(TestCase):
     def setUp(self):

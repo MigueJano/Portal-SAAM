@@ -327,14 +327,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // DataTable
-  $('#tabla-filtros').DataTable({
-    order: [[8, 'asc']], // Desde
-    language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json" },
-    autoWidth: false,
-    scrollX: true
-  });
-
   if (selectListaPredeterminada) {
     selectListaPredeterminada.addEventListener('change', () => {
       sincronizarDesdeImportacion(true);

@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -303,7 +303,7 @@ class EstrategiaPreciosTests(TestCase):
         self.assertContains(resp, "Cliente Estrategia")
         self.assertContains(resp, reverse("dashboard_estrategia_precios"))
 
-    def test_dashboard_estrategia_precios_muestra_tabla_historica(self):
+    def test_dashboard_estrategia_precios_muestra_alertas_de_margen(self):
         resp = self.client.get(
             reverse("dashboard_estrategia_precios"),
             data={"range_months": 6},
@@ -311,16 +311,20 @@ class EstrategiaPreciosTests(TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Estrategia de Precios")
-        self.assertContains(resp, "P-001")
+        self.assertContains(resp, "Jugo Mango")
         self.assertContains(resp, reverse("detalle_precios_estrategia", args=[self.producto.id]))
         self.assertContains(resp, 'id="tabla-alertas-margen"')
-        self.assertContains(resp, 'id="tabla-oportunidades-comerciales"')
-        self.assertContains(resp, 'id="tabla-historico-precios"')
+        self.assertContains(resp, "Fecha compra")
+        self.assertContains(resp, "Fecha venta")
+        self.assertNotContains(resp, 'id="tabla-oportunidades-comerciales"')
+        self.assertNotContains(resp, 'id="tabla-historico-precios"')
+        self.assertNotContains(resp, "Mayor Espacio Comercial")
+        self.assertNotContains(resp, "Tabla Historica de Precios")
         self.assertContains(resp, "Haz clic en el encabezado de una columna para ordenar cada tabla.")
         self.assertContains(
             resp,
             f'{reverse("detalle_precios_estrategia", args=[self.producto.id])}?range_months=6',
-            count=3,
+            count=2,
         )
         self.assertEqual(len(resp.context["pricing_rows"]), 1)
         row = resp.context["pricing_rows"][0]
@@ -328,7 +332,95 @@ class EstrategiaPreciosTests(TestCase):
         self.assertEqual(row["precio_maximo_compra"], Decimal("150.00"))
         self.assertEqual(row["precio_minimo_venta"], Decimal("200.00"))
         self.assertEqual(row["precio_maximo_venta"], Decimal("240.00"))
+        self.assertEqual(row["fecha_precio_maximo_compra"], self.hoy)
+        self.assertEqual(row["fecha_precio_minimo_venta"], self.hoy)
         self.assertEqual(resp.context["productos_en_riesgo"], 0)
+
+    def test_dashboard_estrategia_precios_muestra_cambios_compra(self):
+        recepcion = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=self.hoy,
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=5003,
+            total_neto_recepcion=Decimal("180.00"),
+            iva_recepcion=Decimal("34.20"),
+            total_recepcion=Decimal("214.20"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("180.00"),
+            recepcion=recepcion,
+        )
+
+        resp = self.client.get(
+            reverse("dashboard_estrategia_precios"),
+            data={"range_months": 6},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["cantidad_cambios_precio_compra"], 2)
+        self.assertContains(resp, "Cambios precio compra")
+        self.assertContains(resp, 'id="tabla-cambios-precio-compra"')
+        self.assertContains(resp, "Jugo Mango")
+        self.assertContains(resp, "Precio minimo venta")
+        self.assertContains(resp, "Diferencia $")
+        self.assertContains(resp, "Diferencia %")
+        self.assertNotContains(resp, "<th>Categoria</th>", html=False)
+        self.assertNotContains(resp, "<th>Subcategoria</th>", html=False)
+        self.assertContains(resp, "+$ 30")
+        self.assertContains(resp, "+$ 50")
+        self.assertNotContains(resp, "+$ 500")
+        self.assertContains(resp, "text-danger")
+
+        row = resp.context["cambios_precio_compra"][0]
+        self.assertEqual(row["precio_minimo_venta"], Decimal("200.00"))
+        self.assertEqual(row["diferencia_venta_pesos"], Decimal("20.00"))
+        self.assertEqual(row["diferencia_venta_pct"], Decimal("11.11"))
+
+    def test_dashboard_estrategia_precios_todo_historial_incluye_cambios_fuera_del_horizonte(self):
+        recepcion_antigua = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=date(2025, 1, 10),
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=4999,
+            total_neto_recepcion=Decimal("80.00"),
+            iva_recepcion=Decimal("15.20"),
+            total_recepcion=Decimal("95.20"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("80.00"),
+            fecha_movimiento=recepcion_antigua.fecha_recepcion,
+            recepcion=recepcion_antigua,
+        )
+
+        resp_6_meses = self.client.get(
+            reverse("dashboard_estrategia_precios"),
+            data={"range_months": 6},
+        )
+        resp_todo = self.client.get(
+            reverse("dashboard_estrategia_precios"),
+            data={"range_months": "all"},
+        )
+
+        self.assertEqual(resp_6_meses.status_code, 200)
+        self.assertEqual(resp_todo.status_code, 200)
+        self.assertEqual(resp_6_meses.context["cantidad_cambios_precio_compra"], 1)
+        self.assertEqual(resp_todo.context["cantidad_cambios_precio_compra"], 2)
+        self.assertContains(resp_todo, "todo el historial")
+        self.assertEqual(resp_todo.context["range_months"], "all")
 
     def test_detalle_precios_estrategia_muestra_respaldo_del_periodo(self):
         resp = self.client.get(

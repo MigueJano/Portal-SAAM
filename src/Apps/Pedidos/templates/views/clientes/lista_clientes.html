@@ -99,17 +99,7 @@
 {% block script %}
 <script>
 $(document).ready(function () {
-  const tabla = $('#tabla-filtros').DataTable({
-    order: [[0, 'asc']],
-    language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json" },
-    autoWidth: false,
-    scrollX: true,
-    pageLength: 25,                               // <-- 25 registros por página
-    lengthMenu: [[25, 50, 100, -1], [25, 50, 100, "Todos"]],
-    columnDefs: [
-      { targets: [5], orderable: false }         // Desactiva orden en "Acciones" (ajusta índice si cambias columnas)
-    ]
-  });
+  const tabla = $('#tabla-filtros').DataTable();
 
   // Filtro por tipo de cliente (columna "Tipo" = índice 4)
   $('#filtro-tipo').on('change', function () {

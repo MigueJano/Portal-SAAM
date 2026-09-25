@@ -13,6 +13,7 @@ from Apps.Pedidos.models import Recepcion, Pedido, Stock
 from Apps.Pedidos.services.listaprecios_alertas import (
     filas_precios_cliente,
 )
+from Apps.Pedidos.services.precios_compra_alertas import filas_cambios_precio_compra
 
 IVA_RATE = Decimal('0.19')
 DOS_DEC = Decimal('0.01')
@@ -108,6 +109,10 @@ def home(request):
     cantidad_precios_cliente_bajo_costo = len(precios_cliente_bajo_costo)
     precios_cliente_bajo_costo_preview = precios_cliente_bajo_costo[:5]
 
+    cambios_precio_compra = filas_cambios_precio_compra()
+    cantidad_cambios_precio_compra = len(cambios_precio_compra)
+    cambios_precio_compra_preview = cambios_precio_compra[:5]
+
     return render(request, './views/dashboard/home.html', {
         'recepciones': recepciones,
         'cantidad_recepciones': cantidad_recepciones,
@@ -121,6 +126,12 @@ def home(request):
         'cantidad_precios_cliente_bajo_costo': cantidad_precios_cliente_bajo_costo,
         'precios_cliente_bajo_costo_restantes': max(
             cantidad_precios_cliente_bajo_costo - len(precios_cliente_bajo_costo_preview),
+            0,
+        ),
+        'cambios_precio_compra': cambios_precio_compra_preview,
+        'cantidad_cambios_precio_compra': cantidad_cambios_precio_compra,
+        'cambios_precio_compra_restantes': max(
+            cantidad_cambios_precio_compra - len(cambios_precio_compra_preview),
             0,
         ),
     })

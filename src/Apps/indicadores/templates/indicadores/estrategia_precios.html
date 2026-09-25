@@ -6,7 +6,13 @@
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-3">
     <div>
       <h1 class="h4 mb-1">Estrategia de Precios</h1>
-      <div class="small text-muted">Historico evaluado: {{ inicio|date:"d-m-Y" }} al {{ fin|date:"d-m-Y" }}</div>
+      <div class="small text-muted">
+        {% if range_months == "all" %}
+          Historico evaluado: todo el historial al {{ fin|date:"d-m-Y" }}
+        {% else %}
+          Historico evaluado: {{ inicio|date:"d-m-Y" }} al {{ fin|date:"d-m-Y" }}
+        {% endif %}
+      </div>
     </div>
     <div class="btn-group" role="group" aria-label="Secciones de estrategia">
       <a href="{% url 'dashboard_estrategia' %}" class="btn btn-outline-primary">Informe</a>
@@ -80,8 +86,10 @@
     <div class="col-md-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Dispersion promedio de venta</div>
-          <div class="h5 mb-0">$ {{ amplitud_promedio_venta|formatear_miles }}</div>
+          <div class="small text-muted">Cambios precio compra</div>
+          <div class="h5 mb-0 {% if cantidad_cambios_precio_compra %}text-info{% endif %}">
+            {{ cantidad_cambios_precio_compra|formatear_miles }}
+          </div>
         </div>
       </div>
     </div>
@@ -91,126 +99,80 @@
     Haz clic en el encabezado de una columna para ordenar cada tabla.
   </div>
 
-  <div class="row g-3 mb-4">
-    <div class="col-lg-6">
-      <div class="table-responsive">
-        <h2 class="h6">Alertas de Margen</h2>
-        <table id="tabla-alertas-margen" class="table table-striped table-bordered table-sm js-sortable-report-table">
-          <thead class="table-light text-center">
-            <tr>
-              <th>Producto</th>
-              <th>Max. Compra</th>
-              <th>Min. Venta</th>
-              <th>Colchon</th>
-              <th class="no-sort">Detalle</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in alertas_rows %}
-              <tr>
-                <td>{{ row.nombre }}</td>
-                <td class="text-end" data-order="{{ row.precio_maximo_compra|floatformat:'2u' }}">$ {{ row.precio_maximo_compra|formatear_miles }}</td>
-                <td class="text-end" data-order="{{ row.precio_minimo_venta|floatformat:'2u' }}">$ {{ row.precio_minimo_venta|formatear_miles }}</td>
-                <td class="text-end {% if row.margen_piso <= 0 %}text-danger{% else %}text-success{% endif %}" data-order="{{ row.margen_piso|floatformat:'2u' }}">
-                  $ {{ row.margen_piso|formatear_miles }}
-                </td>
-                <td class="text-center">
-                  <a
-                    href="{% url 'detalle_precios_estrategia' row.producto_id %}?range_months={{ range_months }}{% if categoria_id %}&categoria={{ categoria_id }}{% endif %}{% if subcategoria_id %}&subcategoria={{ subcategoria_id }}{% endif %}"
-                    class="btn btn-sm btn-outline-primary"
-                    title="Ver detalle de precios"
-                  >
-                    <i class="fas fa-eye"></i>
-                  </a>
-                </td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="5" class="text-center text-muted">Sin referencias suficientes para alertas.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="col-lg-6">
-      <div class="table-responsive">
-        <h2 class="h6">Mayor Espacio Comercial</h2>
-        <table id="tabla-oportunidades-comerciales" class="table table-striped table-bordered table-sm js-sortable-report-table">
-          <thead class="table-light text-center">
-            <tr>
-              <th>Producto</th>
-              <th>Min. Compra</th>
-              <th>Max. Venta</th>
-              <th>Brecha</th>
-              <th class="no-sort">Detalle</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in oportunidad_rows %}
-              <tr>
-                <td>{{ row.nombre }}</td>
-                <td class="text-end" data-order="{{ row.precio_minimo_compra|floatformat:'2u' }}">$ {{ row.precio_minimo_compra|formatear_miles }}</td>
-                <td class="text-end" data-order="{{ row.precio_maximo_venta|floatformat:'2u' }}">$ {{ row.precio_maximo_venta|formatear_miles }}</td>
-                <td class="text-end text-success" data-order="{{ row.margen_techo|floatformat:'2u' }}">$ {{ row.margen_techo|formatear_miles }}</td>
-                <td class="text-center">
-                  <a
-                    href="{% url 'detalle_precios_estrategia' row.producto_id %}?range_months={{ range_months }}{% if categoria_id %}&categoria={{ categoria_id }}{% endif %}{% if subcategoria_id %}&subcategoria={{ subcategoria_id }}{% endif %}"
-                    class="btn btn-sm btn-outline-primary"
-                    title="Ver detalle de precios"
-                  >
-                    <i class="fas fa-eye"></i>
-                  </a>
-                </td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="5" class="text-center text-muted">Sin referencias suficientes para oportunidades.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div class="table-responsive">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <div>
-        <h2 class="h6 mb-1">Tabla Historica de Precios</h2>
-        <div class="small text-muted">Precios normalizados por unidad primaria para comparar compras y ventas reales.</div>
-      </div>
-    </div>
-    <table id="tabla-historico-precios" class="table table-striped table-bordered table-sm js-sortable-report-table">
+  <div class="table-responsive mb-4">
+    <h2 class="h6">Alertas de Margen</h2>
+    <table id="tabla-alertas-margen" class="table table-striped table-bordered table-sm js-sortable-report-table">
       <thead class="table-light text-center">
         <tr>
-          <th>Categoria</th>
-          <th>Subcategoria</th>
-          <th>Codigo interno</th>
-          <th>Nombre</th>
-          <th>Precio minimo compra</th>
-          <th>Precio maximo compra</th>
-          <th>Precio minimo venta</th>
-          <th>Precio maximo venta</th>
+          <th>Producto</th>
+          <th>Fecha compra</th>
+          <th>Max. Compra</th>
+          <th>Fecha venta</th>
+          <th>Min. Venta</th>
+          <th>Colchon</th>
           <th class="no-sort">Detalle</th>
         </tr>
       </thead>
       <tbody>
-        {% for row in pricing_rows %}
+        {% for row in alertas_rows %}
           <tr>
-            <td>{{ row.categoria }}</td>
-            <td>{{ row.subcategoria }}</td>
-            <td class="text-center">{{ row.codigo_interno }}</td>
             <td>{{ row.nombre }}</td>
-            <td class="text-end" data-order="{% if row.precio_minimo_compra is not None %}{{ row.precio_minimo_compra|floatformat:'2u' }}{% endif %}">
-              {% if row.precio_minimo_compra is not None %}
-                $ {{ row.precio_minimo_compra|formatear_miles }}
-              {% else %}
-                <span class="text-muted">-</span>
-              {% endif %}
+            <td class="text-center" data-order="{{ row.fecha_precio_maximo_compra|date:'Ymd' }}">{{ row.fecha_precio_maximo_compra|date:"d-m-Y" }}</td>
+            <td class="text-end" data-order="{{ row.precio_maximo_compra|floatformat:'2u' }}">$ {{ row.precio_maximo_compra|formatear_miles }}</td>
+            <td class="text-center" data-order="{{ row.fecha_precio_minimo_venta|date:'Ymd' }}">{{ row.fecha_precio_minimo_venta|date:"d-m-Y" }}</td>
+            <td class="text-end" data-order="{{ row.precio_minimo_venta|floatformat:'2u' }}">$ {{ row.precio_minimo_venta|formatear_miles }}</td>
+            <td class="text-end {% if row.margen_piso <= 0 %}text-danger{% else %}text-success{% endif %}" data-order="{{ row.margen_piso|floatformat:'2u' }}">
+              $ {{ row.margen_piso|formatear_miles }}
             </td>
-            <td class="text-end" data-order="{% if row.precio_maximo_compra is not None %}{{ row.precio_maximo_compra|floatformat:'2u' }}{% endif %}">
-              {% if row.precio_maximo_compra is not None %}
-                $ {{ row.precio_maximo_compra|formatear_miles }}
-              {% else %}
-                <span class="text-muted">-</span>
-              {% endif %}
+            <td class="text-center">
+              <a
+                href="{% url 'detalle_precios_estrategia' row.producto_id %}?range_months={{ range_months }}{% if categoria_id %}&categoria={{ categoria_id }}{% endif %}{% if subcategoria_id %}&subcategoria={{ subcategoria_id }}{% endif %}"
+                class="btn btn-sm btn-outline-primary"
+                title="Ver detalle de precios"
+              >
+                <i class="fas fa-eye"></i>
+              </a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="text-center text-muted">Sin referencias suficientes para alertas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-responsive mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div>
+        <h2 class="h6 mb-1">Cambios de Precio de Compra</h2>
+        <div class="small text-muted">Diferencias detectadas entre precios de compra consecutivos dentro del historico evaluado.</div>
+      </div>
+    </div>
+    <table id="tabla-cambios-precio-compra" class="table table-striped table-bordered table-sm js-sortable-report-table">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Codigo interno</th>
+          <th>Producto</th>
+          <th>Fecha</th>
+          <th>Precio anterior</th>
+          <th>Precio nuevo</th>
+          <th>Diferencia compra</th>
+          <th>Precio minimo venta</th>
+          <th>Diferencia $</th>
+          <th>Diferencia %</th>
+          <th class="no-sort">Detalle</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in cambios_precio_compra %}
+          <tr>
+            <td class="text-center">{{ row.codigo_interno }}</td>
+            <td>{{ row.producto }}</td>
+            <td class="text-center" data-order="{{ row.fecha_cambio|date:'Ymd' }}">{{ row.fecha_cambio|date:"d-m-Y" }}</td>
+            <td class="text-end" data-order="{{ row.precio_anterior|floatformat:'2u' }}">$ {{ row.precio_anterior|formatear_miles }}</td>
+            <td class="text-end" data-order="{{ row.precio_nuevo|floatformat:'2u' }}">$ {{ row.precio_nuevo|formatear_miles }}</td>
+            <td class="text-end {% if row.es_alza %}text-danger{% else %}text-success{% endif %}" data-order="{{ row.diferencia|floatformat:'2u' }}">
+              {% if row.es_alza %}+{% else %}-{% endif %}$ {{ row.diferencia_abs|formatear_miles }}
             </td>
             <td class="text-end" data-order="{% if row.precio_minimo_venta is not None %}{{ row.precio_minimo_venta|floatformat:'2u' }}{% endif %}">
               {% if row.precio_minimo_venta is not None %}
@@ -219,9 +181,16 @@
                 <span class="text-muted">-</span>
               {% endif %}
             </td>
-            <td class="text-end" data-order="{% if row.precio_maximo_venta is not None %}{{ row.precio_maximo_venta|floatformat:'2u' }}{% endif %}">
-              {% if row.precio_maximo_venta is not None %}
-                $ {{ row.precio_maximo_venta|formatear_miles }}
+            <td class="text-end {% if row.diferencia_venta_pesos is not None and row.diferencia_venta_pesos < 0 %}text-danger{% elif row.diferencia_venta_pesos is not None %}text-success{% endif %}" data-order="{% if row.diferencia_venta_pesos is not None %}{{ row.diferencia_venta_pesos|floatformat:'2u' }}{% endif %}">
+              {% if row.diferencia_venta_pesos is not None %}
+                $ {{ row.diferencia_venta_pesos|formatear_miles }}
+              {% else %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </td>
+            <td class="text-end {% if row.diferencia_venta_pct is not None and row.diferencia_venta_pct < 0 %}text-danger{% elif row.diferencia_venta_pct is not None %}text-success{% endif %}" data-order="{% if row.diferencia_venta_pct is not None %}{{ row.diferencia_venta_pct|floatformat:'2u' }}{% endif %}">
+              {% if row.diferencia_venta_pct is not None %}
+                {{ row.diferencia_venta_pct|floatformat:2 }}%
               {% else %}
                 <span class="text-muted">-</span>
               {% endif %}
@@ -237,7 +206,7 @@
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="9" class="text-center text-muted">Sin datos de precios para el filtro seleccionado.</td></tr>
+          <tr><td colspan="10" class="text-center text-muted">Sin cambios de precio de compra para el filtro seleccionado.</td></tr>
         {% endfor %}
       </tbody>
     </table>

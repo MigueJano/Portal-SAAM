@@ -65,38 +65,3 @@
   </div>
 </div>
 {% endblock content %}
-
-{% block script %}
-<script>
-  $(document).ready(function() {
-    $('#tabla-filtros').DataTable({
-      "order": [[0, "asc"]],
-      "language": {
-        "decimal": ",",
-        "thousands": ".",
-        "processing": "Procesando...",
-        "search": "Buscar:",
-        "lengthMenu": "Mostrar _MENU_ registros",
-        "info": "Mostrando registros del _START_ al _END_ de un total de _TOTAL_ registros",
-        "infoEmpty": "Mostrando registros del 0 al 0 de un total de 0 registros",
-        "infoFiltered": "(filtrado de un total de _MAX_ registros)",
-        "loadingRecords": "Cargando...",
-        "zeroRecords": "No se encontraron resultados",
-        "emptyTable": "Ningún dato disponible en esta tabla",
-        "paginate": {
-          "first": "Primero",
-          "previous": "Anterior",
-          "next": "Siguiente",
-          "last": "Último"
-        },
-        "aria": {
-          "sortAscending": ": Activar para ordenar ascendente",
-          "sortDescending": ": Activar para ordenar descendente"
-        }
-      },
-      "autoWidth": false,
-      "scrollX": true
-    });
-  });
-</script>
-{% endblock script %}

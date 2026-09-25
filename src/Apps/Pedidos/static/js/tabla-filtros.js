@@ -1,8 +1,10 @@
-// static/js/tabla-filtros.js
-
 $(document).ready(function() {
+    if (!$('#tabla-filtros').length || $.fn.dataTable.isDataTable('#tabla-filtros')) {
+        return;
+    }
+
     $('#tabla-filtros').DataTable({
-    "order": [[1, "desc"]],
+    "order": [[2, "desc"]],
     "language": {
         "decimal": ",",
         "thousands": ".",
@@ -31,4 +33,3 @@ $(document).ready(function() {
     "scrollX": true
     });
   });
-

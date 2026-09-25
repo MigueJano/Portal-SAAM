@@ -300,14 +300,6 @@ document.addEventListener('DOMContentLoaded', () => {
       cargarPrecioBase(selectProducto.value);
     }
   }
-
-  // DataTable
-  $('#tabla-filtros').DataTable({
-    order: [[8, 'asc']], // Desde
-    language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json" },
-    autoWidth: false,
-    scrollX: true
-  });
 });
 </script>
 {% include "views/clientes/partials/calculadora_precios_simple_script.html" %}

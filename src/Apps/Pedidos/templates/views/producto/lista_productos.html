@@ -4,7 +4,7 @@
 {% block CSS %}
 <!-- CSS DataTables -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
-{% endblock CSS%} 
+{% endblock CSS%}
 
 {% block content %}
 <div class="container-fluid">
@@ -93,42 +93,4 @@
     </div>
   </div>
 </div>
-{% endblock content %} 
-
-{% block script %}
-<script>
-$(document).ready(function() {
-    $('#tabla-filtros').DataTable({
-    "order": [[2, "asc"], [3, "asc"]],
-    "pageLength": 100,
-    "language": {
-        "decimal": ",",
-        "thousands": ".",
-        "processing": "Procesando...",
-        "search": "Buscar:",
-        "lengthMenu": "Mostrar _MENU_ registros",
-        "info": "Mostrando registros del _START_ al _END_ de un total de _TOTAL_ registros",
-        "infoEmpty": "Mostrando registros del 0 al 0 de un total de 0 registros",
-        "infoFiltered": "(filtrado de un total de _MAX_ registros)",
-        "infoPostFix": "",
-        "loadingRecords": "Cargando...",
-        "zeroRecords": "No se encontraron resultados",
-        "emptyTable": "Ningún dato disponible en esta tabla",
-        "paginate": {
-        "first": "Primero",
-        "previous": "Anterior",
-        "next": "Siguiente",
-        "last": "Último"
-        },
-        "aria": {
-        "sortAscending": ": Activar para ordenar la columna de manera ascendente",
-        "sortDescending": ": Activar para ordenar la columna de manera descendente"
-        }
-    },
-    "autoWidth": false,
-    "scrollX": true
-    });
-  });
-
-</script>
-{% endblock script %}
+{% endblock content %}

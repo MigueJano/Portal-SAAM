@@ -22,6 +22,7 @@ from Apps.Pedidos.models import (
     Venta,
 )
 from Apps.Pedidos.services import costo_referencial_pack, es_pack
+from Apps.Pedidos.services.precios_compra_alertas import filas_cambios_precio_compra
 from Apps.indicadores.services.contabilidad import _normalizar_precio_unidad_primaria
 from .common import periodo_desde_request
 
@@ -31,6 +32,7 @@ WINDOW_CHOICES = (
     (6, "Ultimos 6 meses"),
     (12, "Ultimos 12 meses"),
     (24, "Ultimos 24 meses"),
+    ("all", "Todo el historial"),
 )
 
 
@@ -81,17 +83,27 @@ def _fecha_mes(valor):
 
 
 def _historical_window_from_request(request):
+    raw_range = request.GET.get("range_months", 12)
+    if raw_range == "all":
+        return "all", None, timezone.localdate()
+
     try:
-        range_months = int(request.GET.get("range_months", 12))
+        range_months = int(raw_range)
     except (TypeError, ValueError):
         range_months = 12
-    valid_ranges = {choice for choice, _ in WINDOW_CHOICES}
+    valid_ranges = {choice for choice, _ in WINDOW_CHOICES if isinstance(choice, int)}
     if range_months not in valid_ranges:
         range_months = 12
 
     fin = timezone.localdate()
     inicio = _shift_month(_month_start(fin), -(range_months - 1))
     return range_months, inicio, fin
+
+
+def _aplicar_rango_fecha(qs, field_name: str, inicio: date | None, fin: date):
+    if inicio:
+        return qs.filter(**{f"{field_name}__range": (inicio, fin)})
+    return qs.filter(**{f"{field_name}__lte": fin})
 
 
 def _category_filters_from_request(request):
@@ -156,6 +168,10 @@ def _precio_base_row(producto: Producto):
         "precio_maximo_compra": None,
         "precio_minimo_venta": None,
         "precio_maximo_venta": None,
+        "fecha_precio_minimo_compra": None,
+        "fecha_precio_maximo_compra": None,
+        "fecha_precio_minimo_venta": None,
+        "fecha_precio_maximo_venta": None,
         "referencias_compra": 0,
         "referencias_venta": 0,
         "dispersion_compra": None,
@@ -165,15 +181,17 @@ def _precio_base_row(producto: Producto):
     }
 
 
-def _actualizar_rango(row: dict, *, minimo: str, maximo: str, valor):
+def _actualizar_rango(row: dict, *, minimo: str, maximo: str, valor, fecha=None):
     if valor is None:
         return
 
     valor = _q2(valor)
     if row[minimo] is None or valor < row[minimo]:
         row[minimo] = valor
+        row[f"fecha_{minimo}"] = fecha
     if row[maximo] is None or valor > row[maximo]:
         row[maximo] = valor
+        row[f"fecha_{maximo}"] = fecha
 
 
 def _enriquecer_row_precios(row: dict):
@@ -195,7 +213,6 @@ def _filas_tabla_precios(inicio: date, fin: date, *, categoria_id=None, subcateg
     compras_qs = (
         Stock.objects.filter(
             recepcion__isnull=False,
-            recepcion__fecha_recepcion__range=(inicio, fin),
             recepcion__estado_recepcion="Finalizado",
             tipo_movimiento="DISPONIBLE",
             precio_unitario__isnull=False,
@@ -204,6 +221,7 @@ def _filas_tabla_precios(inicio: date, fin: date, *, categoria_id=None, subcateg
         .select_related("producto__categoria_producto", "producto__subcategoria_producto")
         .order_by("producto__nombre_producto", "recepcion__fecha_recepcion", "id")
     )
+    compras_qs = _aplicar_rango_fecha(compras_qs, "recepcion__fecha_recepcion", inicio, fin)
     for stock in compras_qs:
         row = rows.setdefault(stock.producto_id, _precio_base_row(stock.producto))
         row["referencias_compra"] += 1
@@ -212,16 +230,17 @@ def _filas_tabla_precios(inicio: date, fin: date, *, categoria_id=None, subcateg
             minimo="precio_minimo_compra",
             maximo="precio_maximo_compra",
             valor=_normalizar_precio_unidad_primaria(stock),
+            fecha=stock.recepcion.fecha_recepcion,
         )
 
     ventas_qs = (
         UtilidadProducto.objects.filter(
-            venta__fecha_venta__range=(inicio, fin),
             **filtros_producto,
         )
         .select_related("producto__categoria_producto", "producto__subcategoria_producto")
         .order_by("producto__nombre_producto", "venta__fecha_venta", "id")
     )
+    ventas_qs = _aplicar_rango_fecha(ventas_qs, "venta__fecha_venta", inicio, fin)
     for detalle in ventas_qs:
         row = rows.setdefault(detalle.producto_id, _precio_base_row(detalle.producto))
         row["referencias_venta"] += 1
@@ -230,6 +249,7 @@ def _filas_tabla_precios(inicio: date, fin: date, *, categoria_id=None, subcateg
             minimo="precio_minimo_venta",
             maximo="precio_maximo_venta",
             valor=detalle.precio_venta_unitario,
+            fecha=detalle.venta.fecha_venta,
         )
 
     return sorted(
@@ -248,7 +268,6 @@ def _detalle_compras_producto(producto: Producto, inicio: date, fin: date):
         Stock.objects.filter(
             producto=producto,
             recepcion__isnull=False,
-            recepcion__fecha_recepcion__range=(inicio, fin),
             recepcion__estado_recepcion="Finalizado",
             tipo_movimiento="DISPONIBLE",
             precio_unitario__isnull=False,
@@ -256,6 +275,7 @@ def _detalle_compras_producto(producto: Producto, inicio: date, fin: date):
         .select_related("recepcion__proveedor")
         .order_by("-recepcion__fecha_recepcion", "-recepcion__num_documento_recepcion", "-id")
     )
+    compras_qs = _aplicar_rango_fecha(compras_qs, "recepcion__fecha_recepcion", inicio, fin)
 
     return [
         {
@@ -275,11 +295,11 @@ def _detalle_ventas_producto(producto: Producto, inicio: date, fin: date):
     ventas_qs = (
         UtilidadProducto.objects.filter(
             producto=producto,
-            venta__fecha_venta__range=(inicio, fin),
         )
         .select_related("venta__pedidoid__nombre_cliente")
         .order_by("-venta__fecha_venta", "-venta__num_documento", "-id")
     )
+    ventas_qs = _aplicar_rango_fecha(ventas_qs, "venta__fecha_venta", inicio, fin)
 
     return [
         {
@@ -373,6 +393,28 @@ def _resumen_estrategia_precios(pricing_rows):
         "alertas_rows": alertas_rows,
         "oportunidad_rows": oportunidad_rows,
     }
+
+
+def _enriquecer_cambios_precio_compra(cambios, pricing_rows):
+    precios_venta = {
+        row["producto_id"]: row["precio_minimo_venta"]
+        for row in pricing_rows
+        if row["precio_minimo_venta"] is not None
+    }
+
+    for cambio in cambios:
+        precio_minimo_venta = precios_venta.get(cambio["producto_id"])
+        cambio["precio_minimo_venta"] = precio_minimo_venta
+        cambio["diferencia_venta_pesos"] = None
+        cambio["diferencia_venta_pct"] = None
+
+        if precio_minimo_venta is not None:
+            diferencia = _q2(precio_minimo_venta - cambio["precio_nuevo"])
+            cambio["diferencia_venta_pesos"] = diferencia
+            if cambio["precio_nuevo"] and cambio["precio_nuevo"] > 0:
+                cambio["diferencia_venta_pct"] = _q2((diferencia / cambio["precio_nuevo"]) * Decimal("100"))
+
+    return cambios
 
 
 def _normalizar_precio_producto(producto: Producto, empaque: str, precio) -> Decimal:
@@ -640,6 +682,13 @@ def dashboard_estrategia_precios(request):
         subcategoria_id=filtros_categoria["subcategoria_id"],
     )
     resumen = _resumen_estrategia_precios(pricing_rows)
+    cambios_precio_compra = filas_cambios_precio_compra(
+        inicio=inicio,
+        fin=fin,
+        categoria_id=filtros_categoria["categoria_id"],
+        subcategoria_id=filtros_categoria["subcategoria_id"],
+    )
+    cambios_precio_compra = _enriquecer_cambios_precio_compra(cambios_precio_compra, pricing_rows)
 
     return render(
         request,
@@ -650,6 +699,8 @@ def dashboard_estrategia_precios(request):
             "range_months": range_months,
             "window_choices": WINDOW_CHOICES,
             "pricing_rows": pricing_rows,
+            "cambios_precio_compra": cambios_precio_compra,
+            "cantidad_cambios_precio_compra": len(cambios_precio_compra),
             **filtros_categoria,
             **resumen,
         },

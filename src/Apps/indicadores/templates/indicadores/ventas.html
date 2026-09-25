@@ -123,16 +123,3 @@
   </div>
 </div>
 {% endblock content %}
-
-{% block script %}
-<script>
-  $(document).ready(function () {
-    $('#tabla-filtros').DataTable({
-      order: [[1, "asc"]],     // ordenar por "Producto"
-      pageLength: 50,
-      columnDefs: [{ targets: [0, 1], orderable: true }],
-      language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-CL.json" }
-    });
-  });
-</script>
-{% endblock script %}
