@@ -2,11 +2,14 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import DecimalField, ExpressionWrapper, F, IntegerField, Sum, Value
 from django.db.models.functions import Coalesce, TruncMonth
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from Apps.Pedidos.models import (
     Categoria,
@@ -23,6 +26,7 @@ from Apps.Pedidos.models import (
 )
 from Apps.Pedidos.services import costo_referencial_pack, es_pack
 from Apps.Pedidos.services.precios_compra_alertas import filas_cambios_precio_compra
+from Apps.indicadores.models import RevisionCambioPrecioCompra
 from Apps.indicadores.services.contabilidad import _normalizar_precio_unidad_primaria
 from .common import periodo_desde_request
 
@@ -417,6 +421,88 @@ def _enriquecer_cambios_precio_compra(cambios, pricing_rows):
     return cambios
 
 
+def _filtros_revision_cambios_compra_from_request(request):
+    tipo = request.GET.get("tipo_cambio", "alzas").strip().lower()
+    if tipo not in {"todos", "alzas", "bajas"}:
+        tipo = "alzas"
+
+    try:
+        umbral_pct = Decimal(request.GET.get("umbral_pct", "5") or "0")
+    except Exception:
+        umbral_pct = Decimal("5")
+    if umbral_pct < 0:
+        umbral_pct = Decimal("0")
+
+    try:
+        proveedor_id = int(request.GET.get("proveedor", "") or 0) or None
+    except (TypeError, ValueError):
+        proveedor_id = None
+
+    solo_revision = request.GET.get("solo_revision", "1") != "0"
+    busqueda = (request.GET.get("q", "") or "").strip()
+
+    return {
+        "tipo_cambio": tipo,
+        "umbral_pct": _q2(umbral_pct),
+        "proveedor_id": proveedor_id,
+        "solo_revision": solo_revision,
+        "busqueda": busqueda,
+    }
+
+
+def _aplicar_checker_cambios_compra(cambios, filtros):
+    busqueda = filtros["busqueda"].lower()
+    umbral_pct = filtros["umbral_pct"]
+    rows = []
+
+    for cambio in cambios:
+        if filtros["tipo_cambio"] == "alzas" and not cambio["es_alza"]:
+            continue
+        if filtros["tipo_cambio"] == "bajas" and cambio["es_alza"]:
+            continue
+        if filtros["proveedor_id"] and cambio.get("proveedor_id") != filtros["proveedor_id"]:
+            continue
+        if busqueda:
+            texto = " ".join(
+                str(cambio.get(campo, ""))
+                for campo in ("codigo_interno", "producto", "proveedor", "documento")
+            ).lower()
+            if busqueda not in texto:
+                continue
+
+        pct_compra = None
+        if cambio["precio_anterior"] and cambio["precio_anterior"] > 0:
+            pct_compra = _q2((cambio["diferencia_abs"] / cambio["precio_anterior"]) * Decimal("100"))
+        cambio["diferencia_compra_pct"] = pct_compra
+
+        margen = cambio.get("diferencia_venta_pesos")
+        sin_venta = cambio.get("precio_minimo_venta") is None
+        cambio["requiere_revision"] = bool(
+            cambio["es_alza"]
+            and (sin_venta or margen is None or margen <= 0 or (pct_compra is not None and pct_compra >= umbral_pct))
+        )
+        revision = cambio.get("revision_humana")
+        if revision:
+            cambio["requiere_revision"] = revision.estado == RevisionCambioPrecioCompra.ESTADO_REVISAR
+
+        if filtros["solo_revision"] and not cambio["requiere_revision"]:
+            continue
+        rows.append(cambio)
+
+    return rows
+
+
+def _adjuntar_revision_humana(cambios):
+    revisiones = RevisionCambioPrecioCompra.objects.filter(
+        stock_id__in=[row["stock_id"] for row in cambios]
+    ).select_related("revisado_por")
+    revisiones_por_stock = {revision.stock_id: revision for revision in revisiones}
+
+    for cambio in cambios:
+        cambio["revision_humana"] = revisiones_por_stock.get(cambio["stock_id"])
+    return cambios
+
+
 def _normalizar_precio_producto(producto: Producto, empaque: str, precio) -> Decimal:
     base = type(
         "PrecioProducto",
@@ -673,6 +759,7 @@ def dashboard_estrategia(request):
 @login_required
 def dashboard_estrategia_precios(request):
     filtros_categoria = _category_filters_from_request(request)
+    filtros_revision = _filtros_revision_cambios_compra_from_request(request)
     range_months, inicio, fin = _historical_window_from_request(request)
 
     pricing_rows = _filas_tabla_precios(
@@ -689,6 +776,18 @@ def dashboard_estrategia_precios(request):
         subcategoria_id=filtros_categoria["subcategoria_id"],
     )
     cambios_precio_compra = _enriquecer_cambios_precio_compra(cambios_precio_compra, pricing_rows)
+    cambios_precio_compra = _adjuntar_revision_humana(cambios_precio_compra)
+    proveedores_cambios = sorted(
+        {
+            (row["proveedor_id"], row["proveedor"])
+            for row in cambios_precio_compra
+            if row.get("proveedor_id")
+        },
+        key=lambda item: item[1],
+    )
+    total_cambios_precio_compra = len(cambios_precio_compra)
+    cambios_precio_compra = _aplicar_checker_cambios_compra(cambios_precio_compra, filtros_revision)
+    cambios_precio_compra_revision_total = sum(1 for row in cambios_precio_compra if row["requiere_revision"])
 
     return render(
         request,
@@ -697,14 +796,57 @@ def dashboard_estrategia_precios(request):
             "inicio": inicio,
             "fin": fin,
             "range_months": range_months,
+            "query_string": request.GET.urlencode(),
             "window_choices": WINDOW_CHOICES,
             "pricing_rows": pricing_rows,
             "cambios_precio_compra": cambios_precio_compra,
             "cantidad_cambios_precio_compra": len(cambios_precio_compra),
+            "total_cambios_precio_compra": total_cambios_precio_compra,
+            "cambios_precio_compra_revision_total": cambios_precio_compra_revision_total,
+            "proveedores_cambios": proveedores_cambios,
+            **filtros_revision,
             **filtros_categoria,
             **resumen,
         },
     )
+
+
+@login_required
+@require_POST
+def revisar_cambio_precio_compra(request, stock_id):
+    stock = get_object_or_404(
+        Stock.objects.filter(
+            tipo_movimiento="DISPONIBLE",
+            recepcion__isnull=False,
+            recepcion__estado_recepcion="Finalizado",
+        ),
+        pk=stock_id,
+    )
+    accion = request.POST.get("accion")
+    comentario = (request.POST.get("comentario") or "").strip()[:255]
+
+    if accion == "reabrir":
+        estado = RevisionCambioPrecioCompra.ESTADO_REVISAR
+        mensaje = "Cambio de precio reabierto para revision."
+    else:
+        estado = RevisionCambioPrecioCompra.ESTADO_OK
+        mensaje = "Cambio de precio marcado como OK."
+
+    RevisionCambioPrecioCompra.objects.update_or_create(
+        stock=stock,
+        defaults={
+            "estado": estado,
+            "comentario": comentario,
+            "revisado_por": request.user if request.user.is_authenticated else None,
+        },
+    )
+    messages.success(request, mensaje)
+
+    destino = reverse("dashboard_estrategia_precios")
+    query_string = request.POST.get("next_query", "")
+    if query_string:
+        destino = f"{destino}?{query_string}"
+    return redirect(destino)
 
 
 @login_required

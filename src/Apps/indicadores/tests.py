@@ -22,6 +22,7 @@ from Apps.Pedidos.models import (
     UtilidadProducto,
     Venta,
 )
+from Apps.indicadores.models import RevisionCambioPrecioCompra
 
 
 class IndicadoresViewsTests(TestCase):
@@ -35,6 +36,7 @@ class IndicadoresViewsTests(TestCase):
             reverse("dashboard_estrategia_precios"),
             reverse("dashboard_lista_precios_vigentes"),
             reverse("dashboard_precios_cliente"),
+            reverse("revisar_cambio_precio_compra", args=[1]),
         ]
 
     def test_dashboards_requieren_autenticacion(self):
@@ -371,6 +373,9 @@ class EstrategiaPreciosTests(TestCase):
         self.assertContains(resp, "Precio minimo venta")
         self.assertContains(resp, "Diferencia $")
         self.assertContains(resp, "Diferencia %")
+        self.assertContains(resp, "Proveedor Estrategia")
+        self.assertContains(resp, "Factura #5003")
+        self.assertContains(resp, "Revisar")
         self.assertNotContains(resp, "<th>Categoria</th>", html=False)
         self.assertNotContains(resp, "<th>Subcategoria</th>", html=False)
         self.assertContains(resp, "+$ 30")
@@ -382,6 +387,123 @@ class EstrategiaPreciosTests(TestCase):
         self.assertEqual(row["precio_minimo_venta"], Decimal("200.00"))
         self.assertEqual(row["diferencia_venta_pesos"], Decimal("20.00"))
         self.assertEqual(row["diferencia_venta_pct"], Decimal("11.11"))
+        self.assertEqual(row["diferencia_compra_pct"], Decimal("20.00"))
+        self.assertTrue(row["requiere_revision"])
+
+    def test_dashboard_estrategia_precios_checker_filtra_cambios_compra(self):
+        recepcion_alza = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=self.hoy,
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=5003,
+            total_neto_recepcion=Decimal("180.00"),
+            iva_recepcion=Decimal("34.20"),
+            total_recepcion=Decimal("214.20"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("180.00"),
+            recepcion=recepcion_alza,
+        )
+        recepcion_baja = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=self.hoy,
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=5004,
+            total_neto_recepcion=Decimal("170.00"),
+            iva_recepcion=Decimal("32.30"),
+            total_recepcion=Decimal("202.30"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("170.00"),
+            recepcion=recepcion_baja,
+        )
+
+        resp_bajas = self.client.get(
+            reverse("dashboard_estrategia_precios"),
+            data={"range_months": 6, "tipo_cambio": "bajas", "solo_revision": "0"},
+        )
+        resp_busqueda = self.client.get(
+            reverse("dashboard_estrategia_precios"),
+            data={"range_months": 6, "q": "5003", "solo_revision": "0"},
+        )
+
+        self.assertEqual(resp_bajas.status_code, 200)
+        self.assertEqual(resp_bajas.context["total_cambios_precio_compra"], 3)
+        self.assertEqual(resp_bajas.context["cantidad_cambios_precio_compra"], 1)
+        self.assertFalse(resp_bajas.context["cambios_precio_compra"][0]["es_alza"])
+        self.assertContains(resp_bajas, "-$ 10")
+
+        self.assertEqual(resp_busqueda.status_code, 200)
+        self.assertEqual(resp_busqueda.context["cantidad_cambios_precio_compra"], 1)
+        self.assertEqual(resp_busqueda.context["cambios_precio_compra"][0]["documento"], 5003)
+
+    def test_revision_humana_cambia_cambio_compra_de_revisar_a_ok_y_reabre(self):
+        recepcion = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=self.hoy,
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=5003,
+            total_neto_recepcion=Decimal("180.00"),
+            iva_recepcion=Decimal("34.20"),
+            total_recepcion=Decimal("214.20"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        stock = Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("180.00"),
+            recepcion=recepcion,
+        )
+
+        resp_inicial = self.client.get(reverse("dashboard_estrategia_precios"), data={"range_months": 6})
+        self.assertEqual(resp_inicial.context["cantidad_cambios_precio_compra"], 2)
+
+        resp_ok = self.client.post(
+            reverse("revisar_cambio_precio_compra", args=[stock.id]),
+            data={
+                "accion": "ok",
+                "comentario": "Precio validado con proveedor",
+                "next_query": "range_months=6",
+            },
+        )
+        self.assertRedirects(resp_ok, f'{reverse("dashboard_estrategia_precios")}?range_months=6')
+        revision = RevisionCambioPrecioCompra.objects.get(stock=stock)
+        self.assertEqual(revision.estado, RevisionCambioPrecioCompra.ESTADO_OK)
+        self.assertEqual(revision.revisado_por, self.user)
+        self.assertEqual(revision.comentario, "Precio validado con proveedor")
+
+        resp_filtrado = self.client.get(reverse("dashboard_estrategia_precios"), data={"range_months": 6})
+        self.assertEqual(resp_filtrado.context["cantidad_cambios_precio_compra"], 1)
+        self.assertNotIn(stock.id, [row["stock_id"] for row in resp_filtrado.context["cambios_precio_compra"]])
+
+        resp_reabrir = self.client.post(
+            reverse("revisar_cambio_precio_compra", args=[stock.id]),
+            data={"accion": "reabrir", "next_query": "range_months=6"},
+        )
+        self.assertRedirects(resp_reabrir, f'{reverse("dashboard_estrategia_precios")}?range_months=6')
+        revision.refresh_from_db()
+        self.assertEqual(revision.estado, RevisionCambioPrecioCompra.ESTADO_REVISAR)
+
+        resp_reabierto = self.client.get(reverse("dashboard_estrategia_precios"), data={"range_months": 6})
+        self.assertIn(stock.id, [row["stock_id"] for row in resp_reabierto.context["cambios_precio_compra"]])
 
     def test_dashboard_estrategia_precios_todo_historial_incluye_cambios_fuera_del_horizonte(self):
         recepcion_antigua = Recepcion.objects.create(

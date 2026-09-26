@@ -59,6 +59,7 @@ def filas_cambios_precio_compra(
             **filtros,
         )
         .select_related(
+            "recepcion__proveedor",
             "producto__categoria_producto",
             "producto__subcategoria_producto",
             "producto__empaque_primario",
@@ -88,6 +89,10 @@ def filas_cambios_precio_compra(
                         "subcategoria": producto.subcategoria_producto.subcategoria if producto.subcategoria_producto else "-",
                         "codigo_interno": producto.codigo_producto_interno,
                         "producto": producto.nombre_producto,
+                        "proveedor_id": compra.recepcion.proveedor_id,
+                        "proveedor": compra.recepcion.proveedor.nombre_proveedor,
+                        "documento": compra.recepcion.num_documento_recepcion,
+                        "tipo_documento": compra.recepcion.documento_recepcion,
                         "empaque": empaque,
                         "empaque_label": _nombre_empaque_producto(producto, empaque),
                         "precio_anterior": anterior["precio"],

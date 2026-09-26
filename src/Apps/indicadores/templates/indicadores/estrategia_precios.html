@@ -53,6 +53,38 @@
       <button type="submit" class="btn btn-outline-primary w-100">Analizar</button>
       <a href="{% url 'dashboard_estrategia_precios' %}" class="btn btn-outline-secondary w-100">Limpiar</a>
     </div>
+    <div class="col-md-3">
+      <label class="form-label">Buscar cambio</label>
+      <input type="search" class="form-control" name="q" value="{{ busqueda }}" placeholder="Producto, codigo, proveedor o doc.">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Proveedor</label>
+      <select class="form-select" name="proveedor">
+        <option value="">Todos</option>
+        {% for proveedor_item in proveedores_cambios %}
+          <option value="{{ proveedor_item.0 }}" {% if proveedor_item.0 == proveedor_id %}selected{% endif %}>{{ proveedor_item.1 }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Tipo</label>
+      <select class="form-select" name="tipo_cambio">
+        <option value="alzas" {% if tipo_cambio == "alzas" %}selected{% endif %}>Solo alzas</option>
+        <option value="bajas" {% if tipo_cambio == "bajas" %}selected{% endif %}>Solo bajas</option>
+        <option value="todos" {% if tipo_cambio == "todos" %}selected{% endif %}>Todos</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Umbral %</label>
+      <input type="number" class="form-control" name="umbral_pct" value="{{ umbral_pct|floatformat:'2u' }}" min="0" step="0.01">
+    </div>
+    <div class="col-md-2">
+      <div class="form-check mt-md-4">
+        <input type="hidden" name="solo_revision" value="0">
+        <input type="checkbox" class="form-check-input" id="solo_revision" name="solo_revision" value="1" {% if solo_revision %}checked{% endif %}>
+        <label class="form-check-label" for="solo_revision">Solo revisar</label>
+      </div>
+    </div>
   </form>
 
   <div class="row g-2 mb-3">
@@ -90,6 +122,7 @@
           <div class="h5 mb-0 {% if cantidad_cambios_precio_compra %}text-info{% endif %}">
             {{ cantidad_cambios_precio_compra|formatear_miles }}
           </div>
+          <div class="small text-muted">de {{ total_cambios_precio_compra|formatear_miles }} historicos</div>
         </div>
       </div>
     </div>
@@ -145,68 +178,153 @@
     <div class="d-flex justify-content-between align-items-center mb-2">
       <div>
         <h2 class="h6 mb-1">Cambios de Precio de Compra</h2>
-        <div class="small text-muted">Diferencias detectadas entre precios de compra consecutivos dentro del historico evaluado.</div>
+        <div class="small text-muted">
+          Bandeja filtrada de cambios consecutivos dentro del historico evaluado. En revision: {{ cambios_precio_compra_revision_total|formatear_miles }}.
+        </div>
       </div>
     </div>
     <table id="tabla-cambios-precio-compra" class="table table-striped table-bordered table-sm js-sortable-report-table">
       <thead class="table-light text-center">
         <tr>
-          <th>Codigo interno</th>
+          <th>Código interno</th>
           <th>Producto</th>
+          <th>Proveedor</th>
+          <th>Doc.</th>
           <th>Fecha</th>
           <th>Precio anterior</th>
           <th>Precio nuevo</th>
           <th>Diferencia compra</th>
-          <th>Precio minimo venta</th>
-          <th>Diferencia $</th>
-          <th>Diferencia %</th>
+          <th>Precio mínimo venta</th>
+          <th>Diferencia</th>
           <th class="no-sort">Detalle</th>
         </tr>
       </thead>
+
       <tbody>
         {% for row in cambios_precio_compra %}
           <tr>
             <td class="text-center">{{ row.codigo_interno }}</td>
+
             <td>{{ row.producto }}</td>
-            <td class="text-center" data-order="{{ row.fecha_cambio|date:'Ymd' }}">{{ row.fecha_cambio|date:"d-m-Y" }}</td>
-            <td class="text-end" data-order="{{ row.precio_anterior|floatformat:'2u' }}">$ {{ row.precio_anterior|formatear_miles }}</td>
-            <td class="text-end" data-order="{{ row.precio_nuevo|floatformat:'2u' }}">$ {{ row.precio_nuevo|formatear_miles }}</td>
-            <td class="text-end {% if row.es_alza %}text-danger{% else %}text-success{% endif %}" data-order="{{ row.diferencia|floatformat:'2u' }}">
-              {% if row.es_alza %}+{% else %}-{% endif %}$ {{ row.diferencia_abs|formatear_miles }}
+
+            <td>{{ row.proveedor }}</td>
+
+            <td class="text-center">
+              {{ row.tipo_documento }} #{{ row.documento }}
             </td>
-            <td class="text-end" data-order="{% if row.precio_minimo_venta is not None %}{{ row.precio_minimo_venta|floatformat:'2u' }}{% endif %}">
+
+            <td class="text-center"
+                data-order="{{ row.fecha_cambio|date:'Ymd' }}">
+              {{ row.fecha_cambio|date:"d-m-Y" }}
+            </td>
+
+            <td class="text-end"
+                data-order="{{ row.precio_anterior|floatformat:'2u' }}">
+              $ {{ row.precio_anterior|formatear_miles }}
+            </td>
+
+            <td class="text-end"
+                data-order="{{ row.precio_nuevo|floatformat:'2u' }}">
+              $ {{ row.precio_nuevo|formatear_miles }}
+            </td>
+
+            <!-- Diferencia de compra: monto y porcentaje -->
+            <td class="text-end {% if row.es_alza %}text-danger{% else %}text-success{% endif %}"
+                data-order="{{ row.diferencia|floatformat:'2u' }}">
+
+              <div>
+                {% if row.es_alza %}+{% else %}-{% endif %}$
+                {{ row.diferencia_abs|formatear_miles }}
+              </div>
+
+              {% if row.diferencia_compra_pct is not None %}
+                <small>
+                  {% if row.es_alza %}+{% else %}-{% endif %}
+                  {{ row.diferencia_compra_pct|floatformat:2 }}%
+                </small>
+              {% endif %}
+            </td>
+
+            <td class="text-end"
+                data-order="{% if row.precio_minimo_venta is not None %}{{ row.precio_minimo_venta|floatformat:'2u' }}{% endif %}">
               {% if row.precio_minimo_venta is not None %}
                 $ {{ row.precio_minimo_venta|formatear_miles }}
               {% else %}
                 <span class="text-muted">-</span>
               {% endif %}
             </td>
-            <td class="text-end {% if row.diferencia_venta_pesos is not None and row.diferencia_venta_pesos < 0 %}text-danger{% elif row.diferencia_venta_pesos is not None %}text-success{% endif %}" data-order="{% if row.diferencia_venta_pesos is not None %}{{ row.diferencia_venta_pesos|floatformat:'2u' }}{% endif %}">
+
+            <!-- Diferencia de venta: monto y porcentaje -->
+            <td class="text-end
+              {% if row.diferencia_venta_pesos is not None and row.diferencia_venta_pesos < 0 %}
+                text-danger
+              {% elif row.diferencia_venta_pesos is not None %}
+                text-success
+              {% endif %}">
+
               {% if row.diferencia_venta_pesos is not None %}
-                $ {{ row.diferencia_venta_pesos|formatear_miles }}
+                <div>
+                  $ {{ row.diferencia_venta_pesos|formatear_miles }}
+                </div>
+
+                {% if row.diferencia_venta_pct is not None %}
+                  <small>
+                    {{ row.diferencia_venta_pct|floatformat:2 }}%
+                  </small>
+                {% endif %}
               {% else %}
                 <span class="text-muted">-</span>
               {% endif %}
             </td>
-            <td class="text-end {% if row.diferencia_venta_pct is not None and row.diferencia_venta_pct < 0 %}text-danger{% elif row.diferencia_venta_pct is not None %}text-success{% endif %}" data-order="{% if row.diferencia_venta_pct is not None %}{{ row.diferencia_venta_pct|floatformat:'2u' }}{% endif %}">
-              {% if row.diferencia_venta_pct is not None %}
-                {{ row.diferencia_venta_pct|floatformat:2 }}%
-              {% else %}
-                <span class="text-muted">-</span>
-              {% endif %}
-            </td>
+
             <td class="text-center">
-              <a
-                href="{% url 'detalle_precios_estrategia' row.producto_id %}?range_months={{ range_months }}{% if categoria_id %}&categoria={{ categoria_id }}{% endif %}{% if subcategoria_id %}&subcategoria={{ subcategoria_id }}{% endif %}"
-                class="btn btn-sm btn-outline-primary"
-                title="Ver detalle de precios"
-              >
-                <i class="fas fa-eye"></i>
-              </a>
+              <div class="d-flex justify-content-center gap-1">
+
+                <a href="{% url 'detalle_precios_estrategia' row.producto_id %}?range_months={{ range_months }}{% if categoria_id %}&categoria={{ categoria_id }}{% endif %}{% if subcategoria_id %}&subcategoria={{ subcategoria_id }}{% endif %}"
+                  class="btn btn-sm btn-outline-primary"
+                  title="Ver detalle de precios">
+                  <i class="fas fa-eye"></i>
+                </a>
+
+                <form method="post"
+                      action="{% url 'revisar_cambio_precio_compra' row.stock_id %}"
+                      class="d-inline-flex gap-1">
+
+                  {% csrf_token %}
+
+                  <input type="hidden"
+                        name="next_query"
+                        value="{{ query_string }}">
+
+                  {% if row.revision_humana and row.revision_humana.estado == "OK" %}
+                    <input type="hidden" name="accion" value="reabrir">
+
+                    <button type="submit"
+                            class="btn btn-sm btn-outline-warning"
+                            title="Reabrir revisión">
+                      <i class="fas fa-undo"></i>
+                    </button>
+                  {% else %}
+                    <input type="hidden" name="accion" value="ok">
+
+                    <button type="submit"
+                            class="btn btn-sm btn-outline-success"
+                            title="Marcar OK">
+                      <i class="fas fa-check"></i>
+                    </button>
+                  {% endif %}
+                </form>
+
+              </div>
             </td>
           </tr>
+
         {% empty %}
-          <tr><td colspan="10" class="text-center text-muted">Sin cambios de precio de compra para el filtro seleccionado.</td></tr>
+          <tr>
+            <td colspan="12" class="text-center text-muted">
+              Sin cambios de precio de compra para el filtro seleccionado.
+            </td>
+          </tr>
         {% endfor %}
       </tbody>
     </table>

@@ -8,6 +8,7 @@ from .estrategia import (
     dashboard_estrategia_precios,
     dashboard_lista_precios_vigentes,
     detalle_precios_estrategia,
+    revisar_cambio_precio_compra,
 )
 from .contabilidad import (
     exportar_inventario_propyme,
