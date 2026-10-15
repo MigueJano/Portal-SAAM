@@ -290,6 +290,9 @@ def detalle_venta(request, venta_id):
     ganancia_total = sum((p.utilidad              * p.cantidad for p in productos), start=Decimal('0'))
 
     ingreso_total  = ingreso_total.quantize(DOS_DEC,  rounding=ROUND_HALF_UP)
+    iva_detalle = (ingreso_total * IVA_RATE).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
+    total_detalle = (ingreso_total + iva_detalle).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
+    diferencia_neto = (Decimal(venta.venta_neto_pedido) - ingreso_total).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
     ganancia_total = ganancia_total.quantize(DOS_DEC, rounding=ROUND_HALF_UP)
     ganancia_total_pct = ((ganancia_total / ingreso_total) * CIEN).quantize(DOS_DEC, rounding=ROUND_HALF_UP) if ingreso_total > 0 else Decimal('0')
 
@@ -300,6 +303,9 @@ def detalle_venta(request, venta_id):
         'lineas_comerciales': lineas_comerciales,
         'productos': productos,
         'ingreso_total': ingreso_total,
+        'iva_detalle': iva_detalle,
+        'total_detalle': total_detalle,
+        'diferencia_neto': diferencia_neto,
         'ganancia_total': ganancia_total,
         'ganancia_total_pct': ganancia_total_pct,
         'entregas': entregas,

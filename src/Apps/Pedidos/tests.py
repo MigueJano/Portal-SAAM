@@ -807,6 +807,128 @@ class ListaPedidosTests(TestCase):
         )
 
 
+class ListaVentasTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("lista_ventas", password="test123")
+        self.client.force_login(self.user)
+
+        cliente = Cliente.objects.create(
+            nombre_cliente="Cliente Venta",
+            rut_cliente="77555555-5",
+            direccion_cliente="Dir Cliente",
+            direccion_bodega_cliente="Dir Bodega",
+            cliente_activo=True,
+            telefono_cliente="+56955555555",
+            correo_cliente="venta@test.local",
+            categoria="PYME",
+        )
+        pedido = Pedido.objects.create(
+            nombre_cliente=cliente,
+            fecha_pedido=datetime(2026, 10, 15).date(),
+            estado_pedido="Finalizado",
+        )
+        Venta.objects.create(
+            pedidoid=pedido,
+            fecha_venta=datetime(2026, 10, 15).date(),
+            documento_pedido="Boleta",
+            num_documento=4321,
+            venta_neto_pedido=Decimal("1000.00"),
+            venta_iva_pedido=Decimal("190.00"),
+            venta_total_pedido=Decimal("1190.00"),
+        )
+
+    def test_lista_muestra_tipo_y_numero_del_documento_asociado(self):
+        resp = self.client.get(reverse("lista_ventas"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Documento asociado")
+        self.assertContains(resp, "Boleta N&deg; 4321", html=True)
+
+
+class DetalleVentaTotalesTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("detalle_venta", password="test123")
+        self.client.force_login(self.user)
+        cliente = Cliente.objects.create(
+            nombre_cliente="Cliente Detalle Venta",
+            rut_cliente="77666666-6",
+            direccion_cliente="Dir Cliente",
+            direccion_bodega_cliente="Dir Bodega",
+            cliente_activo=True,
+            telefono_cliente="+56966666666",
+            correo_cliente="detalle@test.local",
+            categoria="PYME",
+        )
+        producto = Producto.objects.create(
+            codigo_producto_interno="DETVENTA1",
+            nombre_producto="Producto Detalle Venta",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        pedido = Pedido.objects.create(
+            nombre_cliente=cliente,
+            fecha_pedido=datetime(2026, 10, 15).date(),
+            estado_pedido="Finalizado",
+        )
+        PedidoLinea.objects.create(
+            pedido=pedido,
+            producto=producto,
+            descripcion=producto.nombre_producto,
+            empaque="PRIMARIO",
+            cantidad=2,
+            precio_unitario=Decimal("500.00"),
+        )
+        self.venta = Venta.objects.create(
+            pedidoid=pedido,
+            fecha_venta=datetime(2026, 10, 15).date(),
+            documento_pedido="Boleta",
+            num_documento=4322,
+            venta_neto_pedido=Decimal("1000.00"),
+            venta_iva_pedido=Decimal("190.00"),
+            venta_total_pedido=Decimal("1190.00"),
+        )
+        UtilidadProducto.objects.create(
+            venta=self.venta,
+            producto=producto,
+            empaque="PRIMARIO",
+            cantidad=2,
+            precio_compra_unitario=Decimal("400.00"),
+            precio_venta_unitario=Decimal("500.00"),
+            utilidad=Decimal("100.00"),
+            utilidad_porcentaje=Decimal("20.00"),
+            fecha=timezone.now(),
+        )
+
+    def test_detalle_compara_total_registrado_con_suma_lineas_mas_iva(self):
+        resp = self.client.get(reverse("detalle_venta", args=[self.venta.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["ingreso_total"], Decimal("1000.00"))
+        self.assertEqual(resp.context["iva_detalle"], Decimal("190.00"))
+        self.assertEqual(resp.context["total_detalle"], Decimal("1190.00"))
+        self.assertEqual(resp.context["diferencia_neto"], Decimal("0.00"))
+        self.assertContains(resp, "Total venta registrado")
+
+    def test_detalle_advierte_si_el_neto_registrado_no_coincide_con_las_lineas(self):
+        self.venta.venta_neto_pedido = Decimal("1750.00")
+        self.venta.venta_iva_pedido = Decimal("332.50")
+        self.venta.venta_total_pedido = Decimal("2082.50")
+        self.venta.save(update_fields=[
+            "venta_neto_pedido",
+            "venta_iva_pedido",
+            "venta_total_pedido",
+        ])
+
+        resp = self.client.get(reverse("detalle_venta", args=[self.venta.id]))
+
+        self.assertEqual(resp.context["diferencia_neto"], Decimal("750.00"))
+        self.assertContains(resp, "El detalle histórico no coincide con la venta registrada")
+
+
 class EliminarPedidoTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user("eliminar_pedido", password="test123")

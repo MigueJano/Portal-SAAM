@@ -56,6 +56,7 @@ def _obtener_version_registro(observacion):
 def actualizaciones_sistema(request):
     resultado = None
     estado_git = None
+    ultima_instalacion = ActualizacionSistema.objects.first()
 
     if request.method == "POST":
         if not request.user.is_superuser:
@@ -74,10 +75,13 @@ def actualizaciones_sistema(request):
                     messages.success(request, "El sistema ya esta actualizado.")
             else:
                 messages.error(request, f"No fue posible consultar Git: {estado_git.error}")
-        elif accion == "instalar":
+        elif accion in {"instalar", "reintentar"}:
             estado_previo = git_status(fetch=False)
             try:
-                resultado = apply_system_update()
+                es_reintento = accion == "reintentar"
+                if es_reintento and (ultima_instalacion is None or ultima_instalacion.estado != "FALLIDA"):
+                    raise SystemUpdateError("No existe una instalacion fallida pendiente de reintento.")
+                resultado = apply_system_update(retry=es_reintento)
                 estado_final = resultado["status"]
                 ActualizacionSistema.objects.create(
                     estado="EXITOSA" if resultado["changed"] else "SIN_CAMBIOS",
@@ -87,7 +91,9 @@ def actualizaciones_sistema(request):
                     detalle=resultado.get("log", "")[-12000:],
                     creado_por=request.user,
                 )
-                if resultado["changed"]:
+                if resultado.get("retried"):
+                    messages.success(request, "Instalacion pendiente completada. Reinicia el servicio si no se recarga automaticamente.")
+                elif resultado["changed"]:
                     messages.success(request, "Actualizacion aplicada. Reinicia el servicio si no se recarga automaticamente.")
                 else:
                     messages.info(request, "No habia cambios pendientes de instalacion.")
@@ -103,6 +109,7 @@ def actualizaciones_sistema(request):
         else:
             messages.error(request, "Accion de actualizacion no reconocida.")
 
+    ultima_instalacion = ActualizacionSistema.objects.first()
     if estado_git is None:
         estado_git = git_status(fetch=False)
     return render(
@@ -113,6 +120,7 @@ def actualizaciones_sistema(request):
             "version_actual": _version_str(obtener_version_actual()),
             "versiones": VersionRegistro.objects.select_related("creado_por")[:10],
             "actualizaciones": ActualizacionSistema.objects.select_related("creado_por")[:10],
+            "puede_reintentar": ultima_instalacion is not None and ultima_instalacion.estado == "FALLIDA",
             "resultado": resultado,
         },
     )

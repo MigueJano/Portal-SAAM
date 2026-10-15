@@ -10,11 +10,6 @@ from .common import periodo_desde_request
 def dashboard_operaciones(request):
     periodo, inicio, fin, meses = periodo_desde_request(request)
 
-    pedidos_qs = (
-        Pedido.objects.filter(fecha_pedido__range=(inicio, fin))
-        .select_related("nombre_cliente")
-        .order_by("-fecha_pedido", "-id")
-    )
     recepciones_qs = (
         Recepcion.objects.filter(fecha_recepcion__range=(inicio, fin))
         .select_related("proveedor")
@@ -32,6 +27,15 @@ def dashboard_operaciones(request):
             "venta_total_pedido",
         )
         .order_by("-fecha_venta")
+    )
+
+    # El periodo de Operaciones representa el cierre comercial. Un pedido
+    # pertenece al mes cuando su venta se registra dentro del periodo, aunque
+    # el pedido se haya creado en un mes anterior.
+    pedidos_qs = (
+        Pedido.objects.filter(id__in={venta["pedidoid_id"] for venta in ventas_periodo})
+        .select_related("nombre_cliente")
+        .order_by("-fecha_pedido", "-id")
     )
     venta_por_pedido = {}
     for venta in ventas_periodo:
@@ -61,6 +65,8 @@ def dashboard_operaciones(request):
                 "total_con_iva": venta["venta_total_pedido"] if venta else None,
             }
         )
+
+    pedidos_rows.sort(key=lambda row: (row["fecha_venta"], row["id"]), reverse=True)
 
     total_pedidos = len(pedidos_rows)
     pedidos_con_venta = len(venta_por_pedido)

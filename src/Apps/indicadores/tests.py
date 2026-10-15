@@ -370,6 +370,35 @@ class EstrategiaPreciosTests(TestCase):
         self.assertEqual(resumen_recepciones["neto_sin_iva"], Decimal("750.00"))
         self.assertEqual(resumen_recepciones["total_con_iva"], Decimal("892.50"))
 
+    def test_dashboard_operaciones_usa_fecha_de_venta_como_cierre_del_pedido(self):
+        pedido_anterior = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=date(2025, 12, 15),
+            estado_pedido="Finalizado",
+        )
+        Venta.objects.create(
+            pedidoid=pedido_anterior,
+            fecha_venta=self.hoy,
+            documento_pedido="Boleta",
+            num_documento=7003,
+            venta_neto_pedido=Decimal("500.00"),
+            venta_iva_pedido=Decimal("95.00"),
+            venta_total_pedido=Decimal("595.00"),
+        )
+
+        resp = self.client.get(
+            reverse("dashboard_operaciones"),
+            data={"month": self.hoy.month, "year": self.hoy.year},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        pedidos_ids = [row["id"] for row in resp.context["pedidos_rows"]]
+        self.assertIn(pedido_anterior.id, pedidos_ids)
+        fila = next(row for row in resp.context["pedidos_rows"] if row["id"] == pedido_anterior.id)
+        self.assertEqual(fila["fecha_venta"], self.hoy)
+        self.assertEqual(fila["total_con_iva"], Decimal("595.00"))
+        self.assertContains(resp, "Pedidos cerrados en el período")
+
     def test_dashboard_estrategia_renderiza_lectura_rapida(self):
         resp = self.client.get(
             reverse("dashboard_estrategia"),

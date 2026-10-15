@@ -88,6 +88,21 @@ class ActualizacionesSistemaTests(TestCase):
         self.assertEqual(_python_executable(), "/opt/portal/venv/bin/python")
 
     @patch("Apps.observaciones.views.git_status")
+    def test_permite_reintentar_ultima_instalacion_fallida_sin_commit_nuevo(self, status_mock):
+        status_mock.return_value = GitStatus(
+            available=True, branch="main", current_commit="abc123", remote_commit="abc123"
+        )
+        ActualizacionSistema.objects.create(
+            estado="FALLIDA", commit_anterior="abc123", commit_nuevo="abc123", creado_por=self.superuser
+        )
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("actualizaciones_sistema"))
+
+        self.assertContains(response, "Reintentar instalaci&oacute;n")
+        self.assertContains(response, 'value="reintentar"')
+
+    @patch("Apps.observaciones.views.git_status")
     def test_staff_puede_ver_estado_pero_no_instalar(self, status_mock):
         status_mock.return_value = GitStatus(
             available=True, branch="main", current_commit="abc123", remote_commit="def456", behind=1

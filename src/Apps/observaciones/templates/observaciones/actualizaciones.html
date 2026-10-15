@@ -37,9 +37,9 @@
         <button class="btn btn-outline-primary" type="submit"><i class="fas fa-sync-alt me-1"></i>Buscar actualizaciones</button>
       </form>
       <form method="post" onsubmit="return confirm('Se respaldara la base activa y se actualizara el sistema. Deseas continuar?');">
-        {% csrf_token %}<input type="hidden" name="accion" value="instalar">
-        <button class="btn btn-primary" type="submit" {% if not estado_git.update_available or estado_git.dirty or estado_git.ahead %}disabled{% endif %}>
-          <i class="fas fa-download me-1"></i>Instalar actualizaci&oacute;n
+        {% csrf_token %}<input type="hidden" name="accion" value="{% if puede_reintentar and not estado_git.update_available %}reintentar{% else %}instalar{% endif %}">
+        <button class="btn btn-primary" type="submit" {% if not estado_git.update_available and not puede_reintentar or estado_git.dirty or estado_git.ahead %}disabled{% endif %}>
+          <i class="fas fa-download me-1"></i>{% if puede_reintentar and not estado_git.update_available %}Reintentar instalaci&oacute;n{% else %}Instalar actualizaci&oacute;n{% endif %}
         </button>
       </form>
       {% else %}

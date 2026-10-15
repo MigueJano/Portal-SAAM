@@ -18,6 +18,7 @@
             <th class="text-center" >N° Pedido</th>
             <th class="text-center">Cliente</th>
             <th class="text-center">Fecha</th>
+            <th class="text-center">Documento asociado</th>
             <th class="text-center">Total Neto</th>
             <th class="text-center">Total con IVA</th>
             <th class="text-center">% Ganancia</th>
@@ -30,6 +31,7 @@
             <td>{{ v.pedidoid.id }}</td>
             <td class="text-start">{{ v.pedidoid.nombre_cliente }}</td>
             <td data-order="{{ v.fecha_venta|date:'Y-m-d' }}">{{ v.fecha_venta|date:"d-m-Y" }}</td>
+            <td>{{ v.get_documento_pedido_display }} N&deg; {{ v.num_documento }}</td>
             <td>${{ v.venta_neto_pedido|formatear_miles }}</td>
             <td>${{ v.venta_total_pedido|formatear_miles }}</td>
             <td>{{ v.ganancia_porcentaje|floatformat:1 }}%</td>

@@ -31,7 +31,7 @@
     <div class="col-md-3">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Pedidos del período</div>
+          <div class="small text-muted">Pedidos cerrados en el período</div>
           <div class="h5 mb-0">{{ kpis.total_pedidos|formatear_miles }}</div>
         </div>
       </div>
@@ -79,7 +79,7 @@
   <div class="row g-3 mb-2">
     <div class="col-12">
       <div class="table-responsive">
-        <h2 class="h6">Revision de Pedidos del Período ({{ pedidos_rows|length }})</h2>
+        <h2 class="h6">Revision de Pedidos Cerrados del Período ({{ pedidos_rows|length }})</h2>
         <table class="table table-striped table-bordered table-sm js-tabla-filtros">
           <thead class="table-light text-center">
             <tr>
@@ -122,7 +122,7 @@
                 </td>
               </tr>
             {% empty %}
-              <tr><td colspan="9" class="text-center text-muted">Sin pedidos en el período.</td></tr>
+              <tr><td colspan="9" class="text-center text-muted">Sin pedidos cerrados en el período.</td></tr>
             {% endfor %}
           </tbody>
         </table>

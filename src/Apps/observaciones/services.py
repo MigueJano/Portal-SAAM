@@ -115,7 +115,7 @@ def git_status(fetch: bool = False) -> GitStatus:
         return GitStatus(available=False, error=str(exc))
 
 
-def apply_system_update() -> dict:
+def apply_system_update(*, retry: bool = False) -> dict:
     status = git_status(fetch=True)
     if not status.available:
         raise SystemUpdateError(status.error)
@@ -125,7 +125,7 @@ def apply_system_update() -> dict:
         raise SystemUpdateError("Existen cambios locales. La actualizacion fue cancelada para no sobrescribirlos.")
     if status.diverged or status.ahead:
         raise SystemUpdateError("La rama local contiene cambios no publicados o esta divergida de origin/main.")
-    if not status.update_available:
+    if not status.update_available and not retry:
         return {"changed": False, "status": status, "log": "El sistema ya esta actualizado."}
 
     backup_path = ""
@@ -140,7 +140,8 @@ def apply_system_update() -> dict:
         backup_path = str(destination)
 
     log_parts = []
-    log_parts.append(_run(["git", "merge", "--ff-only", "origin/main"]))
+    if status.update_available:
+        log_parts.append(_run(["git", "merge", "--ff-only", "origin/main"]))
     python = _python_executable()
     log_parts.append(_run([python, "manage.py", "migrate", "--noinput"], timeout=300))
     log_parts.append(_run([python, "manage.py", "collectstatic", "--noinput"], timeout=300))
@@ -148,6 +149,7 @@ def apply_system_update() -> dict:
     final_status = git_status(fetch=False)
     return {
         "changed": True,
+        "retried": retry and not status.update_available,
         "status": final_status,
         "previous_commit": status.current_commit,
         "backup_path": backup_path,
