@@ -93,12 +93,6 @@
     <p class="mb-1"><strong>IVA registrado:</strong> ${{ venta.venta_iva_pedido|formatear_miles }}</p>
     <p class="mb-1"><strong>Total venta registrado:</strong> ${{ venta.venta_total_pedido|formatear_miles }}</p>
     <p class="mb-1 text-muted"><strong>Neto reconstruido desde líneas:</strong> ${{ ingreso_total|formatear_miles }}</p>
-    {% if diferencia_neto %}
-      <div class="alert alert-warning d-inline-block text-start mt-2 mb-2" role="alert">
-        El detalle histórico no coincide con la venta registrada.
-        Diferencia neta: ${{ diferencia_neto|formatear_miles }}.
-      </div>
-    {% endif %}
     <p class="mb-1"><strong>Ganancia total:</strong> ${{ ganancia_total|formatear_miles }}</p>
     <p class="mb-1"><strong>% Ganancia total:</strong> {{ ganancia_total_pct|floatformat:1 }}%</p>
   </div>

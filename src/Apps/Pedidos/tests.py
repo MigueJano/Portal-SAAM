@@ -910,23 +910,7 @@ class DetalleVentaTotalesTests(TestCase):
         self.assertEqual(resp.context["ingreso_total"], Decimal("1000.00"))
         self.assertEqual(resp.context["iva_detalle"], Decimal("190.00"))
         self.assertEqual(resp.context["total_detalle"], Decimal("1190.00"))
-        self.assertEqual(resp.context["diferencia_neto"], Decimal("0.00"))
         self.assertContains(resp, "Total venta registrado")
-
-    def test_detalle_advierte_si_el_neto_registrado_no_coincide_con_las_lineas(self):
-        self.venta.venta_neto_pedido = Decimal("1750.00")
-        self.venta.venta_iva_pedido = Decimal("332.50")
-        self.venta.venta_total_pedido = Decimal("2082.50")
-        self.venta.save(update_fields=[
-            "venta_neto_pedido",
-            "venta_iva_pedido",
-            "venta_total_pedido",
-        ])
-
-        resp = self.client.get(reverse("detalle_venta", args=[self.venta.id]))
-
-        self.assertEqual(resp.context["diferencia_neto"], Decimal("750.00"))
-        self.assertContains(resp, "El detalle histórico no coincide con la venta registrada")
 
 
 class EliminarPedidoTests(TestCase):
