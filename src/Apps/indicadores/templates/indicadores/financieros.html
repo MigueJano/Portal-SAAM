@@ -154,6 +154,71 @@
       </div>
     </div>
 
+    <div class="card mt-3 shadow-sm border-primary">
+      <div class="card-header bg-primary text-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h5 class="mb-0">Resumen referencial Formulario 29 (SII)</h5>
+        <span class="badge bg-light text-primary">Declaraci&oacute;n mensual de IVA</span>
+      </div>
+      <div class="card-body">
+        <p class="mb-3">
+          Proyecci&oacute;n mensual construida con las compras y ventas registradas en Portal SAAM.
+          Permite anticipar el IVA y PPM antes de revisar la propuesta oficial del SII.
+        </p>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-2">
+            <thead class="table-light text-center">
+              <tr>
+                <th>Per&iacute;odo</th>
+                <th>D&eacute;bito fiscal<br><small class="fw-normal">IVA ventas</small></th>
+                <th>Cr&eacute;dito fiscal<br><small class="fw-normal">IVA compras</small></th>
+                <th>IVA determinado</th>
+                <th>Remanente estimado</th>
+                <th>PPM (1,5%)</th>
+                <th>Total estimado a pagar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for fila in resumen_f29_mensual %}
+                <tr>
+                  <td class="fw-bold">{{ fila.periodo }}</td>
+                  <td class="text-end">${{ fila.debito_fiscal|formatear_miles }}</td>
+                  <td class="text-end">${{ fila.credito_fiscal|formatear_miles }}</td>
+                  <td class="text-end {% if fila.iva_determinado > 0 %}text-danger fw-bold{% endif %}">
+                    ${{ fila.iva_determinado|formatear_miles }}
+                  </td>
+                  <td class="text-end {% if fila.remanente_credito > 0 %}text-success fw-bold{% endif %}">
+                    ${{ fila.remanente_credito|formatear_miles }}
+                  </td>
+                  <td class="text-end">${{ fila.ppm|formatear_miles }}</td>
+                  <td class="text-end fw-bold">${{ fila.total_estimado|formatear_miles }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+            {% if resumen_f29_mensual|length > 1 %}
+              <tfoot class="table-secondary fw-bold">
+                <tr>
+                  <td>Total per&iacute;odo</td>
+                  <td class="text-end">${{ f29_totales.debito_fiscal|formatear_miles }}</td>
+                  <td class="text-end">${{ f29_totales.credito_fiscal|formatear_miles }}</td>
+                  <td class="text-end">${{ f29_totales.iva_determinado|formatear_miles }}</td>
+                  <td class="text-end">${{ f29_totales.remanente_credito|formatear_miles }}</td>
+                  <td class="text-end">${{ f29_totales.ppm|formatear_miles }}</td>
+                  <td class="text-end">${{ f29_totales.total_estimado|formatear_miles }}</td>
+                </tr>
+              </tfoot>
+            {% endif %}
+          </table>
+        </div>
+
+        <div class="alert alert-warning py-2 mb-0" role="alert">
+          <strong>Importante:</strong> esta proyecci&oacute;n no reemplaza el Formulario 29 ni la propuesta del SII.
+          No considera remanentes de meses anteriores, notas de cr&eacute;dito o d&eacute;bito, retenciones,
+          operaciones exentas, cr&eacute;ditos especiales ni otros ajustes tributarios.
+        </div>
+      </div>
+    </div>
+
     <!-- TABLA -->
     <div class="card mt-3 shadow-sm">
       <div class="card-body">

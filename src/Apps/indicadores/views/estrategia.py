@@ -710,6 +710,10 @@ def dashboard_estrategia(request):
         F("cantidad") * F("utilidad"),
         output_field=DecimalField(max_digits=15, decimal_places=2),
     )
+    neto_linea_expr = ExpressionWrapper(
+        F("cantidad") * F("precio_venta_unitario"),
+        output_field=DecimalField(max_digits=15, decimal_places=2),
+    )
 
     top_clientes = list(
         ventas_qs.values("pedidoid__nombre_cliente__nombre_cliente")
@@ -721,6 +725,7 @@ def dashboard_estrategia(request):
         .values("producto__codigo_producto_interno", "producto__nombre_producto")
         .annotate(
             unidades=Coalesce(Sum("cantidad"), Value(0, output_field=IntegerField())),
+            neto_total=Coalesce(Sum(neto_linea_expr), Value(Decimal("0.00"), output_field=dec_15_2)),
             utilidad_total=Coalesce(Sum(utilidad_linea_expr), Value(Decimal("0.00"), output_field=dec_15_2)),
         )
         .order_by("-unidades", "producto__nombre_producto")[:10]

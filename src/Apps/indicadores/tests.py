@@ -82,6 +82,14 @@ class IndicadoresViewsTests(TestCase):
         self.assertTrue(reverse("exportar_inventario_propyme").startswith("/indicadores/"))
         self.assertTrue(reverse("exportar_libros_propyme_zip").startswith("/indicadores/"))
 
+    def test_operaciones_identifica_neto_y_total_con_iva_en_todas_las_tablas(self):
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("dashboard_operaciones"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Neto (sin IVA)", count=4)
+        self.assertContains(resp, "Total (con IVA)", count=4)
+
 
 class DashboardFinancieroPpmTests(TestCase):
     def setUp(self):
@@ -151,6 +159,47 @@ class DashboardFinancieroPpmTests(TestCase):
         self.assertEqual(resp.context["ppm_total"]["total"], Decimal("16.00"))
         self.assertEqual(resp.context["total_general_total"]["neto"], Decimal("1034.00"))
         self.assertEqual(resp.context["total_general_total"]["total"], Decimal("1233.50"))
+
+    def test_dashboard_financiero_presenta_resumen_referencial_f29(self):
+        fecha = timezone.localdate()
+        proveedor = Proveedor.objects.create(
+            nombre_proveedor="Proveedor F29",
+            rut_proveedor="76999991-1",
+            direccion_proveedor="Dir proveedor",
+            direccion_bodega_proveedor="Dir bodega",
+            empresa_activa=True,
+            banco_proveedor="Banco",
+            cta_proveedor="Corriente",
+            num_cuenta_proveedor="123456",
+        )
+        Recepcion.objects.create(
+            proveedor=proveedor,
+            fecha_recepcion=fecha,
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=9101,
+            total_neto_recepcion=Decimal("400.00"),
+            iva_recepcion=Decimal("76.00"),
+            total_recepcion=Decimal("476.00"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+
+        resp = self.client.get(
+            reverse("dashboard_financiero_simple"),
+            data={"fecha_desde": fecha.isoformat(), "fecha_hasta": fecha.isoformat()},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        fila = resp.context["resumen_f29_mensual"][0]
+        self.assertEqual(fila["debito_fiscal"], Decimal("190.00"))
+        self.assertEqual(fila["credito_fiscal"], Decimal("76.00"))
+        self.assertEqual(fila["iva_determinado"], Decimal("114.00"))
+        self.assertEqual(fila["remanente_credito"], Decimal("0.00"))
+        self.assertEqual(fila["ppm"], Decimal("15.00"))
+        self.assertEqual(fila["total_estimado"], Decimal("129.00"))
+        self.assertContains(resp, "Resumen referencial Formulario 29 (SII)")
+        self.assertContains(resp, "no reemplaza el Formulario 29")
 
 
 class EstrategiaPreciosTests(TestCase):
@@ -293,6 +342,23 @@ class EstrategiaPreciosTests(TestCase):
             fecha=timezone.now() + timedelta(seconds=1),
         )
 
+    def test_dashboard_operaciones_suma_neto_y_total_con_iva_por_estado(self):
+        resp = self.client.get(
+            reverse("dashboard_operaciones"),
+            data={"month": self.hoy.month, "year": self.hoy.year},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        resumen_pedidos = resp.context["resumen_pedidos_estado"][0]
+        self.assertEqual(resumen_pedidos["cantidad"], 2)
+        self.assertEqual(resumen_pedidos["neto_sin_iva"], Decimal("2200.00"))
+        self.assertEqual(resumen_pedidos["total_con_iva"], Decimal("2618.00"))
+
+        resumen_recepciones = resp.context["resumen_recepciones_estado"][0]
+        self.assertEqual(resumen_recepciones["cantidad"], 2)
+        self.assertEqual(resumen_recepciones["neto_sin_iva"], Decimal("750.00"))
+        self.assertEqual(resumen_recepciones["total_con_iva"], Decimal("892.50"))
+
     def test_dashboard_estrategia_renderiza_lectura_rapida(self):
         resp = self.client.get(
             reverse("dashboard_estrategia"),
@@ -303,6 +369,10 @@ class EstrategiaPreciosTests(TestCase):
         self.assertContains(resp, "Informe Estrategico")
         self.assertContains(resp, "Lectura Rapida")
         self.assertContains(resp, "Cliente Estrategia")
+        self.assertContains(resp, "<th>Neto</th>", html=True)
+        self.assertContains(resp, "<th>Total Utilidad</th>", html=True)
+        self.assertEqual(resp.context["top_productos"][0]["neto_total"], Decimal("3920.00"))
+        self.assertEqual(resp.context["top_productos"][0]["utilidad_total"], Decimal("1720.00"))
         self.assertContains(resp, reverse("dashboard_estrategia_precios"))
 
     def test_dashboard_estrategia_precios_muestra_alertas_de_margen(self):

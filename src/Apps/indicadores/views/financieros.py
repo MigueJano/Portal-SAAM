@@ -244,6 +244,42 @@ def dashboard_financiero_simple(request):
     ppm_periodo = ppm_total['total']
 
     # =================
+    # RESUMEN REFERENCIAL FORMULARIO 29
+    # =================
+    # El F29 es mensual. Estos valores se calculan solo con las compras y
+    # ventas registradas en Portal SAAM; no incluyen remanentes ni ajustes SII.
+    resumen_f29_mensual = []
+    f29_totales = {
+        'debito_fiscal': DEC,
+        'credito_fiscal': DEC,
+        'iva_determinado': DEC,
+        'remanente_credito': DEC,
+        'ppm': DEC,
+        'total_estimado': DEC,
+    }
+    for i, mes in enumerate(meses):
+        debito_fiscal = subtotal_ventas_mes[i]['iva']
+        credito_fiscal = subtotal_compras_mes_display[i]['iva']
+        diferencia = debito_fiscal - credito_fiscal
+        iva_determinado = max(diferencia, DEC)
+        remanente_credito = max(-diferencia, DEC)
+        ppm = ppm_mes[i]['total']
+        total_estimado = iva_determinado + ppm
+
+        fila_f29 = {
+            'periodo': _label_mes(mes),
+            'debito_fiscal': debito_fiscal,
+            'credito_fiscal': credito_fiscal,
+            'iva_determinado': iva_determinado,
+            'remanente_credito': remanente_credito,
+            'ppm': ppm,
+            'total_estimado': total_estimado,
+        }
+        resumen_f29_mensual.append(fila_f29)
+        for campo in f29_totales:
+            f29_totales[campo] += fila_f29[campo]
+
+    # =================
     # TOTAL GENERAL
     # =================
     total_general_mes = []
@@ -273,6 +309,8 @@ def dashboard_financiero_simple(request):
         'ganancia_porcentaje_periodo':ganancia_porcentaje,
         'diferencia_iva': diferencia_iva,
         'ppm_periodo': ppm_periodo,
+        'resumen_f29_mensual': resumen_f29_mensual,
+        'f29_totales': f29_totales,
 
         # Compras (mostrar POSITIVO)
         'filas_proveedores': filas_proveedores,

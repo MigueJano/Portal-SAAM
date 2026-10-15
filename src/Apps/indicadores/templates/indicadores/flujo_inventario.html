@@ -11,7 +11,7 @@
       </div>
     </div>
     <a
-      href="{% url 'stock_productos' %}?year={{ year }}&month={{ month }}&stock_view={{ stock_view }}{% if search_term %}&q={{ search_term|urlencode }}{% endif %}"
+      href="{% url 'stock_productos' %}?year={{ year }}&month={{ month }}&stock_view={{ stock_view }}{% if search_term %}&q={{ search_term|urlencode }}{% endif %}&estado_view={{ estado_view }}"
       class="btn btn-outline-secondary"
     >
       Volver a stock

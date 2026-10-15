@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.shortcuts import render
 
 from Apps.Pedidos.models import Pedido, Recepcion, Venta
@@ -23,7 +23,14 @@ def dashboard_operaciones(request):
 
     ventas_periodo = list(
         Venta.objects.filter(fecha_venta__range=(inicio, fin))
-        .values("pedidoid_id", "fecha_venta", "documento_pedido", "num_documento")
+        .values(
+            "pedidoid_id",
+            "fecha_venta",
+            "documento_pedido",
+            "num_documento",
+            "venta_neto_pedido",
+            "venta_total_pedido",
+        )
         .order_by("-fecha_venta")
     )
     venta_por_pedido = {}
@@ -50,6 +57,8 @@ def dashboard_operaciones(request):
                 "documento_venta": venta["documento_pedido"] if venta else "",
                 "folio_venta": venta["num_documento"] if venta else "",
                 "dias_ciclo": dias_ciclo,
+                "neto_sin_iva": venta["venta_neto_pedido"] if venta else None,
+                "total_con_iva": venta["venta_total_pedido"] if venta else None,
             }
         )
 
@@ -74,11 +83,27 @@ def dashboard_operaciones(request):
         "recepciones_rechazadas": recepciones_rech,
     }
 
-    resumen_pedidos_estado = list(
-        pedidos_qs.values("estado_pedido").annotate(total=Count("id")).order_by("-total")
+    resumen_pedidos_por_estado = {}
+    for pedido in pedidos_rows:
+        estado = pedido["estado_pedido"]
+        resumen = resumen_pedidos_por_estado.setdefault(
+            estado,
+            {"estado_pedido": estado, "cantidad": 0, "neto_sin_iva": 0, "total_con_iva": 0},
+        )
+        resumen["cantidad"] += 1
+        resumen["neto_sin_iva"] += pedido["neto_sin_iva"] or 0
+        resumen["total_con_iva"] += pedido["total_con_iva"] or 0
+    resumen_pedidos_estado = sorted(
+        resumen_pedidos_por_estado.values(), key=lambda row: row["cantidad"], reverse=True
     )
     resumen_recepciones_estado = list(
-        recepciones_qs.values("estado_recepcion").annotate(total=Count("id")).order_by("-total")
+        recepciones_qs.values("estado_recepcion")
+        .annotate(
+            cantidad=Count("id"),
+            neto_sin_iva=Sum("total_neto_recepcion"),
+            total_con_iva=Sum("total_recepcion"),
+        )
+        .order_by("-cantidad")
     )
 
     return render(

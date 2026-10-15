@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Acta del {{ acta.fecha|date:"d/m/Y" }}{% endblock %}
+
+{% block content %}
+<div class="mt-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Acta del {{ acta.fecha|date:"d/m/Y" }}</h1>
+      <p class="text-muted mb-0">
+        Registrada por {{ acta.creado_por.get_full_name|default:acta.creado_por.username|default:"Usuario eliminado" }}
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{% url 'lista_actas' %}" class="btn btn-outline-secondary">Historial</a>
+      <a href="{% url 'editar_acta' acta.pk %}" class="btn btn-primary"><i class="bi bi-pencil me-1"></i>Editar</a>
+    </div>
+  </div>
+
+  <article class="card shadow-sm mb-4">
+    <div class="card-body p-4">{{ acta.acta|safe }}</div>
+  </article>
+
+  {% if acta_anterior %}
+    <a href="{% url 'detalle_acta' acta_anterior.pk %}" class="text-decoration-none">
+      <i class="bi bi-arrow-left me-1"></i>Ver acta anterior del {{ acta_anterior.fecha|date:"d/m/Y" }}
+    </a>
+  {% endif %}
+</div>
+{% endblock %}

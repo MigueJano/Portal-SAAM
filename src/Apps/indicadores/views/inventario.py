@@ -166,12 +166,18 @@ def _coincide_busqueda_stock(row: dict, termino: str) -> bool:
 def render_informe_inventario(request):
     periodo, inicio, fin, meses = periodo_desde_request(request)
 
-    minimos = {
-        p.codigo_producto_interno: int(p.qty_minima or 0)
-        for p in Producto.objects.only("codigo_producto_interno", "qty_minima")
+    productos_info = {
+        p.id: {
+            "qty_minima": int(p.qty_minima or 0),
+            "estado_operativo": p.estado_operativo,
+            "estado_label": p.get_estado_operativo_display(),
+            "estado_badge_class": p.estado_badge_class,
+        }
+        for p in Producto.objects.only("id", "qty_minima", "estado_operativo")
     }
 
     filtro_stock = request.GET.get("stock_view", "todos")
+    filtro_estado = request.GET.get("estado_view", "todos")
     search_term = (request.GET.get("q") or "").strip()
     stock_rows_base = [
         row
@@ -179,15 +185,31 @@ def render_informe_inventario(request):
         if _coincide_busqueda_stock(row, search_term)
     ]
     for row in stock_rows_base:
-        qty_minima = int(minimos.get(row["codigo_interno"], 0))
+        producto_info = productos_info.get(row["producto_id"], {})
+        qty_minima = producto_info.get("qty_minima", 0)
         row["qty_minima"] = qty_minima
         row["es_critico"] = row["cantidad_disponible_uprim"] <= qty_minima
+        row["estado_operativo"] = producto_info.get("estado_operativo", Producto.ESTADO_ACTIVO)
+        row["estado_label"] = producto_info.get("estado_label", "Activo")
+        row["estado_badge_class"] = producto_info.get("estado_badge_class", "bg-success")
+
+    productos_activos = sum(
+        1 for row in stock_rows_base if row["estado_operativo"] == Producto.ESTADO_ACTIVO
+    )
+
+    if filtro_estado == "activos":
+        stock_rows_filtradas = [
+            row for row in stock_rows_base if row["estado_operativo"] == Producto.ESTADO_ACTIVO
+        ]
+    else:
+        filtro_estado = "todos"
+        stock_rows_filtradas = stock_rows_base
 
     if filtro_stock == "con_stock":
-        stock_rows = [row for row in stock_rows_base if row["cantidad_disponible_uprim"] > 0]
+        stock_rows = [row for row in stock_rows_filtradas if row["cantidad_disponible_uprim"] > 0]
     else:
         filtro_stock = "todos"
-        stock_rows = stock_rows_base
+        stock_rows = stock_rows_filtradas
 
     total_stock_ref = sum((row["total_producto"] for row in stock_rows), start=Decimal("0.00"))
     kpis = {
@@ -206,9 +228,11 @@ def render_informe_inventario(request):
             "inicio": inicio,
             "fin": fin,
             "filtro_stock": filtro_stock,
+            "filtro_estado": filtro_estado,
             "search_term": search_term,
             "productos_total_general": len(stock_rows_base),
             "productos_con_stock": sum(1 for row in stock_rows_base if row["cantidad_disponible_uprim"] > 0),
+            "productos_activos": productos_activos,
             "kpis": kpis,
             "stock_rows": stock_rows,
         },
@@ -325,6 +349,7 @@ def flujo_inventario_producto(request, producto_id):
             "year": request.GET.get("year", ""),
             "month": request.GET.get("month", ""),
             "stock_view": request.GET.get("stock_view", "todos"),
+            "estado_view": request.GET.get("estado_view", "todos"),
             "search_term": (request.GET.get("q") or "").strip(),
         },
     )

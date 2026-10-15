@@ -54,6 +54,15 @@
           </li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Administraci&oacute;n
+            </a>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" href="{% url 'lista_actas' %}">Actas de reuniones</a></li>
+              <li><a class="dropdown-item" href="{% url 'crear_acta' %}">Nueva acta</a></li>
+            </ul>
+          </li>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Proveedores
             </a>
             <ul class="dropdown-menu">
@@ -130,7 +139,7 @@
           {% if user.is_staff %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Administradores
+              Sistema
             </a>
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'lista_observaciones' %}">Observaciones</a></li>

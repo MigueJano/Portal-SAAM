@@ -1226,6 +1226,41 @@ class InventarioPeriodoTests(TestCase):
         self.assertContains(resp, self.producto.nombre_producto)
         self.assertNotContains(resp, producto_sin_stock.nombre_producto)
 
+    def test_stock_productos_permita_filtrar_solo_productos_activos(self):
+        producto_suspendido = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            codigo_producto_interno="INACT001",
+            nombre_producto="Producto Suspendido Inventario",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=0,
+            empaque_primario=self.emp_p,
+            empaque_secundario=self.emp_s,
+            empaque_terciario=self.emp_t,
+            estado_operativo=Producto.ESTADO_SUSPENDIDO_VENTA,
+        )
+
+        resp_todos = self.client.get(
+            reverse("stock_productos"),
+            data={"year": 2026, "month": 3, "stock_view": "todos", "estado_view": "todos"},
+        )
+        self.assertContains(resp_todos, producto_suspendido.nombre_producto)
+        self.assertContains(resp_todos, "Suspendido de venta")
+
+        resp_activos = self.client.get(
+            reverse("stock_productos"),
+            data={"year": 2026, "month": 3, "stock_view": "todos", "estado_view": "activos"},
+        )
+        self.assertEqual(resp_activos.status_code, 200)
+        self.assertEqual(resp_activos.context["filtro_estado"], "activos")
+        self.assertContains(resp_activos, "Solo activos")
+        self.assertContains(resp_activos, self.producto.nombre_producto)
+        self.assertNotContains(resp_activos, producto_suspendido.nombre_producto)
+
     def test_stock_productos_permita_buscar_por_codigo_y_nombre(self):
         producto_codigo = Producto.objects.create(
             categoria_producto=self.categoria,
@@ -1318,8 +1353,8 @@ class InventarioPeriodoTests(TestCase):
             data={"year": 2026, "month": 3, "stock_view": "todos"},
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "js-sortable-report-table", count=2)
-        self.assertContains(resp, '$(".js-sortable-report-table").each(function () {')
+        self.assertContains(resp, "js-sortable-report-table", count=1)
+        self.assertContains(resp, "/static/js/tabla-filtros.js")
         self.assertContains(resp, "Informe de Inventario")
         self.assertContains(resp, "Reservas")
         self.assertNotContains(resp, "Despachos")

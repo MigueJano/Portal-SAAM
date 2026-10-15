@@ -331,33 +331,3 @@
   </div>
 </div>
 {% endblock %}
-
-{% block script %}
-<script>
-  $(function () {
-    $(".js-sortable-report-table").each(function () {
-      const $table = $(this);
-      const hasDataRows = $table.find("tbody tr").length > 0 && $table.find("tbody td[colspan]").length === 0;
-
-      if (!hasDataRows) {
-        return;
-      }
-
-      const noSortTargets = $table.find("thead th.no-sort").map(function () {
-        return $(this).index();
-      }).get();
-
-      $table.DataTable({
-        paging: false,
-        searching: false,
-        info: false,
-        lengthChange: false,
-        order: [],
-        autoWidth: false,
-        dom: "t",
-        columnDefs: noSortTargets.length ? [{ targets: noSortTargets, orderable: false }] : [],
-      });
-    });
-  });
-</script>
-{% endblock %}

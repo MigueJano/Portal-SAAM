@@ -1,0 +1,25 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_("Django site admin") }}{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <script defer src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+  <script defer src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <script defer src="{% static 'js/tabla-filtros.js' %}"></script>
+{% endblock %}
+
+{% block branding %}
+<div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_("Django administration") }}</a></div>
+{% if user.is_anonymous %}
+  {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}
+
+{% block nav-global %}{% endblock %}

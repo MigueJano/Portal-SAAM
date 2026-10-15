@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block CSS %}
+<style>
+  .acta-layout { display: grid; gap: 1.25rem; }
+  .rich-editor { min-height: 22rem; outline: none; overflow-wrap: anywhere; }
+  .rich-editor:empty::before { color: var(--bs-secondary-color); content: attr(data-placeholder); }
+  .acta-previa-contenido { max-height: 30rem; overflow-y: auto; }
+  @media (min-width: 992px) {
+    .acta-layout { grid-template-columns: minmax(0, 3fr) minmax(18rem, 2fr); align-items: start; }
+    .acta-previa { position: sticky; top: 1rem; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mt-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <h1 class="h3 mb-0">{{ titulo }}</h1>
+    <a href="{% url 'lista_actas' %}" class="btn btn-outline-secondary">Volver al historial</a>
+  </div>
+
+  <div class="acta-layout">
+    <form method="post" id="acta-form" class="card shadow-sm">
+      {% csrf_token %}
+      <div class="card-body">
+        <div class="mb-3">
+          <label for="{{ form.fecha.id_for_label }}" class="form-label fw-semibold">Fecha de reuni&oacute;n</label>
+          {{ form.fecha }}
+          {% for error in form.fecha.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+        </div>
+
+        <label class="form-label fw-semibold">Acta</label>
+        <div class="btn-toolbar gap-1 border rounded-top bg-body-tertiary p-2" role="toolbar" aria-label="Formato del acta">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-command="bold" title="Negrita"><i class="bi bi-type-bold"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-command="italic" title="Cursiva"><i class="bi bi-type-italic"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-command="underline" title="Subrayado"><i class="bi bi-type-underline"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-command="insertUnorderedList" title="Lista"><i class="bi bi-list-ul"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-command="insertOrderedList" title="Lista numerada"><i class="bi bi-list-ol"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="insert-link" title="Enlace"><i class="bi bi-link-45deg"></i></button>
+        </div>
+        <div id="acta-editor" class="rich-editor form-control rounded-top-0" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Registra los temas tratados, tareas, responsables, plazos y acuerdos...">{{ editor_content|safe }}</div>
+        {{ form.acta }}
+        {% for error in form.acta.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="card-footer bg-transparent d-flex justify-content-end gap-2">
+        <a href="{% url 'lista_actas' %}" class="btn btn-outline-secondary">Cancelar</a>
+        <button type="submit" class="btn btn-primary">Guardar acta</button>
+      </div>
+    </form>
+
+    <aside class="card shadow-sm acta-previa">
+      <div class="card-header">
+        <h2 class="h5 mb-0">Acta anterior</h2>
+      </div>
+      <div class="card-body acta-previa-contenido">
+        {% if acta_anterior %}
+          <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+            <strong>{{ acta_anterior.fecha|date:"d/m/Y" }}</strong>
+            <a href="{% url 'detalle_acta' acta_anterior.pk %}" class="btn btn-sm btn-outline-primary" target="_blank">Abrir completa</a>
+          </div>
+          <div>{{ acta_anterior.acta|safe }}</div>
+        {% else %}
+          <p class="text-muted mb-0">No existe un acta anterior para esta fecha.</p>
+        {% endif %}
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  (function () {
+    const form = document.getElementById("acta-form");
+    const editor = document.getElementById("acta-editor");
+    const input = document.getElementById("{{ form.acta.id_for_label }}");
+
+    document.querySelectorAll("[data-command]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        editor.focus();
+        document.execCommand(button.dataset.command, false, null);
+      });
+    });
+
+    document.getElementById("insert-link").addEventListener("click", function () {
+      const url = window.prompt("Dirección del enlace (https://...):");
+      if (url) {
+        editor.focus();
+        document.execCommand("createLink", false, url);
+      }
+    });
+
+    form.addEventListener("submit", function () {
+      input.value = editor.innerHTML;
+    });
+  }());
+</script>
+{% endblock %}

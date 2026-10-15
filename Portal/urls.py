@@ -16,6 +16,7 @@ urlpatterns = [
     path("ajax/", include("Apps.Pedidos.urls_ajax")),
     path("indicadores/", include("Apps.indicadores.urls")),
     path("observaciones/", include("Apps.observaciones.urls")),
+    path("administracion/", include("Apps.administracion.urls")),
 ]
 
 if settings.DEBUG:

@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "Apps.usuarios.apps.UsuariosConfig",
     "Apps.indicadores.apps.IndicadoresConfig",
     "Apps.observaciones.apps.ObservacionesConfig",
+    "Apps.administracion.apps.AdministracionConfig",
 ]
 
 
@@ -76,7 +77,7 @@ ROOT_URLCONF = "Portal.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "src" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

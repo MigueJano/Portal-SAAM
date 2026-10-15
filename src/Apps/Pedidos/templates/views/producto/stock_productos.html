@@ -32,6 +32,7 @@
       >
     </div>
     <input type="hidden" name="stock_view" value="{{ filtro_stock }}">
+    <input type="hidden" name="estado_view" value="{{ filtro_estado }}">
     <div class="col-md-4 d-flex gap-2">
       <button type="submit" class="btn btn-outline-primary w-100">Actualizar</button>
       <a href="{% url 'stock_productos' %}" class="btn btn-outline-secondary w-100">Mes actual</a>
@@ -44,16 +45,28 @@
 
   <div class="d-flex flex-wrap gap-2 mb-3">
     <a
-      href="{% url 'stock_productos' %}?year={{ periodo.year }}&month={{ periodo.month }}&stock_view=todos{% if search_term %}&q={{ search_term|urlencode }}{% endif %}"
+      href="{% url 'stock_productos' %}?year={{ periodo.year }}&month={{ periodo.month }}&stock_view=todos&estado_view={{ filtro_estado }}{% if search_term %}&q={{ search_term|urlencode }}{% endif %}"
       class="btn {% if filtro_stock == 'todos' %}btn-primary{% else %}btn-outline-primary{% endif %}"
     >
       Total productos ({{ productos_total_general|formatear_miles }})
     </a>
     <a
-      href="{% url 'stock_productos' %}?year={{ periodo.year }}&month={{ periodo.month }}&stock_view=con_stock{% if search_term %}&q={{ search_term|urlencode }}{% endif %}"
+      href="{% url 'stock_productos' %}?year={{ periodo.year }}&month={{ periodo.month }}&stock_view=con_stock&estado_view={{ filtro_estado }}{% if search_term %}&q={{ search_term|urlencode }}{% endif %}"
       class="btn {% if filtro_stock == 'con_stock' %}btn-primary{% else %}btn-outline-primary{% endif %}"
     >
       Solo con stock ({{ productos_con_stock|formatear_miles }})
+    </a>
+    <a
+      href="{% url 'stock_productos' %}?year={{ periodo.year }}&month={{ periodo.month }}&stock_view={{ filtro_stock }}&estado_view=todos{% if search_term %}&q={{ search_term|urlencode }}{% endif %}"
+      class="btn {% if filtro_estado == 'todos' %}btn-secondary{% else %}btn-outline-secondary{% endif %}"
+    >
+      Todos los estados ({{ productos_total_general|formatear_miles }})
+    </a>
+    <a
+      href="{% url 'stock_productos' %}?year={{ periodo.year }}&month={{ periodo.month }}&stock_view={{ filtro_stock }}&estado_view=activos{% if search_term %}&q={{ search_term|urlencode }}{% endif %}"
+      class="btn {% if filtro_estado == 'activos' %}btn-success{% else %}btn-outline-success{% endif %}"
+    >
+      Solo activos ({{ productos_activos|formatear_miles }})
     </a>
   </div>
 
@@ -98,6 +111,7 @@
         <tr>
           <th>Codigo</th>
           <th>Producto</th>
+          <th>Estado</th>
           <th>Stock Disponible</th>
           <th>Reservas</th>
           <th>Valor Producto Unitario</th>
@@ -109,45 +123,21 @@
           <tr>
             <td>{{ row.codigo_interno }}</td>
             <td>
-              <a href="{% url 'flujo_inventario_producto' row.producto_id %}?year={{ periodo.year }}&month={{ periodo.month }}&stock_view={{ filtro_stock }}{% if search_term %}&q={{ search_term|urlencode }}{% endif %}">
+              <a href="{% url 'flujo_inventario_producto' row.producto_id %}?year={{ periodo.year }}&month={{ periodo.month }}&stock_view={{ filtro_stock }}{% if search_term %}&q={{ search_term|urlencode }}{% endif %}&estado_view={{ filtro_estado }}">
                 {{ row.producto }}
               </a>
             </td>
+            <td class="text-center"><span class="badge {{ row.estado_badge_class }}">{{ row.estado_label }}</span></td>
             <td class="text-end{% if row.cantidad_disponible_uprim <= 0 %} text-danger fw-semibold{% endif %}" data-order="{{ row.cantidad_disponible_uprim }}">{{ row.cantidad_disponible_uprim|formatear_miles }}</td>
             <td class="text-end" data-order="{{ row.cantidad_reservada_uprim }}">{{ row.cantidad_reservada_uprim|formatear_miles }}</td>
             <td class="text-end" data-order="{{ row.valor_producto_unitario|floatformat:'2u' }}">$ {{ row.valor_producto_unitario|formatear_miles }}</td>
             <td class="text-end" data-order="{{ row.total_producto|floatformat:'2u' }}">$ {{ row.total_producto|formatear_miles }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="6" class="text-center text-muted">Sin datos de inventario.</td></tr>
+          <tr><td colspan="7" class="text-center text-muted">Sin datos de inventario.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
-{% endblock %}
-
-{% block script %}
-<script>
-  $(function () {
-    $(".js-sortable-report-table").each(function () {
-      const $table = $(this);
-      const hasDataRows = $table.find("tbody tr").length > 0 && $table.find("tbody td[colspan]").length === 0;
-
-      if (!hasDataRows) {
-        return;
-      }
-
-      $table.DataTable({
-        paging: false,
-        searching: false,
-        info: false,
-        lengthChange: false,
-        order: [],
-        autoWidth: false,
-        dom: "t",
-      });
-    });
-  });
-</script>
 {% endblock %}

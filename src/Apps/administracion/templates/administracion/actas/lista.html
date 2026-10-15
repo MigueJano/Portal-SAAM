@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Actas de reuniones{% endblock %}
+
+{% block content %}
+<div class="mt-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Actas de reuniones</h1>
+      <p class="text-muted mb-0">Registro y seguimiento de tareas y acuerdos de la empresa.</p>
+    </div>
+    <a href="{% url 'crear_acta' %}" class="btn btn-primary">
+      <i class="bi bi-plus-lg me-1"></i>Nueva acta
+    </a>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="list-group list-group-flush">
+      {% for acta in actas %}
+        <a href="{% url 'detalle_acta' acta.pk %}" class="list-group-item list-group-item-action py-3">
+          <div class="d-flex flex-wrap justify-content-between gap-2">
+            <strong>Reuni&oacute;n del {{ acta.fecha|date:"d/m/Y" }}</strong>
+            <small class="text-muted">Actualizada {{ acta.actualizado_en|date:"d/m/Y H:i" }}</small>
+          </div>
+          <div class="text-muted small mt-1">
+            Registrada por {{ acta.creado_por.get_full_name|default:acta.creado_por.username|default:"Usuario eliminado" }}
+          </div>
+        </a>
+      {% empty %}
+        <div class="text-center p-5">
+          <i class="bi bi-journal-text fs-1 text-muted"></i>
+          <p class="mt-3 mb-0">Todav&iacute;a no hay actas registradas.</p>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

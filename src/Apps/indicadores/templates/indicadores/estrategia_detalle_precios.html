@@ -135,28 +135,3 @@
   </div>
 </div>
 {% endblock %}
-
-{% block script %}
-<script>
-  $(function () {
-    $(".js-sortable-report-table").each(function () {
-      const $table = $(this);
-      const hasDataRows = $table.find("tbody tr").length > 0 && $table.find("tbody td[colspan]").length === 0;
-
-      if (!hasDataRows) {
-        return;
-      }
-
-      $table.DataTable({
-        paging: false,
-        searching: false,
-        info: false,
-        lengthChange: false,
-        order: [],
-        autoWidth: false,
-        dom: "t",
-      });
-    });
-  });
-</script>
-{% endblock %}
