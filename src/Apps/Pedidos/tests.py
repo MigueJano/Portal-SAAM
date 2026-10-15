@@ -903,14 +903,12 @@ class DetalleVentaTotalesTests(TestCase):
             fecha=timezone.now(),
         )
 
-    def test_detalle_compara_total_registrado_con_suma_lineas_mas_iva(self):
+    def test_detalle_muestra_totales_registrados_sin_neto_reconstruido(self):
         resp = self.client.get(reverse("detalle_venta", args=[self.venta.id]))
 
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.context["ingreso_total"], Decimal("1000.00"))
-        self.assertEqual(resp.context["iva_detalle"], Decimal("190.00"))
-        self.assertEqual(resp.context["total_detalle"], Decimal("1190.00"))
         self.assertContains(resp, "Total venta registrado")
+        self.assertNotContains(resp, "Neto reconstruido desde líneas")
 
 
 class EliminarPedidoTests(TestCase):
