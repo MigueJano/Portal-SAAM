@@ -99,7 +99,25 @@ class IndicadoresViewsTests(TestCase):
             contenido = template_path.read_text(encoding="utf-8")
             for etiqueta in re.findall(r"<table\b[^>]*>", contenido, flags=re.IGNORECASE):
                 with self.subTest(template=template_path.name, table=etiqueta):
-                    self.assertIn("js-tabla-filtros", etiqueta)
+                    usa_filtros = "js-tabla-filtros" in etiqueta
+                    excluye_filtros = 'data-tabla-filtros="false"' in etiqueta
+                    self.assertTrue(usa_filtros or excluye_filtros)
+
+    def test_dashboard_financiero_no_usa_tabla_filtros(self):
+        template_path = (
+            Path(__file__).resolve().parent
+            / "templates"
+            / "indicadores"
+            / "financieros.html"
+        )
+        contenido = template_path.read_text(encoding="utf-8")
+        etiquetas = re.findall(r"<table\b[^>]*>", contenido, flags=re.IGNORECASE)
+
+        self.assertTrue(etiquetas)
+        for etiqueta in etiquetas:
+            with self.subTest(table=etiqueta):
+                self.assertIn('data-tabla-filtros="false"', etiqueta)
+                self.assertNotIn("js-tabla-filtros", etiqueta)
 
 
 class DashboardFinancieroPpmTests(TestCase):
@@ -211,6 +229,75 @@ class DashboardFinancieroPpmTests(TestCase):
         self.assertEqual(fila["total_estimado"], Decimal("129.00"))
         self.assertContains(resp, "Resumen referencial Formulario 29 (SII)")
         self.assertContains(resp, "no reemplaza el Formulario 29")
+
+    def test_detalle_financiero_indica_cantidad_de_documentos(self):
+        fecha = timezone.localdate()
+        pedido_factura = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=fecha,
+            estado_pedido="Finalizado",
+        )
+        pedido_boleta = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=fecha,
+            estado_pedido="Finalizado",
+        )
+        Venta.objects.create(
+            pedidoid=pedido_factura,
+            fecha_venta=fecha,
+            documento_pedido="Factura",
+            num_documento=9002,
+            venta_neto_pedido=Decimal("500.00"),
+            venta_iva_pedido=Decimal("95.00"),
+            venta_total_pedido=Decimal("595.00"),
+        )
+        Venta.objects.create(
+            pedidoid=pedido_boleta,
+            fecha_venta=fecha,
+            documento_pedido="Boleta",
+            num_documento=9003,
+            venta_neto_pedido=Decimal("200.00"),
+            venta_iva_pedido=Decimal("38.00"),
+            venta_total_pedido=Decimal("238.00"),
+        )
+        proveedor = Proveedor.objects.create(
+            nombre_proveedor="Proveedor Conteo",
+            rut_proveedor="76999992-K",
+            direccion_proveedor="Dir proveedor",
+            direccion_bodega_proveedor="Dir bodega",
+            empresa_activa=True,
+            banco_proveedor="Banco",
+            cta_proveedor="Corriente",
+            num_cuenta_proveedor="654321",
+        )
+        for numero in (9201, 9202):
+            Recepcion.objects.create(
+                proveedor=proveedor,
+                fecha_recepcion=fecha,
+                estado_recepcion="Finalizado",
+                documento_recepcion="Factura",
+                num_documento_recepcion=numero,
+                total_neto_recepcion=Decimal("100.00"),
+                iva_recepcion=Decimal("19.00"),
+                total_recepcion=Decimal("119.00"),
+                incluir_iva=False,
+                moneda_recepcion="CLP",
+            )
+
+        resp = self.client.get(
+            reverse("dashboard_financiero_simple"),
+            data={"fecha_desde": fecha.isoformat(), "fecha_hasta": fecha.isoformat()},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        filas_ventas = {fila["tipo"]: fila for fila in resp.context["filas_ventas_tipo"]}
+        self.assertEqual(filas_ventas["Factura"]["valores"][0]["cantidad"], 2)
+        self.assertEqual(filas_ventas["Factura"]["total"]["cantidad"], 2)
+        self.assertEqual(filas_ventas["Boleta"]["valores"][0]["cantidad"], 1)
+        self.assertEqual(resp.context["filas_proveedores"][0]["valores"][0]["cantidad"], 2)
+        self.assertContains(resp, "Factura (2)")
+        self.assertContains(resp, "Boleta (1)")
+        self.assertContains(resp, "Proveedor Conteo (2)")
 
 
 class EstrategiaPreciosTests(TestCase):

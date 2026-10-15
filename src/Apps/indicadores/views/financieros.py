@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import ExpressionWrapper, Sum, Avg, Value, DecimalField
+from django.db.models import Avg, Count, DecimalField, ExpressionWrapper, Sum, Value
 from django.db.models.functions import Coalesce, TruncMonth
 from django.shortcuts import render
 
@@ -105,6 +105,7 @@ def dashboard_financiero_simple(request):
         .annotate(mes=TruncMonth('fecha_recepcion'))
         .values('proveedor__nombre_proveedor', 'mes')
         .annotate(
+            cantidad=Count('pk'),
             neto=Coalesce(Sum('total_neto_recepcion'), Value(DEC, output_field=DEC_F)),
             iva=Coalesce(Sum('iva_recepcion'), Value(DEC, output_field=DEC_F)),
             total=Coalesce(Sum('total_recepcion'), Value(DEC, output_field=DEC_F)),
@@ -118,6 +119,7 @@ def dashboard_financiero_simple(request):
         prov = row['proveedor__nombre_proveedor'] or '—'
         mes = row['mes']
         datos_compras.setdefault(prov, {})[mes] = {
+            'cantidad': row['cantidad'],
             'neto': row['neto'] or DEC,
             'iva':  row['iva']  or DEC,
             'total':row['total']or DEC,
@@ -140,14 +142,23 @@ def dashboard_financiero_simple(request):
 
     for prov in proveedores_ordenados:
         valores = []
-        suma_prov_display = {'neto': DEC, 'iva': DEC, 'total': DEC}
+        suma_prov_display = {'cantidad': 0, 'neto': DEC, 'iva': DEC, 'total': DEC}
         for i, m in enumerate(meses):
-            d = datos_compras.get(prov, {}).get(m, {'neto': DEC, 'iva': DEC, 'total': DEC})
+            d = datos_compras.get(prov, {}).get(
+                m,
+                {'cantidad': 0, 'neto': DEC, 'iva': DEC, 'total': DEC},
+            )
 
             # Mostrar SIEMPRE en positivo
-            valores.append({'neto': d['neto'], 'iva': d['iva'], 'total': d['total']})
+            valores.append({
+                'cantidad': d['cantidad'],
+                'neto': d['neto'],
+                'iva': d['iva'],
+                'total': d['total'],
+            })
 
             # Subtotal mostrado (positivo)
+            suma_prov_display['cantidad'] += d['cantidad']
             suma_prov_display['neto']  += d['neto']
             suma_prov_display['iva']   += d['iva']
             suma_prov_display['total'] += d['total']
@@ -184,6 +195,7 @@ def dashboard_financiero_simple(request):
         .annotate(mes=TruncMonth('fecha_venta'))
         .values('documento_pedido', 'mes')
         .annotate(
+            cantidad=Count('pk'),
             neto=Coalesce(Sum('venta_neto_pedido'), Value(DEC, output_field=DEC_F)),
             iva=Coalesce(Sum('venta_iva_pedido'), Value(DEC, output_field=DEC_F)),
             total=Coalesce(Sum('venta_total_pedido'), Value(DEC, output_field=DEC_F)),
@@ -196,6 +208,7 @@ def dashboard_financiero_simple(request):
         tipo = row['documento_pedido']
         mes = row['mes']
         datos_ventas.setdefault(tipo, {})[mes] = {
+            'cantidad': row['cantidad'],
             'neto': row['neto'] or DEC,
             'iva':  row['iva']  or DEC,
             'total':row['total']or DEC,
@@ -208,11 +221,20 @@ def dashboard_financiero_simple(request):
     tipos_ordenados = [t for t in tipos_doc if t in datos_ventas]
     for tipo in tipos_ordenados:
         valores = []
-        suma_tipo = {'neto': DEC, 'iva': DEC, 'total': DEC}
+        suma_tipo = {'cantidad': 0, 'neto': DEC, 'iva': DEC, 'total': DEC}
         for i, m in enumerate(meses):
-            d = datos_ventas.get(tipo, {}).get(m, {'neto': DEC, 'iva': DEC, 'total': DEC})
+            d = datos_ventas.get(tipo, {}).get(
+                m,
+                {'cantidad': 0, 'neto': DEC, 'iva': DEC, 'total': DEC},
+            )
             # Ventas en positivo (display y contable)
-            valores.append({'neto': d['neto'], 'iva': d['iva'], 'total': d['total']})
+            valores.append({
+                'cantidad': d['cantidad'],
+                'neto': d['neto'],
+                'iva': d['iva'],
+                'total': d['total'],
+            })
+            suma_tipo['cantidad'] += d['cantidad']
             suma_tipo['neto']  += d['neto']
             suma_tipo['iva']   += d['iva']
             suma_tipo['total'] += d['total']

@@ -166,7 +166,7 @@
         </p>
 
         <div class="table-responsive">
-          <table class="table table-sm table-bordered align-middle mb-2 js-tabla-filtros">
+          <table class="table table-sm table-bordered align-middle mb-2" data-tabla-filtros="false">
             <thead class="table-light text-center">
               <tr>
                 <th>Per&iacute;odo</th>
@@ -230,7 +230,7 @@
         </div>
 
         <div class="table-responsive">
-          <table class="table table-sm table-bordered align-middle js-tabla-filtros">
+          <table class="table table-sm table-bordered align-middle" data-tabla-filtros="false">
             <thead class="table-light text-center">
               <tr>
                 <th>Concepto</th>
@@ -254,9 +254,15 @@
               <tr class="table-warning fw-bold">
                 <td>{{ fila.proveedor }}</td>
                 {% for v in fila.valores %}
-                  <td class="text-end">${{ v.total|formatear_miles }}</td>
+                  <td class="text-end">
+                    <div>${{ v.total|formatear_miles }}</div>
+                    <small class="text-muted">{{ fila.proveedor }} ({{ v.cantidad }})</small>
+                  </td>
                 {% endfor %}
-                <td class="text-end">${{ fila.total.total|formatear_miles }}</td>
+                <td class="text-end">
+                  <div>${{ fila.total.total|formatear_miles }}</div>
+                  <small class="text-muted">{{ fila.proveedor }} ({{ fila.total.cantidad }})</small>
+                </td>
               </tr>
               <!-- Fila NETO proveedor -->
               <tr>
@@ -316,9 +322,15 @@
                 <tr class="table-primary fw-bold">
                   <td>{{ fila.tipo }}</td>
                   {% for v in fila.valores %}
-                    <td class="text-end">${{ v.total|formatear_miles }}</td>
+                    <td class="text-end">
+                      <div>${{ v.total|formatear_miles }}</div>
+                      <small class="text-muted">{{ fila.tipo }} ({{ v.cantidad }})</small>
+                    </td>
                   {% endfor %}
-                  <td class="text-end">${{ fila.total.total|formatear_miles }}</td>
+                  <td class="text-end">
+                    <div>${{ fila.total.total|formatear_miles }}</div>
+                    <small class="text-muted">{{ fila.tipo }} ({{ fila.total.cantidad }})</small>
+                  </td>
                 </tr>
                 <!-- Fila NETO por tipo -->
                 <tr>
