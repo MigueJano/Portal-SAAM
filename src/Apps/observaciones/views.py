@@ -55,6 +55,7 @@ def _obtener_version_registro(observacion):
 @staff_member_required
 def actualizaciones_sistema(request):
     resultado = None
+    estado_git = None
 
     if request.method == "POST":
         if not request.user.is_superuser:
@@ -102,7 +103,8 @@ def actualizaciones_sistema(request):
         else:
             messages.error(request, "Accion de actualizacion no reconocida.")
 
-    estado_git = git_status(fetch=False)
+    if estado_git is None:
+        estado_git = git_status(fetch=False)
     return render(
         request,
         "observaciones/actualizaciones.html",

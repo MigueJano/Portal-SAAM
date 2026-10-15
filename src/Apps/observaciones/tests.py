@@ -102,6 +102,18 @@ class ActualizacionesSistemaTests(TestCase):
         self.assertEqual(ActualizacionSistema.objects.count(), 0)
 
     @patch("Apps.observaciones.views.git_status")
+    def test_error_de_fetch_no_se_reemplaza_por_estado_obsoleto(self, status_mock):
+        status_mock.return_value = GitStatus(available=False, error="fetch sin permisos")
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(reverse("actualizaciones_sistema"), {"accion": "buscar"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(status_mock.call_count, 1)
+        self.assertContains(response, "fetch sin permisos")
+        self.assertContains(response, "Git no disponible")
+
+    @patch("Apps.observaciones.views.git_status")
     @patch("Apps.observaciones.views.apply_system_update")
     def test_superusuario_instala_y_registra_resultado(self, apply_mock, status_mock):
         status_mock.return_value = GitStatus(
