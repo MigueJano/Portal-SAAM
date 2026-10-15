@@ -18,12 +18,14 @@ db.sqlite3
 *.sqlite3
 database/*.sqlite3
 *.db
+Database/active_database.json
 
 # Postgres / DB dumps / backups
 *.sql
 *.dump
 *.backup
 *.drawio
+Respaldos/
 
 # Env vars / secrets
 .env
