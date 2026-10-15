@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Observacion, VersionRegistro
+from .models import ActualizacionSistema, Observacion, VersionRegistro
 
 @admin.register(Observacion)
 class ObservacionAdmin(admin.ModelAdmin):
@@ -10,6 +10,17 @@ class ObservacionAdmin(admin.ModelAdmin):
 @admin.register(VersionRegistro)
 class VersionRegistroAdmin(admin.ModelAdmin):
     list_display = ('version_mayor','version_menor','version_patch','impacto','resumen','creado_en','creado_por')
-    list_filter  = ('impacto','creado_en')
-    search_fields = ('resumen','detalle')
-    readonly_fields = ()
+    list_filter = ('impacto', 'creado_en')
+    search_fields = ('resumen', 'detalle')
+
+
+@admin.register(ActualizacionSistema)
+class ActualizacionSistemaAdmin(admin.ModelAdmin):
+    list_display = ("estado", "commit_anterior", "commit_nuevo", "creado_en", "creado_por")
+    readonly_fields = ("estado", "commit_anterior", "commit_nuevo", "respaldo", "detalle", "creado_en", "creado_por")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

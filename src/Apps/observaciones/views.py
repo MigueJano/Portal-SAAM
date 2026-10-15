@@ -8,7 +8,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .forms import ObservacionForm, ResolverObservacionForm
-from .models import Observacion, VersionRegistro
+from .models import ActualizacionSistema, Observacion, VersionRegistro
+from .services import SystemUpdateError, apply_system_update, git_status
 from .utils_versionado import calcular_siguiente_version, obtener_version_actual
 
 
@@ -49,6 +50,70 @@ def _obtener_version_registro(observacion):
         return observacion.version_registro
     except VersionRegistro.DoesNotExist:
         return None
+
+
+@staff_member_required
+def actualizaciones_sistema(request):
+    resultado = None
+
+    if request.method == "POST":
+        if not request.user.is_superuser:
+            messages.error(request, "Solo un superusuario puede consultar o instalar actualizaciones.")
+            return redirect("actualizaciones_sistema")
+
+        accion = request.POST.get("accion")
+        if accion == "buscar":
+            estado_git = git_status(fetch=True)
+            if estado_git.available:
+                if estado_git.update_available:
+                    messages.info(request, f"Hay {estado_git.behind} cambio(s) disponible(s).")
+                elif estado_git.diverged or estado_git.ahead:
+                    messages.warning(request, "La copia local contiene cambios que requieren revision manual.")
+                else:
+                    messages.success(request, "El sistema ya esta actualizado.")
+            else:
+                messages.error(request, f"No fue posible consultar Git: {estado_git.error}")
+        elif accion == "instalar":
+            estado_previo = git_status(fetch=False)
+            try:
+                resultado = apply_system_update()
+                estado_final = resultado["status"]
+                ActualizacionSistema.objects.create(
+                    estado="EXITOSA" if resultado["changed"] else "SIN_CAMBIOS",
+                    commit_anterior=resultado.get("previous_commit", estado_previo.current_commit),
+                    commit_nuevo=estado_final.current_commit,
+                    respaldo=resultado.get("backup_path", ""),
+                    detalle=resultado.get("log", "")[-12000:],
+                    creado_por=request.user,
+                )
+                if resultado["changed"]:
+                    messages.success(request, "Actualizacion aplicada. Reinicia el servicio si no se recarga automaticamente.")
+                else:
+                    messages.info(request, "No habia cambios pendientes de instalacion.")
+            except SystemUpdateError as exc:
+                ActualizacionSistema.objects.create(
+                    estado="FALLIDA",
+                    commit_anterior=estado_previo.current_commit,
+                    commit_nuevo=estado_previo.current_commit,
+                    detalle=str(exc)[-12000:],
+                    creado_por=request.user,
+                )
+                messages.error(request, f"La actualizacion no pudo completarse: {exc}")
+        else:
+            messages.error(request, "Accion de actualizacion no reconocida.")
+
+    estado_git = git_status(fetch=False)
+    return render(
+        request,
+        "observaciones/actualizaciones.html",
+        {
+            "estado_git": estado_git,
+            "version_actual": _version_str(obtener_version_actual()),
+            "versiones": VersionRegistro.objects.select_related("creado_por")[:10],
+            "actualizaciones": ActualizacionSistema.objects.select_related("creado_por")[:10],
+            "resultado": resultado,
+        },
+    )
 
 
 @login_required

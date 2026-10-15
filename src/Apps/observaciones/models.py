@@ -62,3 +62,25 @@ class VersionRegistro(models.Model):
     @property
     def version_str(self) -> str:
         return f"{self.version_mayor}.{self.version_menor}.{self.version_patch}"
+
+
+class ActualizacionSistema(models.Model):
+    ESTADOS = (
+        ("EXITOSA", "Exitosa"),
+        ("FALLIDA", "Fallida"),
+        ("SIN_CAMBIOS", "Sin cambios"),
+    )
+
+    estado = models.CharField(max_length=20, choices=ESTADOS)
+    commit_anterior = models.CharField(max_length=40, blank=True)
+    commit_nuevo = models.CharField(max_length=40, blank=True)
+    respaldo = models.CharField(max_length=500, blank=True)
+    detalle = models.TextField(blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    creado_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ["-creado_en", "-id"]
+
+    def __str__(self):
+        return f"{self.get_estado_display()} - {self.creado_en:%Y-%m-%d %H:%M}"

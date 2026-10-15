@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Actualizaciones del sistema{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div>
+    <h1 class="h4 mb-1">Actualizaciones del sistema</h1>
+    <p class="text-muted mb-0">Consulta e instala versiones publicadas en <code>origin/main</code>.</p>
+  </div>
+  <span class="badge bg-primary fs-6">Versi&oacute;n {{ version_actual }}</span>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-3"><strong>Rama</strong><div>{{ estado_git.branch|default:"No disponible" }}</div></div>
+      <div class="col-md-3"><strong>Commit instalado</strong><div><code>{{ estado_git.current_commit|default:"-" }}</code></div></div>
+      <div class="col-md-3"><strong>Commit remoto</strong><div><code>{{ estado_git.remote_commit|default:"-" }}</code></div></div>
+      <div class="col-md-3">
+        <strong>Estado</strong>
+        <div>
+          {% if not estado_git.available %}<span class="badge bg-danger">Git no disponible</span>
+          {% elif estado_git.dirty %}<span class="badge bg-warning text-dark">Cambios locales</span>
+          {% elif estado_git.diverged or estado_git.ahead %}<span class="badge bg-warning text-dark">Revisi&oacute;n manual</span>
+          {% elif estado_git.update_available %}<span class="badge bg-info text-dark">{{ estado_git.behind }} cambio(s) disponible(s)</span>
+          {% else %}<span class="badge bg-success">Actualizado</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% if estado_git.error %}<div class="alert alert-danger mt-3 mb-0">{{ estado_git.error }}</div>{% endif %}
+
+    <div class="d-flex flex-wrap gap-2 mt-4">
+      {% if user.is_superuser %}
+      <form method="post">
+        {% csrf_token %}<input type="hidden" name="accion" value="buscar">
+        <button class="btn btn-outline-primary" type="submit"><i class="fas fa-sync-alt me-1"></i>Buscar actualizaciones</button>
+      </form>
+      <form method="post" onsubmit="return confirm('Se respaldara la base activa y se actualizara el sistema. Deseas continuar?');">
+        {% csrf_token %}<input type="hidden" name="accion" value="instalar">
+        <button class="btn btn-primary" type="submit" {% if not estado_git.update_available or estado_git.dirty or estado_git.ahead %}disabled{% endif %}>
+          <i class="fas fa-download me-1"></i>Instalar actualizaci&oacute;n
+        </button>
+      </form>
+      {% else %}
+      <span class="text-muted">Solo un superusuario puede buscar o instalar actualizaciones.</span>
+      {% endif %}
+    </div>
+    <p class="small text-muted mt-3 mb-0">La instalaci&oacute;n exige la rama <code>main</code> sin cambios locales, crea un respaldo de SQLite y ejecuta migraciones, archivos est&aacute;ticos y verificaciones de Django.</p>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">Versiones registradas</div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead><tr><th>Versi&oacute;n</th><th>Resumen</th><th>Fecha</th></tr></thead>
+          <tbody>
+          {% for version in versiones %}
+            <tr><td><strong>v{{ version.version_str }}</strong></td><td>{{ version.resumen }}</td><td>{{ version.creado_en|date:"d/m/Y H:i" }}</td></tr>
+          {% empty %}<tr><td colspan="3" class="text-center text-muted py-3">No hay versiones registradas.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">Historial de instalaciones</div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead><tr><th>Estado</th><th>Commit</th><th>Usuario</th><th>Fecha</th></tr></thead>
+          <tbody>
+          {% for item in actualizaciones %}
+            <tr>
+              <td><span class="badge {% if item.estado == 'EXITOSA' %}bg-success{% elif item.estado == 'FALLIDA' %}bg-danger{% else %}bg-secondary{% endif %}">{{ item.get_estado_display }}</span></td>
+              <td><code>{{ item.commit_anterior|default:"-" }} &rarr; {{ item.commit_nuevo|default:"-" }}</code></td>
+              <td>{{ item.creado_por|default:"-" }}</td><td>{{ item.creado_en|date:"d/m/Y H:i" }}</td>
+            </tr>
+          {% empty %}<tr><td colspan="4" class="text-center text-muted py-3">No hay instalaciones registradas.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
