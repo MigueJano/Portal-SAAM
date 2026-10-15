@@ -69,6 +69,7 @@
 
   function opcionesPara($tabla) {
     const esInforme = $tabla.hasClass("js-sortable-report-table");
+    const largoPagina = Number($tabla.attr("data-page-length"));
     const noOrdenables = $tabla.find("thead th.no-sort").map(function () {
       return $(this).index();
     }).get();
@@ -78,6 +79,10 @@
       scrollX: !esInforme,
       order: [],
     };
+
+    if (Number.isInteger(largoPagina) && largoPagina > 0) {
+      opciones.pageLength = largoPagina;
+    }
 
     if (esInforme) {
       Object.assign(opciones, {
@@ -97,7 +102,14 @@
   }
 
   function inicializarTablas(contenedor) {
-    $(contenedor).find("table").addBack("table").each(function () {
+    const selectorTablas = [
+      "table#result_list",
+      "table#tabla-filtros",
+      "table.js-tabla-filtros",
+      "table.js-sortable-report-table",
+    ].join(", ");
+
+    $(contenedor).find(selectorTablas).addBack(selectorTablas).each(function () {
       const $tabla = $(this);
 
       normalizarCeldasCombinadas($tabla);
