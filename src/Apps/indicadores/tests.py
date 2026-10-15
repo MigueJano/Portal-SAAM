@@ -1,5 +1,7 @@
+import re
 from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -89,6 +91,15 @@ class IndicadoresViewsTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Neto (sin IVA)", count=4)
         self.assertContains(resp, "Total (con IVA)", count=4)
+
+    def test_todas_las_tablas_de_indicadores_usan_tabla_filtros(self):
+        templates_dir = Path(__file__).resolve().parent / "templates" / "indicadores"
+
+        for template_path in templates_dir.rglob("*.html"):
+            contenido = template_path.read_text(encoding="utf-8")
+            for etiqueta in re.findall(r"<table\b[^>]*>", contenido, flags=re.IGNORECASE):
+                with self.subTest(template=template_path.name, table=etiqueta):
+                    self.assertIn("js-tabla-filtros", etiqueta)
 
 
 class DashboardFinancieroPpmTests(TestCase):

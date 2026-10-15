@@ -42,6 +42,31 @@
     }).length;
   }
 
+  function normalizarCeldasCombinadas($tabla) {
+    if (!$tabla.hasClass("js-tabla-filtros")) {
+      return;
+    }
+
+    const columnas = $tabla.find("thead tr:first th, thead tr:first td").length;
+    $tabla.find("tbody tr").each(function () {
+      const $celdas = $(this).children("th, td");
+      if ($celdas.length !== 1) {
+        return;
+      }
+
+      const $celda = $celdas.first();
+      const colspan = Number($celda.attr("colspan") || 1);
+      if (colspan <= 1) {
+        return;
+      }
+
+      $celda.removeAttr("colspan");
+      for (let indice = 1; indice < columnas; indice += 1) {
+        $("<td>", { "aria-hidden": "true" }).appendTo(this);
+      }
+    });
+  }
+
   function opcionesPara($tabla) {
     const esInforme = $tabla.hasClass("js-sortable-report-table");
     const noOrdenables = $tabla.find("thead th.no-sort").map(function () {
@@ -74,6 +99,8 @@
   function inicializarTablas(contenedor) {
     $(contenedor).find("table").addBack("table").each(function () {
       const $tabla = $(this);
+
+      normalizarCeldasCombinadas($tabla);
 
       if ($tabla.attr("data-tabla-filtros") === "false" ||
           $.fn.dataTable.isDataTable(this) ||
