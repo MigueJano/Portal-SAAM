@@ -2792,6 +2792,10 @@ class ProductoEstadoVentaTests(ProductoEstadoBaseTests):
         resp = self.client.get(reverse("agregar_productos_pedido", args=[self.pedido.id]))
 
         self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'id="tabla-filtros"')
+        self.assertContains(resp, 'class="text-center col-producto"')
+        self.assertNotContains(resp, 'id="buscador"')
+        self.assertNotContains(resp, 'id="scan-codigo"')
         producto_ids = {int(form.initial["producto_id"]) for form in resp.context["formset"].forms}
         self.assertIn(self.producto_activo.id, producto_ids)
         self.assertNotIn(self.producto_suspendido.id, producto_ids)

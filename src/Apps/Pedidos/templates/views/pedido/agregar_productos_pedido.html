@@ -3,7 +3,11 @@
 
 {% block CSS %}
 <style>
-  .table-products { table-layout: fixed; width: 100%; }
+  .table-products { table-layout: auto; width: 100% !important; }
+  .table-products th:not(.col-producto),
+  .table-products td:not(.col-producto) { width: 1%; white-space: nowrap; }
+  .table-products th.col-producto,
+  .table-products td.col-producto { width: 100%; min-width: 18rem; }
   #tabla-productos td.col-cantidad input[type="number"]{
     width: 100%; max-width: 7ch; text-align: center; padding: .35rem .4rem; line-height: 1.2;
   }
@@ -13,6 +17,8 @@
   @media (max-width: 576px) {
     .table-products thead { display:none; }
     .table-products, .table-products tbody, .table-products tr, .table-products td { display:block; width:100%; }
+    .table-products td:not(.col-producto),
+    .table-products td.col-producto { width:100%; min-width:0; white-space:normal; }
     .table-products tr {
       margin-bottom:.85rem; border:1px solid var(--bs-border-color,#dee2e6);
       border-radius:.75rem; background:var(--bs-body-bg,#fff); box-shadow:0 1px 6px rgba(0,0,0,.05);
@@ -34,7 +40,6 @@
     .table-products td.col-subtotal { text-align:left !important; }
     #tabla-productos td.col-cantidad input[type="number"]{ max-width:11ch; padding:.5rem; border-radius:.5rem; }
     .actions-wrap { flex-direction:column; gap:.5rem; align-items:stretch !important; }
-    #buscador, #scan-codigo { width:100% !important; }
     .mobile-summary {
       position:sticky; bottom:0; z-index:10; background:var(--bs-body-bg,#fff);
       border-top:1px solid var(--bs-border-color,#dee2e6); box-shadow:0 -6px 16px rgba(0,0,0,.08);
@@ -57,11 +62,6 @@
       <div class="header-subtitle">para {{ pedido.nombre_cliente }}</div>
     </div>
     <div class="d-flex align-items-center">
-      <!-- NUEVO: input para escanear/ingresar código externo -->
-      <input type="text" id="scan-codigo" class="form-control d-inline-block me-2"
-             placeholder="Escanea/ingresa código proveedor…" style="width: 260px;">
-      <input type="text" id="buscador" class="form-control d-inline-block me-2"
-             placeholder="Buscar código, nombre o empaque..." style="width: 280px;">
       <button type="submit" form="form-productos" class="btn btn-outline-primary me-2">Guardar Reservas</button>
       <a href="{% url 'lista_pedidos' %}" class="btn btn-outline-secondary">Cerrar</a>
     </div>
@@ -76,16 +76,16 @@
     {{ formset.management_form }}
 
     <div class="table-responsive mt-4">
-      <table class="table table-striped table-bordered align-middle table-products">
+      <table id="tabla-filtros" class="table table-striped table-bordered align-middle table-products">
         <thead class="table-light text-center">
           <tr>
-            <th class="text-center" style="width: 6%;">Código</th>
-            <th class="text-center" style="width: 60%;">Producto</th>
-            <th class="text-center" style="width: 8%;">Empaque</th>
-            <th class="text-center" style="width: 10%;">Precio Neto</th>
-            <th class="text-center" style="width: 10%;">Precio Venta</th>
-            <th class="text-center" style="width: 8%;">Cantidad</th>
-            <th class="text-center" style="width: 8%;">Subtotal</th>
+            <th class="text-center">Código</th>
+            <th class="text-center col-producto">Producto</th>
+            <th class="text-center">Empaque</th>
+            <th class="text-center">Precio Neto</th>
+            <th class="text-center">Precio Venta</th>
+            <th class="text-center no-sort">Cantidad</th>
+            <th class="text-center no-sort">Subtotal</th>
           </tr>
         </thead>
         <tbody id="tabla-productos">
@@ -106,6 +106,12 @@
                     Pack disponible: {{ form.initial.stock_pack_disponible|default:0|formatear_miles }}
                   </div>
                 {% endif %}
+              </div>
+              <div class="d-none">
+                {{ form.producto_id }}
+                {{ form.producto_nombre }}
+                {{ form.precio_unitario }}
+                {{ form.empaque }}
               </div>
             </td>
 
@@ -143,13 +149,6 @@
               $0
             </td>
 
-            <!-- Ocultos: no ensucian layout móvil -->
-            <div class="d-none">
-              {{ form.producto_id }}
-              {{ form.producto_nombre }}
-              {{ form.precio_unitario }}
-              {{ form.empaque }}
-            </div>
           </tr>
           {% endfor %}
         </tbody>
@@ -182,6 +181,14 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const fmt = (n) => n.toLocaleString("es-CL");
+  const tablaProductos = document.getElementById("tabla-filtros");
+
+  function filasProductos() {
+    if (window.jQuery && jQuery.fn.dataTable.isDataTable(tablaProductos)) {
+      return Array.from(jQuery(tablaProductos).DataTable().rows().nodes());
+    }
+    return Array.from(document.querySelectorAll("#tabla-productos tr"));
+  }
 
   function leerPrecioCentavos(celdaPrecio) {
     if (!celdaPrecio) return 0;
@@ -208,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // NUEVO: pinta el precio venta (con IVA) por fila
   function pintarPrecioVentaFilas() {
-    document.querySelectorAll("#tabla-productos tr").forEach((row) => {
+    filasProductos().forEach((row) => {
       const celdaPrecioNeto = row.querySelector(".precio");
       const celdaPrecioIva  = row.querySelector(".precio-iva");
       if (!celdaPrecioNeto || !celdaPrecioIva) return;
@@ -222,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function calcularTotales() {
     let totalCents = 0;
-    document.querySelectorAll("#tabla-productos tr").forEach((row) => {
+    filasProductos().forEach((row) => {
       const celdaPrecio = row.querySelector(".precio");
       const input       = row.querySelector('input[name$="-cantidad"]');
       const cantidad    = parseInt((input?.value || "0").trim(), 10) || 0;
@@ -244,7 +251,9 @@ document.addEventListener('DOMContentLoaded', () => {
     pintarPrecioVentaFilas();
   }
 
-  document.querySelectorAll('input[name$="-cantidad"]').forEach(input => {
+  filasProductos().forEach((row) => {
+    const input = row.querySelector('input[name$="-cantidad"]');
+    if (!input) return;
     input.addEventListener("input", calcularTotales);
     input.setAttribute("inputmode", "numeric");
     input.setAttribute("pattern", "[0-9]*");
@@ -255,6 +264,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inicializa
   pintarPrecioVentaFilas();
   calcularTotales();
+
+  // DataTables retira del DOM las filas filtradas o paginadas. Antes de enviar,
+  // restaura todas para que el formset de Django llegue completo al servidor.
+  document.getElementById("form-productos").addEventListener("submit", () => {
+    if (window.jQuery && jQuery.fn.dataTable.isDataTable(tablaProductos)) {
+      jQuery(tablaProductos).DataTable().search("").page.len(-1).draw();
+    }
+  });
 });
 </script>
 
