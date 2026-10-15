@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .models import ActualizacionSistema, Observacion, VersionRegistro
-from .services import GitStatus, SystemUpdateError
+from .services import GitStatus, SystemUpdateError, _python_executable
 
 
 class ResolverObservacionTests(TestCase):
@@ -81,6 +81,11 @@ class ActualizacionesSistemaTests(TestCase):
         self.superuser = user_model.objects.create_superuser(
             username="admin-update", password="secret123", email="admin@example.com"
         )
+
+    @patch.dict("os.environ", {"PORTAL_PYTHON_EXECUTABLE": "/opt/portal/venv/bin/python"})
+    @patch("Apps.observaciones.services.sys.executable", "/usr/local/bin/uwsgi")
+    def test_actualizador_no_usa_uwsgi_como_interprete_python(self):
+        self.assertEqual(_python_executable(), "/opt/portal/venv/bin/python")
 
     @patch("Apps.observaciones.views.git_status")
     def test_staff_puede_ver_estado_pero_no_instalar(self, status_mock):

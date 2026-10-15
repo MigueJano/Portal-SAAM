@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -62,6 +63,35 @@ def _run(command: list[str], timeout: int = 120) -> str:
     return output
 
 
+def _python_executable() -> str:
+    """Return the Python interpreter used by Django, never the uWSGI binary."""
+    configured = os.getenv("PORTAL_PYTHON_EXECUTABLE", "").strip()
+    if configured:
+        return configured
+
+    candidates = []
+    virtual_env = os.getenv("VIRTUAL_ENV", "").strip()
+    if virtual_env:
+        candidates.extend((Path(virtual_env) / "bin" / "python", Path(virtual_env) / "Scripts" / "python.exe"))
+    candidates.extend((Path(sys.prefix) / "bin" / "python", Path(sys.prefix) / "Scripts" / "python.exe"))
+
+    executable = Path(sys.executable)
+    if executable.name.lower() in {"python", "python3", "python.exe"}:
+        candidates.append(executable)
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+
+    discovered = shutil.which("python3") or shutil.which("python")
+    if discovered:
+        return discovered
+    raise SystemUpdateError(
+        "No se encontro el interprete Python para ejecutar las tareas de actualizacion. "
+        "Configura PORTAL_PYTHON_EXECUTABLE con la ruta del Python del entorno virtual."
+    )
+
+
 def git_status(fetch: bool = False) -> GitStatus:
     try:
         if fetch:
@@ -111,9 +141,10 @@ def apply_system_update() -> dict:
 
     log_parts = []
     log_parts.append(_run(["git", "merge", "--ff-only", "origin/main"]))
-    log_parts.append(_run([sys.executable, "manage.py", "migrate", "--noinput"], timeout=300))
-    log_parts.append(_run([sys.executable, "manage.py", "collectstatic", "--noinput"], timeout=300))
-    log_parts.append(_run([sys.executable, "manage.py", "check"], timeout=180))
+    python = _python_executable()
+    log_parts.append(_run([python, "manage.py", "migrate", "--noinput"], timeout=300))
+    log_parts.append(_run([python, "manage.py", "collectstatic", "--noinput"], timeout=300))
+    log_parts.append(_run([python, "manage.py", "check"], timeout=180))
     final_status = git_status(fetch=False)
     return {
         "changed": True,
