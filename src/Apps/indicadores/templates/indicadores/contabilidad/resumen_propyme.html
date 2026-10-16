@@ -69,7 +69,7 @@
   <div class="card mb-4">
     <div class="card-header d-flex flex-wrap justify-content-between gap-2">
       <strong>Cálculo del costo de ventas</strong>
-      <span class="text-muted small">Costo real histórico · método FIFO</span>
+      <span class="text-muted small">Costo FIFO reconocido por fecha de venta</span>
     </div>
     <div class="card-body">
       <div class="row g-3 text-center align-items-center">
@@ -79,10 +79,13 @@
         <div class="col-auto d-none d-md-block">−</div>
         <div class="col-md"><div class="small text-muted">Inventario final</div><strong>$ {{ resumen.inventario_final|formatear_miles }}</strong></div>
         <div class="col-auto d-none d-md-block">=</div>
-        <div class="col-md"><div class="small text-muted">Costo de ventas</div><strong>$ {{ resumen.costo_ventas|formatear_miles }}</strong></div>
+        <div class="col-md"><div class="small text-muted">Costo de salidas por movimiento</div><strong>$ {{ resumen.costo_salidas_movimiento|formatear_miles }}</strong></div>
       </div>
       <p class="small text-muted mb-0 mt-3">
-        Las reservas no rebajan el inventario contable hasta registrar el despacho. Los servicios incluidos en facturas permanecen en compras facturadas, pero no valorizan existencias.
+        El costo de ventas y el margen se reconocen usando la fecha de venta, igual que en el Dashboard Financiero.
+        La ecuación de inventario conserva las fechas físicas de entradas y despachos; su diferencia temporal
+        respecto del costo reconocido en ventas es $ {{ resumen.diferencia_temporal_costo|formatear_miles }}.
+        Los servicios incluidos en facturas permanecen en compras facturadas, pero no valorizan existencias.
       </p>
     </div>
   </div>

@@ -258,12 +258,22 @@ def obtener_costo_ventas_periodo(periodo: Periodo) -> dict[str, Decimal | int]:
     valuacion_final = _valuacion_fifo_por_producto(fecha_corte=fin)
     inventario_final = sum((fila["valor"] for fila in valuacion_final.values()), start=ZERO)
     compras = _valor_compras_inventario(inicio, fin)
-    costo_ventas = _q2(inventario_inicial + compras - inventario_final)
+    costo_salidas_movimiento = _q2(inventario_inicial + compras - inventario_final)
+    ventas_periodo = Venta.objects.filter(
+        fecha_venta__year=periodo.year,
+        fecha_venta__month=periodo.month,
+    )
+    costo_ventas = ZERO
+    for venta in ventas_periodo.only("venta_neto_pedido", "ganancia_total"):
+        costo_ventas += Decimal(venta.venta_neto_pedido or 0) - Decimal(venta.ganancia_total or 0)
+    costo_ventas = _q2(costo_ventas)
     return {
         "inventario_inicial": _q2(inventario_inicial),
         "compras_inventario": compras,
         "inventario_final": _q2(inventario_final),
         "costo_ventas": costo_ventas,
+        "costo_salidas_movimiento": costo_salidas_movimiento,
+        "diferencia_temporal_costo": _q2(costo_ventas - costo_salidas_movimiento),
         "salidas_sin_recepcion_uprim": int(
             sum(
                 (fila["salida_sin_recepcion_historica"] for fila in valuacion_final.values()),

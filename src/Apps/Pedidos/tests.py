@@ -1145,6 +1145,8 @@ class ContabilidadProPymeTests(TestCase):
         resp = self.client.get(reverse("resumen_contable_propyme"))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Contabilidad Pro Pyme")
+        self.assertEqual(resp.context["resumen"]["costo_ventas"], Decimal("1500.00"))
+        self.assertEqual(resp.context["resumen"]["margen_bruto"], Decimal("500.00"))
 
     def test_resumen_contable_propyme_usuario_regular(self):
         self.client.force_login(self.user_regular)
