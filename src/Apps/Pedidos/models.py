@@ -679,8 +679,8 @@ class Venta(models.Model):
     venta_neto_pedido = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
     venta_iva_pedido = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
     venta_total_pedido = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
-    ganancia_total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
-    ganancia_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    ganancia_total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    ganancia_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
 
 
     def __str__(self):

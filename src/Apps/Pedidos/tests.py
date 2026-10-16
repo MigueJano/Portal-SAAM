@@ -1148,6 +1148,17 @@ class ContabilidadProPymeTests(TestCase):
         self.assertEqual(resp.context["resumen"]["costo_ventas"], Decimal("1500.00"))
         self.assertEqual(resp.context["resumen"]["margen_bruto"], Decimal("500.00"))
 
+    def test_venta_permite_ganancia_y_porcentaje_negativos(self):
+        self.venta.ganancia_total = Decimal("-48699.08")
+        self.venta.ganancia_porcentaje = Decimal("-25.67")
+
+        self.venta.full_clean()
+        self.venta.save(update_fields=["ganancia_total", "ganancia_porcentaje"])
+
+        self.venta.refresh_from_db()
+        self.assertEqual(self.venta.ganancia_total, Decimal("-48699.08"))
+        self.assertEqual(self.venta.ganancia_porcentaje, Decimal("-25.67"))
+
     def test_resumen_contable_propyme_usuario_regular(self):
         self.client.force_login(self.user_regular)
         resp = self.client.get(reverse("resumen_contable_propyme"))
