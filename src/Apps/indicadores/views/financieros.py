@@ -78,7 +78,7 @@ def dashboard_financiero_simple(request):
         total=Coalesce(Sum('venta_total_pedido'), Value(DEC, output_field=DEC_F)),
     )
 
-    margen_bruto = v['neto'] - r['neto']
+    balance_neto_ventas_compras = v['neto'] - r['neto']
     ganancia_periodo = ventas_qs.aggregate(
         ganancia=Coalesce(Sum('ganancia_total'), Value(DEC, output_field=DEC_F))
     )['ganancia']
@@ -188,10 +188,8 @@ def dashboard_financiero_simple(request):
     # ================
     # VENTAS x TIPO
     # ================
-    tipos_doc = ['Factura', 'Boleta']
     ventas_grouped = (
         ventas_qs
-        .filter(documento_pedido__in=tipos_doc)
         .annotate(mes=TruncMonth('fecha_venta'))
         .values('documento_pedido', 'mes')
         .annotate(
@@ -218,7 +216,9 @@ def dashboard_financiero_simple(request):
     subtotal_ventas_mes = [{'neto': DEC, 'iva': DEC, 'total': DEC} for _ in meses]
     subtotal_ventas_total = {'neto': DEC, 'iva': DEC, 'total': DEC}
 
-    tipos_ordenados = [t for t in tipos_doc if t in datos_ventas]
+    tipos_modelo = [valor for valor, _etiqueta in Venta.DOCUMENTO_PEDIDO_CHOICES]
+    tipos_ordenados = [tipo for tipo in tipos_modelo if tipo in datos_ventas]
+    tipos_ordenados.extend(sorted(set(datos_ventas) - set(tipos_modelo)))
     for tipo in tipos_ordenados:
         valores = []
         suma_tipo = {'cantidad': 0, 'neto': DEC, 'iva': DEC, 'total': DEC}
@@ -326,7 +326,7 @@ def dashboard_financiero_simple(request):
 
         'compras': {'neto': r['neto'], 'iva': r['iva'], 'total': r['total']},
         'ventas':  {'neto': v['neto'], 'iva': v['iva'], 'total': v['total']},
-        'margen_bruto': margen_bruto,
+        'balance_neto_ventas_compras': balance_neto_ventas_compras,
         'ganancia_periodo': ganancia_periodo,
         'ganancia_porcentaje_periodo':ganancia_porcentaje,
         'diferencia_iva': diferencia_iva,

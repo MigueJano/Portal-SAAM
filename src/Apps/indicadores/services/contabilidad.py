@@ -11,7 +11,7 @@ import csv
 import zipfile
 from calendar import monthrange
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from io import BytesIO, StringIO
 from typing import Iterable
@@ -59,9 +59,12 @@ STOCK_FIELDS = [
     "codigo_interno",
     "producto",
     "cantidad_disponible_uprim",
+    "cantidad_reservada_uprim",
+    "cantidad_existencia_contable_uprim",
     "cantidad_despachada_uprim",
-    "costo_unitario_compra",
-    "total_producto",
+    "costo_unitario_fifo",
+    "valor_inventario_fifo",
+    "capas_fifo",
 ]
 
 
@@ -154,18 +157,123 @@ def _agregar_por_producto(tipo: str, *, fecha_corte: date | None = None) -> dict
     return {f["producto"]: int(f["total"] or 0) for f in filas}
 
 
-def _costos_compra_por_producto(*, fecha_corte: date | None = None) -> dict[int, Decimal]:
-    costos: dict[int, Decimal] = {}
-    qs = (
-        _stock_qs("DISPONIBLE", fecha_corte=fecha_corte)
-        .filter(precio_unitario__isnull=False)
+def _cantidad_unidad_primaria(stock: Stock) -> Decimal:
+    return Decimal(stock.qty or 0) * _factor_empaque(stock.producto, stock.empaque)
+
+
+def _valor_compras_inventario(fecha_inicio: date, fecha_fin: date) -> Decimal:
+    """Costo neto real de la mercaderia ingresada durante el periodo."""
+    total = ZERO
+    ingresos = (
+        Stock.objects.filter(
+            tipo_movimiento="DISPONIBLE",
+            fecha_movimiento__range=(fecha_inicio, fecha_fin),
+        )
         .select_related("producto")
-        .order_by("producto_id", "-fecha_movimiento", "-id")
+        .order_by("fecha_movimiento", "id")
     )
-    for stock in qs:
-        if stock.producto_id not in costos:
-            costos[stock.producto_id] = _normalizar_precio_unidad_primaria(stock)
-    return costos
+    for ingreso in ingresos:
+        total += _cantidad_unidad_primaria(ingreso) * _normalizar_precio_unidad_primaria(ingreso)
+    return _q2(total)
+
+
+def _valuacion_fifo_por_producto(*, fecha_corte: date | None = None) -> dict[int, dict]:
+    """Reconstruye las capas FIFO desde el historial real de ingresos y despachos.
+
+    Las reservas se informan por separado: siguen siendo inventario de la empresa
+    hasta que el pedido se despacha. El precio de venta de una salida nunca se usa
+    como costo.
+    """
+    movimientos = Stock.objects.filter(tipo_movimiento__in=("DISPONIBLE", "DESPACHO"))
+    if fecha_corte:
+        movimientos = movimientos.filter(fecha_movimiento__lte=fecha_corte)
+    movimientos = movimientos.select_related("producto", "recepcion").order_by(
+        "producto_id", "fecha_movimiento", "id"
+    )
+
+    resultados: dict[int, dict] = {}
+    for movimiento in movimientos:
+        resultado = resultados.setdefault(
+            movimiento.producto_id,
+            {
+                "capas": [],
+                "cantidad_despachada": Decimal(0),
+                "deficit_pendiente": Decimal(0),
+                "salida_sin_recepcion_historica": Decimal(0),
+            },
+        )
+        cantidad = _cantidad_unidad_primaria(movimiento)
+        if cantidad <= 0:
+            continue
+
+        if movimiento.tipo_movimiento == "DISPONIBLE":
+            if resultado["deficit_pendiente"]:
+                regularizada = min(cantidad, resultado["deficit_pendiente"])
+                resultado["deficit_pendiente"] -= regularizada
+                cantidad -= regularizada
+            if cantidad <= 0:
+                continue
+            resultado["capas"].append(
+                {
+                    "stock_id": movimiento.id,
+                    "recepcion_id": movimiento.recepcion_id,
+                    "fecha": movimiento.fecha_movimiento,
+                    "cantidad": cantidad,
+                    "costo_unitario": _normalizar_precio_unidad_primaria(movimiento),
+                }
+            )
+            continue
+
+        resultado["cantidad_despachada"] += cantidad
+        pendiente = cantidad
+        for capa in resultado["capas"]:
+            if pendiente <= 0:
+                break
+            consumida = min(capa["cantidad"], pendiente)
+            capa["cantidad"] -= consumida
+            pendiente -= consumida
+        resultado["capas"] = [capa for capa in resultado["capas"] if capa["cantidad"] > 0]
+        resultado["deficit_pendiente"] += pendiente
+        resultado["salida_sin_recepcion_historica"] += pendiente
+
+    for resultado in resultados.values():
+        cantidad = sum((capa["cantidad"] for capa in resultado["capas"]), start=Decimal(0))
+        valor = sum(
+            (capa["cantidad"] * capa["costo_unitario"] for capa in resultado["capas"]),
+            start=ZERO,
+        )
+        resultado["cantidad"] = cantidad - resultado["deficit_pendiente"]
+        resultado["valor"] = _q2(valor)
+        resultado["costo_unitario"] = _q2(valor / cantidad) if cantidad else ZERO
+    return resultados
+
+
+def obtener_costo_ventas_periodo(periodo: Periodo) -> dict[str, Decimal | int]:
+    inicio = date(periodo.year, periodo.month, 1)
+    fin = _fecha_corte_periodo(periodo)
+    inventario_inicial = sum(
+        (fila["valor"] for fila in _valuacion_fifo_por_producto(fecha_corte=inicio - timedelta(days=1)).values()),
+        start=ZERO,
+    )
+    valuacion_final = _valuacion_fifo_por_producto(fecha_corte=fin)
+    inventario_final = sum((fila["valor"] for fila in valuacion_final.values()), start=ZERO)
+    compras = _valor_compras_inventario(inicio, fin)
+    costo_ventas = _q2(inventario_inicial + compras - inventario_final)
+    return {
+        "inventario_inicial": _q2(inventario_inicial),
+        "compras_inventario": compras,
+        "inventario_final": _q2(inventario_final),
+        "costo_ventas": costo_ventas,
+        "salidas_sin_recepcion_uprim": int(
+            sum(
+                (fila["salida_sin_recepcion_historica"] for fila in valuacion_final.values()),
+                start=Decimal(0),
+            )
+        ),
+        "deficit_inventario_uprim": int(
+            sum((fila["deficit_pendiente"] for fila in valuacion_final.values()), start=Decimal(0))
+        ),
+    }
 
 
 def obtener_resumen_periodo(periodo: Periodo) -> dict[str, Decimal | int]:
@@ -183,7 +291,8 @@ def obtener_resumen_periodo(periodo: Periodo) -> dict[str, Decimal | int]:
     compras_total_iva = _q2(compras.aggregate(total=Sum("iva_recepcion"))["total"])
     compras_total = _q2(compras.aggregate(total=Sum("total_recepcion"))["total"])
 
-    margen_bruto = _q2(ventas_total_neto - compras_total_neto)
+    costo_ventas = obtener_costo_ventas_periodo(periodo)
+    margen_bruto = _q2(ventas_total_neto - costo_ventas["costo_ventas"])
 
     return {
         "ventas_count": ventas.count(),
@@ -194,6 +303,7 @@ def obtener_resumen_periodo(periodo: Periodo) -> dict[str, Decimal | int]:
         "compras_total_neto": compras_total_neto,
         "compras_total_iva": compras_total_iva,
         "compras_total": compras_total,
+        **costo_ventas,
         "margen_bruto": margen_bruto,
     }
 
@@ -266,21 +376,26 @@ def filas_libro_compras(periodo: Periodo, compras) -> list[dict]:
 
 def filas_stock_contable(periodo: Periodo | None = None) -> list[dict]:
     fecha_corte = _fecha_corte_periodo(periodo)
-    ingresos = _agregar_por_producto("DISPONIBLE", fecha_corte=fecha_corte)
     reservas = _agregar_por_producto("RESERVA", fecha_corte=fecha_corte)
     despachos = _agregar_por_producto("DESPACHO", fecha_corte=fecha_corte)
-    costos_compra = _costos_compra_por_producto(fecha_corte=fecha_corte)
+    valuacion = _valuacion_fifo_por_producto(fecha_corte=fecha_corte)
 
     productos = Producto.objects.all().order_by("nombre_producto")
     filas: list[dict] = []
     for prod in productos:
-        qty_ingresado = int(ingresos.get(prod.id, 0))
         qty_res = int(reservas.get(prod.id, 0))
         qty_des = int(despachos.get(prod.id, 0))
-        qty_disp = qty_ingresado - qty_res - qty_des
-
-        costo_compra = costos_compra.get(prod.id, ZERO)
-        total_producto = _q2(Decimal(qty_disp) * costo_compra)
+        resultado = valuacion.get(prod.id, {})
+        qty_contable = int(resultado.get("cantidad", 0))
+        qty_disp = qty_contable - qty_res
+        costo_fifo = resultado.get("costo_unitario", ZERO)
+        total_producto = resultado.get("valor", ZERO)
+        capas = resultado.get("capas", [])
+        capas_resumen = " | ".join(
+            f"{capa['fecha'].isoformat()} R{capa['recepcion_id'] or '-'}: "
+            f"{int(capa['cantidad'])} x ${capa['costo_unitario']:.2f}"
+            for capa in capas
+        )
 
         filas.append(
             {
@@ -289,12 +404,21 @@ def filas_stock_contable(periodo: Periodo | None = None) -> list[dict]:
                 "producto": prod.nombre_producto,
                 "cantidad_disponible_uprim": qty_disp,
                 "cantidad_reservada_uprim": qty_res,
+                "cantidad_existencia_contable_uprim": qty_contable,
                 "cantidad_despachada_uprim": qty_des,
-                "costo_unitario_compra": costo_compra,
-                "valor_producto_unitario": costo_compra,
+                "costo_unitario_fifo": costo_fifo,
+                "valor_inventario_fifo": total_producto,
+                "capas_fifo": capas_resumen,
+                "salida_sin_capa_uprim": int(resultado.get("deficit_pendiente", 0)),
+                "salida_sin_recepcion_historica_uprim": int(
+                    resultado.get("salida_sin_recepcion_historica", 0)
+                ),
+                # Alias de compatibilidad para vistas que aun consumen estos nombres.
+                "costo_unitario_compra": costo_fifo,
+                "valor_producto_unitario": costo_fifo,
                 "total_producto": total_producto,
                 "valor_inventario_compra": total_producto,
-                "costo_unitario_referencia": costo_compra,
+                "costo_unitario_referencia": costo_fifo,
                 "valor_inventario_referencia": total_producto,
             }
         )

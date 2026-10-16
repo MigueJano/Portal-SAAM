@@ -59,7 +59,7 @@
   <p class="text-muted">Período: <strong>{{ desde|date:"d-m-Y" }}</strong> a <strong>{{ hasta|date:"d-m-Y" }}</strong></p>
   {% endif %}
 
-    <!-- Fila 1: Compras, Ventas, Margen Bruto -->
+    <!-- Fila 1: Compras, Ventas, Indicadores -->
     <div class="row g-3">
       <!-- Compras / Recepciones -->
       <div class="col-md-4 d-flex">
@@ -111,11 +111,11 @@
           <div class="card-body">
             <h5 class="card-title mb-3">Indicadores</h5>
 
-            <!-- Margen Bruto -->
+            <!-- Diferencia entre ventas netas y compras netas del periodo -->
             <div class="d-flex justify-content-between">
-              <span>Margen Neto</span>
-              <strong class="{% if margen_bruto >= 0 %}text-success{% else %}text-danger{% endif %}">
-                ${{ margen_bruto|formatear_miles }}
+              <span>Ventas netas &minus; compras netas</span>
+              <strong class="{% if balance_neto_ventas_compras >= 0 %}text-success{% else %}text-danger{% endif %}">
+                ${{ balance_neto_ventas_compras|formatear_miles }}
               </strong>
             </div>
 
@@ -350,7 +350,7 @@
                 </tr>
               {% empty %}
                 <tr>
-                  <td colspan="{{ meses_labels|length|add:2 }}" class="text-center text-muted">Sin ventas Factura/Boleta en el período.</td>
+                  <td colspan="{{ meses_labels|length|add:2 }}" class="text-center text-muted">Sin ventas en el período.</td>
                 </tr>
               {% endfor %}
 

@@ -43,7 +43,7 @@
     <div class="col-md-3">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Compras (Neto)</div>
+          <div class="small text-muted">Compras facturadas (Neto)</div>
           <div class="h5 mb-0">$ {{ resumen.compras_total_neto|formatear_miles }}</div>
         </div>
       </div>
@@ -51,20 +51,53 @@
     <div class="col-md-3">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Margen Bruto</div>
-          <div class="h5 mb-0">$ {{ resumen.margen_bruto|formatear_miles }}</div>
+          <div class="small text-muted">Costo de ventas</div>
+          <div class="h5 mb-0">$ {{ resumen.costo_ventas|formatear_miles }}</div>
         </div>
       </div>
     </div>
     <div class="col-md-3">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Valor Inventario</div>
-          <div class="h5 mb-0">$ {{ total_stock_ref|formatear_miles }}</div>
+          <div class="small text-muted">Margen bruto real</div>
+          <div class="h5 mb-0">$ {{ resumen.margen_bruto|formatear_miles }}</div>
         </div>
       </div>
     </div>
   </div>
+
+  <div class="card mb-4">
+    <div class="card-header d-flex flex-wrap justify-content-between gap-2">
+      <strong>Cálculo del costo de ventas</strong>
+      <span class="text-muted small">Costo real histórico · método FIFO</span>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 text-center align-items-center">
+        <div class="col-md"><div class="small text-muted">Inventario inicial</div><strong>$ {{ resumen.inventario_inicial|formatear_miles }}</strong></div>
+        <div class="col-auto d-none d-md-block">+</div>
+        <div class="col-md"><div class="small text-muted">Compras de inventario</div><strong>$ {{ resumen.compras_inventario|formatear_miles }}</strong></div>
+        <div class="col-auto d-none d-md-block">−</div>
+        <div class="col-md"><div class="small text-muted">Inventario final</div><strong>$ {{ resumen.inventario_final|formatear_miles }}</strong></div>
+        <div class="col-auto d-none d-md-block">=</div>
+        <div class="col-md"><div class="small text-muted">Costo de ventas</div><strong>$ {{ resumen.costo_ventas|formatear_miles }}</strong></div>
+      </div>
+      <p class="small text-muted mb-0 mt-3">
+        Las reservas no rebajan el inventario contable hasta registrar el despacho. Los servicios incluidos en facturas permanecen en compras facturadas, pero no valorizan existencias.
+      </p>
+    </div>
+  </div>
+
+  {% if resumen.salidas_sin_recepcion_uprim %}
+    <div class="alert alert-warning" role="alert">
+      <strong>Trazabilidad histórica incompleta:</strong>
+      existen {{ resumen.salidas_sin_recepcion_uprim|formatear_miles }} unidades despachadas que, en su fecha, no tenían una recepción anterior registrada.
+      {% if resumen.deficit_inventario_uprim %}
+        El déficit aún pendiente es de {{ resumen.deficit_inventario_uprim|formatear_miles }} unidades.
+      {% else %}
+        El historial posterior regulariza la cantidad, pero conviene revisar las fechas o recepciones originales.
+      {% endif %}
+    </div>
+  {% endif %}
 
   <div class="table-responsive mb-4">
     <h2 class="h6">Revision de Ventas del Periodo ({{ resumen.ventas_count }})</h2>
@@ -137,16 +170,19 @@
   </div>
 
   <div class="table-responsive">
-    <h2 class="h6">Revision de Stock Contable ({{ stock_rows|length }})</h2>
+    <h2 class="h6">Inventario a costo real histórico ({{ stock_rows|length }})</h2>
     <table class="table table-striped table-bordered table-sm js-tabla-filtros">
       <thead class="table-light text-center">
         <tr>
           <th>Codigo</th>
           <th>Producto</th>
-          <th>Stock Disponible</th>
+          <th>Disponible</th>
+          <th>Reservado</th>
+          <th>Existencia contable</th>
           <th>Despachos</th>
-          <th>Valor Producto Unitario</th>
-          <th>Total</th>
+          <th>Costo unitario FIFO</th>
+          <th>Valor inventario</th>
+          <th>Trazabilidad del saldo</th>
         </tr>
       </thead>
       <tbody>
@@ -155,12 +191,15 @@
             <td>{{ row.codigo_interno }}</td>
             <td>{{ row.producto }}</td>
             <td class="text-end">{{ row.cantidad_disponible_uprim|formatear_miles }}</td>
+            <td class="text-end">{{ row.cantidad_reservada_uprim|formatear_miles }}</td>
+            <td class="text-end">{{ row.cantidad_existencia_contable_uprim|formatear_miles }}</td>
             <td class="text-end">{{ row.cantidad_despachada_uprim|formatear_miles }}</td>
-            <td class="text-end">$ {{ row.valor_producto_unitario|formatear_miles }}</td>
-            <td class="text-end">$ {{ row.total_producto|formatear_miles }}</td>
+            <td class="text-end">$ {{ row.costo_unitario_fifo|formatear_miles }}</td>
+            <td class="text-end">$ {{ row.valor_inventario_fifo|formatear_miles }}</td>
+            <td class="small">{{ row.capas_fifo|default:"Sin capas vigentes" }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="6" class="text-center text-muted">Sin datos de inventario.</td></tr>
+          <tr><td colspan="9" class="text-center text-muted">Sin datos de inventario.</td></tr>
         {% endfor %}
       </tbody>
     </table>

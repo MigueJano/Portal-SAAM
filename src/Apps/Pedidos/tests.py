@@ -42,7 +42,11 @@ from Apps.Pedidos.utils_pdf import _items_pedido_para_pdf, formatear_miles_punto
 from Apps.Pedidos.services import sincronizar_lista_predeterminada_a_cliente
 from Apps.Pedidos.views.pedido import _detalle_lineas_pedido
 from Apps.Pedidos.views.producto import _parse_codigos_proveedor
-from Apps.indicadores.services.contabilidad import Periodo, filas_stock_contable
+from Apps.indicadores.services.contabilidad import (
+    Periodo,
+    filas_stock_contable,
+    obtener_costo_ventas_periodo,
+)
 
 
 class ClonarDbSqliteCommandTests(SimpleTestCase):
@@ -1271,23 +1275,39 @@ class InventarioPeriodoTests(TestCase):
         fila_enero = self._fila_producto(2026, 1)
         self.assertEqual(fila_enero["cantidad_disponible_uprim"], 6)
         self.assertEqual(fila_enero["cantidad_reservada_uprim"], 4)
+        self.assertEqual(fila_enero["cantidad_existencia_contable_uprim"], 10)
         self.assertEqual(fila_enero["cantidad_despachada_uprim"], 0)
-        self.assertEqual(fila_enero["costo_unitario_compra"], Decimal("100.00"))
-        self.assertEqual(fila_enero["total_producto"], Decimal("600.00"))
+        self.assertEqual(fila_enero["costo_unitario_fifo"], Decimal("100.00"))
+        self.assertEqual(fila_enero["total_producto"], Decimal("1000.00"))
 
         fila_febrero = self._fila_producto(2026, 2)
         self.assertEqual(fila_febrero["cantidad_disponible_uprim"], 26)
         self.assertEqual(fila_febrero["cantidad_reservada_uprim"], 4)
+        self.assertEqual(fila_febrero["cantidad_existencia_contable_uprim"], 30)
         self.assertEqual(fila_febrero["cantidad_despachada_uprim"], 0)
-        self.assertEqual(fila_febrero["costo_unitario_compra"], Decimal("150.00"))
-        self.assertEqual(fila_febrero["total_producto"], Decimal("3900.00"))
+        self.assertEqual(fila_febrero["costo_unitario_fifo"], Decimal("133.33"))
+        self.assertEqual(fila_febrero["total_producto"], Decimal("4000.00"))
 
         fila_marzo = self._fila_producto(2026, 3)
         self.assertEqual(fila_marzo["cantidad_disponible_uprim"], 24)
         self.assertEqual(fila_marzo["cantidad_reservada_uprim"], 4)
+        self.assertEqual(fila_marzo["cantidad_existencia_contable_uprim"], 28)
         self.assertEqual(fila_marzo["cantidad_despachada_uprim"], 2)
-        self.assertEqual(fila_marzo["costo_unitario_compra"], Decimal("150.00"))
-        self.assertEqual(fila_marzo["total_producto"], Decimal("3600.00"))
+        self.assertEqual(fila_marzo["costo_unitario_fifo"], Decimal("135.71"))
+        self.assertEqual(fila_marzo["total_producto"], Decimal("3800.00"))
+
+    def test_costo_ventas_usa_inventario_inicial_compras_e_inventario_final(self):
+        febrero = obtener_costo_ventas_periodo(Periodo(year=2026, month=2))
+        self.assertEqual(febrero["inventario_inicial"], Decimal("1000.00"))
+        self.assertEqual(febrero["compras_inventario"], Decimal("3000.00"))
+        self.assertEqual(febrero["inventario_final"], Decimal("4000.00"))
+        self.assertEqual(febrero["costo_ventas"], Decimal("0.00"))
+
+        marzo = obtener_costo_ventas_periodo(Periodo(year=2026, month=3))
+        self.assertEqual(marzo["inventario_inicial"], Decimal("4000.00"))
+        self.assertEqual(marzo["compras_inventario"], Decimal("0.00"))
+        self.assertEqual(marzo["inventario_final"], Decimal("3800.00"))
+        self.assertEqual(marzo["costo_ventas"], Decimal("200.00"))
 
     def test_exportar_inventario_propyme_csv_usa_periodo_consultado(self):
         resp = self.client.get(
@@ -1300,9 +1320,10 @@ class InventarioPeriodoTests(TestCase):
         fila = next(item for item in filas if item["codigo_interno"] == self.producto.codigo_producto_interno)
 
         self.assertEqual(fila["cantidad_disponible_uprim"], "6")
+        self.assertEqual(fila["cantidad_existencia_contable_uprim"], "10")
         self.assertEqual(fila["cantidad_despachada_uprim"], "0")
-        self.assertEqual(fila["costo_unitario_compra"], "100.00")
-        self.assertEqual(fila["total_producto"], "600.00")
+        self.assertEqual(fila["costo_unitario_fifo"], "100.00")
+        self.assertEqual(fila["valor_inventario_fifo"], "1000.00")
 
     def test_stock_productos_permita_filtrar_solo_productos_con_stock(self):
         producto_sin_stock = Producto.objects.create(

@@ -299,6 +299,49 @@ class DashboardFinancieroPpmTests(TestCase):
         self.assertContains(resp, "Boleta (1)")
         self.assertContains(resp, "Proveedor Conteo (2)")
 
+    def test_tarjetas_y_detalle_incluyen_los_mismos_tipos_de_documento(self):
+        fecha = timezone.localdate()
+        pedido_credito = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=fecha,
+            estado_pedido="Finalizado",
+        )
+        Venta.objects.create(
+            pedidoid=pedido_credito,
+            fecha_venta=fecha,
+            documento_pedido="Credito",
+            num_documento=9004,
+            venta_neto_pedido=Decimal("250.00"),
+            venta_iva_pedido=Decimal("47.50"),
+            venta_total_pedido=Decimal("297.50"),
+            ganancia_total=Decimal("50.00"),
+            ganancia_porcentaje=Decimal("20.00"),
+        )
+
+        resp = self.client.get(
+            reverse("dashboard_financiero_simple"),
+            data={"fecha_desde": fecha.isoformat(), "fecha_hasta": fecha.isoformat()},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        filas_ventas = {fila["tipo"]: fila for fila in resp.context["filas_ventas_tipo"]}
+        self.assertIn("Credito", filas_ventas)
+        self.assertEqual(filas_ventas["Credito"]["total"]["neto"], Decimal("250.00"))
+        self.assertEqual(
+            resp.context["subtotal_ventas_total"]["neto"],
+            resp.context["ventas"]["neto"],
+        )
+        self.assertEqual(
+            resp.context["subtotal_ventas_total"]["iva"],
+            resp.context["ventas"]["iva"],
+        )
+        self.assertEqual(
+            resp.context["subtotal_ventas_total"]["total"],
+            resp.context["ventas"]["total"],
+        )
+        self.assertContains(resp, "Credito (1)")
+        self.assertContains(resp, "Ventas netas &minus; compras netas")
+
 
 class EstrategiaPreciosTests(TestCase):
     def setUp(self):
