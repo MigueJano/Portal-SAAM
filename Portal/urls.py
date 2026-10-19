@@ -17,6 +17,7 @@ urlpatterns = [
     path("indicadores/", include("Apps.indicadores.urls")),
     path("observaciones/", include("Apps.observaciones.urls")),
     path("administracion/", include("Apps.administracion.urls")),
+    path("integraciones/", include("Apps.integraciones.urls")),
 ]
 
 if settings.DEBUG:

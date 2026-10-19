@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Documentos tributarios{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+  <h1 class="h4">Documentos tributarios recibidos</h1>
+  <p class="text-muted">Los adjuntos quedan pendientes hasta que una persona los revise y asocie.</p>
+  <div class="table-responsive"><table class="table table-sm table-striped">
+    <thead><tr><th>Fecha</th><th>Remitente</th><th>Archivo</th><th>Tipo/Folio</th><th>RUT emisor</th><th>Total</th><th>Estado</th></tr></thead>
+    <tbody>{% for doc in documentos %}<tr>
+      <td>{{ doc.recibido_en|date:"d-m-Y H:i" }}</td><td>{{ doc.remitente }}</td>
+      <td><a href="{{ doc.archivo.url }}">{{ doc.nombre_archivo }}</a></td>
+      <td>{{ doc.tipo_documento|default:"—" }} / {{ doc.folio|default:"—" }}</td><td>{{ doc.rut_emisor|default:"—" }}</td>
+      <td>{% if doc.monto_total != None %}${{ doc.monto_total }}{% else %}—{% endif %}</td><td>{{ doc.get_estado_display }}</td>
+    </tr>{% empty %}<tr><td colspan="7" class="text-center text-muted">No hay documentos importados.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}
+

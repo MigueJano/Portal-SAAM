@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Correo{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1 class="h4 mb-3">Correo</h1>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="card h-100"><div class="card-body">
+        <h2 class="h6">Enviar correo</h2>
+        <p>Enviar mensajes y documentos a clientes o contactos de proveedores.</p>
+        <a class="btn btn-outline-primary" href="{% url 'integraciones:redactar_correo' %}">Redactar correo</a>
+      </div></div>
+    </div>
+    <div class="col-md-6">
+      <div class="card h-100"><div class="card-body">
+        <h2 class="h6">Documentos tributarios recibidos</h2>
+        <p>{{ documentos_pendientes }} adjuntos pendientes de revisión.</p>
+        <a class="btn btn-outline-primary" href="{% url 'integraciones:documentos_tributarios' %}">Abrir bandeja</a>
+      </div></div>
+    </div>
+  </div>
+</div>
+{% endblock %}

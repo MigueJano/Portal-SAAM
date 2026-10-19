@@ -1,0 +1,1056 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "MovimientosySaldos",
+    "x-ibm-name": "api-movimientos-saldos",
+    "version": "1.0.0",
+    "description": "Recibe la lista de movimientos de tu cuenta directamente en tu software de gestión empresarial."
+  },
+  "servers": [
+    {
+      "url": "https://gw.apistore.bancochile.cl/banco-chile/sandbox/v1/movimientos-cuenta"
+    }
+  ],
+  "x-ibm-configuration": {
+    "cors": {
+      "enabled": true
+    },
+    "type": "rest",
+    "phase": "realized",
+    "enforced": true,
+    "testable": true
+  },
+  "paths": {
+    "/obtener": {
+      "post": {
+        "tags": [
+          "movimientos-periodo-controller"
+        ],
+        "summary": "Devuelve la cantidad indicada de movimientos de una cuenta, o por defecto los últimos 100.",
+        "operationId": "getMovimientosByCantidad",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "bearerAuth",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Bearer eyJhbGciOiJSUzI1..."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsultaMovCantidadRq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Movimientos de una cuenta",
+            "content": {
+              "application/json": {
+                "example": {
+                  "codigoRetorno": null,
+                  "glosaRespuesta": "EXITO",
+                  "tokenTipoProducto": "CTD",
+                  "numeroCuenta": "000005123456",
+                  "moneda": "CLP",
+                  "nombreTitular": "Bustos Pedro",
+                  "nombreSegundoTitular": "",
+                  "representanteLegal": "",
+                  "saldoDisponible": 2863902,
+                  "saldoContable": 2863902,
+                  "totalCargo": 35401323,
+                  "totalAbono": 8208436,
+                  "saldoDisponibleAcumuladoDelDia": 7407878,
+                  "saldoDisponibleAcumuladoAnterior": 0,
+                  "retencion1Dia": 0,
+                  "retencionNDia": 0,
+                  "montoAutorizadoLineaCredito": 2150000,
+                  "montoUtilizadoLineaCredito": 0,
+                  "saldoInicio": 7378429,
+                  "saldoFinal": 0,
+                  "indicadorLineaCredito": "N",
+                  "numeroLineaCredito": "010005282456",
+                  "montoAutorizadoLSP": 0,
+                  "llaveLibretaAhorro": "",
+                  "saldoLibreta": 0,
+                  "flagLibretaAhorro": "N",
+                  "flagGiroDiferido": "N",
+                  "flagReajustabilidad": "N",
+                  "monedaCuentaRedireccionamiento": "",
+                  "numeroMovimientos": 3,
+                  "totalRegistros": 3,
+                  "indiceInicioRespuesta": 1,
+                  "indiceTerminoRespuesta": 100,
+                  "cantidadRegistrosRespuesta": 100,
+                  "indicadorMasPaginas": "Y",
+                  "maximosGirosPerderIntereses": 0,
+                  "maximosGirosPerderReajustes": 0,
+                  "fechaUltimoCapitalIntereses": null,
+                  "fechaUltimoCapitalReajustes": null,
+                  "fechaProximaLiquidacionIntereses": null,
+                  "fechaProximaLiquidacionReajustes": null,
+                  "fechaEmisionUltimaCartola": 1722384000000,
+                  "movimientos": [
+                    {
+                      "secuencial": "00d2fd81-d5a0-410b-9452-69e72e7528bd",
+                      "codigoTransaccionCore": "56C",
+                      "descripcionTransaccionCore": "ABONO POR TRANSFERENCIA DE FONDOS",
+                      "codigoExtendidoCore": "00690",
+                      "descripcionCorta": "TRANSF. FONDOS",
+                      "descripcionLarga": "TRASPASO DE:Juan Perez por MI Pago",
+                      "descripcionOficina": "INTERNET",
+                      "indicadorCreditoDebito": "C",
+                      "numeroDocumento": "",
+                      "monto": 350000,
+                      "saldoContableDelDia": 0,
+                      "saldoDisponibleDelDia": 0,
+                      "saldoDisponibleAcumulado": 2863902,
+                      "fechaContable": "20240821",
+                      "fechaTransaccion": "20240821",
+                      "fechaValorTransaccion": "20240821",
+                      "fechaHoraRealTransaccion": "20240820 15:06:25",
+                      "indicadorImpresionLibreta": "N",
+                      "codigoOrigen": "BCAMOVIL01",
+                      "idInternoTransaccion": "55181673269",
+                      "campoComplementario1": "Pedro Bustos por MI Pago",
+                      "campoComplementario2": "000005123456",
+                      "campoComplementario3": "BancoChile",
+                      "campoComplementario4": "128123456",
+                      "campoComplementario5": "004080123456",
+                      "campoComplementario6": "Juan Perez por MI Pago",
+                      "campoComplementario7": "TEFMPGO2408201506115765390620",
+                      "campoComplementario8": "Devolucion mecanico faltan 30",
+                      "campoComplementario9": "0135123456",
+                      "glosas": [
+                        "TRASPASO DE:Juan Perez por MI Pago"
+                      ],
+                      "adicionales": [
+                        {
+                          "campos": [
+                            {
+                              "dato": "Nombre Origen:",
+                              "importancia": "N"
+                            },
+                            {
+                              "dato": "Juan Perez por MI Pago",
+                              "importancia": "N"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Rut Origen:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "128123456",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Cuenta Origen:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "004080123456",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Rut Destinatario:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "0135123456",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Cuenta Abono:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "000005123456",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Id transaccion:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "TEFMPGO2408201506115765390620",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Comentario:",
+                              "importancia": "Z"
+                            },
+                            {
+                              "dato": "Devolucion mecanico faltan 30",
+                              "importancia": "Z"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "secuencial": "adc5c69e-7098-46b9-810c-34c56df2ee28",
+                      "codigoTransaccionCore": "G52",
+                      "descripcionTransaccionCore": "DEPOSITO EN EFECTIVO",
+                      "codigoExtendidoCore": "00000",
+                      "descripcionCorta": "DEP.EN EFECTIV",
+                      "descripcionLarga": "DEPOSITO EN EFECTIVO",
+                      "descripcionOficina": "PROVIDENCIA",
+                      "indicadorCreditoDebito": "C",
+                      "numeroDocumento": "3255017",
+                      "monto": 300000,
+                      "saldoContableDelDia": 2913176,
+                      "saldoDisponibleDelDia": 0,
+                      "saldoDisponibleAcumulado": 2913176,
+                      "fechaContable": "20240819",
+                      "fechaTransaccion": "20240819",
+                      "fechaValorTransaccion": "20240819",
+                      "fechaHoraRealTransaccion": "20240819 11:33:27",
+                      "indicadorImpresionLibreta": "N",
+                      "codigoOrigen": "CAJA",
+                      "idInternoTransaccion": "55161123456",
+                      "campoComplementario1": "",
+                      "campoComplementario2": "",
+                      "campoComplementario3": "",
+                      "campoComplementario4": "",
+                      "campoComplementario5": "3255017",
+                      "campoComplementario6": "",
+                      "campoComplementario7": "",
+                      "campoComplementario8": "",
+                      "campoComplementario9": "",
+                      "glosas": [
+                        "DEPOSITO EN EFECTIVO"
+                      ],
+                      "adicionales": []
+                    },
+                    {
+                      "secuencial": "29de6ab0-764f-46ae-abac-5e3dc584d6c1",
+                      "codigoTransaccionCore": "646",
+                      "descripcionTransaccionCore": "COMPRA COMERCIO NAC/INT",
+                      "codigoExtendidoCore": "00000",
+                      "descripcionCorta": "PAGO REDCOMPRA",
+                      "descripcionLarga": "PAGO:MERPAGO*SODEXO SO",
+                      "descripcionOficina": "OFICINA CENTRAL",
+                      "indicadorCreditoDebito": "D",
+                      "numeroDocumento": "",
+                      "monto": 2890,
+                      "saldoContableDelDia": 2913176,
+                      "saldoDisponibleDelDia": 0,
+                      "saldoDisponibleAcumulado": 2613176,
+                      "fechaContable": "20240819",
+                      "fechaTransaccion": "20240819",
+                      "fechaValorTransaccion": "20240819",
+                      "fechaHoraRealTransaccion": "20240819 11:01:39",
+                      "indicadorImpresionLibreta": "N",
+                      "codigoOrigen": "ATM_BCH",
+                      "idInternoTransaccion": "55161123456",
+                      "campoComplementario1": "000123456",
+                      "campoComplementario2": "MERPAGO*SODEXO SO",
+                      "campoComplementario3": "11020",
+                      "campoComplementario4": "A9",
+                      "campoComplementario5": "",
+                      "campoComplementario6": "",
+                      "campoComplementario7": "",
+                      "campoComplementario8": "",
+                      "campoComplementario9": "",
+                      "glosas": [
+                        "PAGO:MERPAGO*SODEXO SO"
+                      ],
+                      "adicionales": []
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Mal requerimiento"
+          }
+        }
+      }
+    },
+    "/obtener-resumen": {
+      "post": {
+        "tags": [
+          "movimientos-periodo-controller"
+        ],
+        "summary": "Devuelve los movimientos del último mes.",
+        "operationId": "getResumenMovimientos",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "bearerAuth",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Bearer eyJhbGciOiJSUzI1..."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsultaMovResumenRq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Resumen de movimientos de una cuenta",
+            "content": {
+              "application/json": {
+                "example": {
+                  "codigoRetorno": null,
+                  "glosaRespuesta": "EXITO",
+                  "tokenTipoProducto": "CTD",
+                  "numeroCuenta": "000005123456",
+                  "moneda": "CLP",
+                  "nombreTitular": "Bustos Pedro",
+                  "nombreSegundoTitular": "",
+                  "representanteLegal": "",
+                  "saldoDisponible": 2863902,
+                  "saldoContable": 2863902,
+                  "totalCargo": 35401323,
+                  "totalAbono": 8208436,
+                  "saldoDisponibleAcumuladoDelDia": 7407878,
+                  "saldoDisponibleAcumuladoAnterior": 0,
+                  "retencion1Dia": 0,
+                  "retencionNDia": 0,
+                  "montoAutorizadoLineaCredito": 2150000,
+                  "montoUtilizadoLineaCredito": 0,
+                  "saldoInicio": 7378429,
+                  "saldoFinal": 0,
+                  "indicadorLineaCredito": "N",
+                  "numeroLineaCredito": "010005282456",
+                  "montoAutorizadoLSP": 0,
+                  "llaveLibretaAhorro": "",
+                  "saldoLibreta": 0,
+                  "flagLibretaAhorro": "N",
+                  "flagGiroDiferido": "N",
+                  "flagReajustabilidad": "N",
+                  "monedaCuentaRedireccionamiento": "",
+                  "numeroMovimientos": 3,
+                  "totalRegistros": 3,
+                  "indiceInicioRespuesta": 1,
+                  "indiceTerminoRespuesta": 100,
+                  "cantidadRegistrosRespuesta": 100,
+                  "indicadorMasPaginas": "Y",
+                  "maximosGirosPerderIntereses": 0,
+                  "maximosGirosPerderReajustes": 0,
+                  "fechaUltimoCapitalIntereses": null,
+                  "fechaUltimoCapitalReajustes": null,
+                  "fechaProximaLiquidacionIntereses": null,
+                  "fechaProximaLiquidacionReajustes": null,
+                  "fechaEmisionUltimaCartola": 1722384000000,
+                  "movimientos": [
+                    {
+                      "secuencial": "00d2fd81-d5a0-410b-9452-69e72e7528bd",
+                      "codigoTransaccionCore": "56C",
+                      "descripcionTransaccionCore": "ABONO POR TRANSFERENCIA DE FONDOS",
+                      "codigoExtendidoCore": "00690",
+                      "descripcionCorta": "TRANSF. FONDOS",
+                      "descripcionLarga": "TRASPASO DE:Juan Perez por MI Pago",
+                      "descripcionOficina": "INTERNET",
+                      "indicadorCreditoDebito": "C",
+                      "numeroDocumento": "",
+                      "monto": 350000,
+                      "saldoContableDelDia": 0,
+                      "saldoDisponibleDelDia": 0,
+                      "saldoDisponibleAcumulado": 2863902,
+                      "fechaContable": "20240821",
+                      "fechaTransaccion": "20240821",
+                      "fechaValorTransaccion": "20240821",
+                      "fechaHoraRealTransaccion": "20240820 15:06:25",
+                      "indicadorImpresionLibreta": "N",
+                      "codigoOrigen": "BCAMOVIL01",
+                      "idInternoTransaccion": "55181673269",
+                      "campoComplementario1": "Pedro Bustos por MI Pago",
+                      "campoComplementario2": "000005123456",
+                      "campoComplementario3": "BancoChile",
+                      "campoComplementario4": "128123456",
+                      "campoComplementario5": "004080123456",
+                      "campoComplementario6": "Juan Perez por MI Pago",
+                      "campoComplementario7": "TEFMPGO2408201506115765390620",
+                      "campoComplementario8": "Devolucion mecanico faltan 30",
+                      "campoComplementario9": "0135123456",
+                      "glosas": [
+                        "TRASPASO DE:Juan Perez por MI Pago"
+                      ],
+                      "adicionales": [
+                        {
+                          "campos": [
+                            {
+                              "dato": "Nombre Origen:",
+                              "importancia": "N"
+                            },
+                            {
+                              "dato": "Juan Perez por MI Pago",
+                              "importancia": "N"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Rut Origen:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "128123456",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Cuenta Origen:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "004080123456",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Rut Destinatario:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "0135123456",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Cuenta Abono:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "000005123456",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Id transaccion:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "TEFMPGO2408201506115765390620",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Comentario:",
+                              "importancia": "Z"
+                            },
+                            {
+                              "dato": "Devolucion mecanico faltan 30",
+                              "importancia": "Z"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "secuencial": "adc5c69e-7098-46b9-810c-34c56df2ee28",
+                      "codigoTransaccionCore": "G52",
+                      "descripcionTransaccionCore": "DEPOSITO EN EFECTIVO",
+                      "codigoExtendidoCore": "00000",
+                      "descripcionCorta": "DEP.EN EFECTIV",
+                      "descripcionLarga": "DEPOSITO EN EFECTIVO",
+                      "descripcionOficina": "PROVIDENCIA",
+                      "indicadorCreditoDebito": "C",
+                      "numeroDocumento": "3255017",
+                      "monto": 300000,
+                      "saldoContableDelDia": 2913176,
+                      "saldoDisponibleDelDia": 0,
+                      "saldoDisponibleAcumulado": 2913176,
+                      "fechaContable": "20240819",
+                      "fechaTransaccion": "20240819",
+                      "fechaValorTransaccion": "20240819",
+                      "fechaHoraRealTransaccion": "20240819 11:33:27",
+                      "indicadorImpresionLibreta": "N",
+                      "codigoOrigen": "CAJA",
+                      "idInternoTransaccion": "55161123456",
+                      "campoComplementario1": "",
+                      "campoComplementario2": "",
+                      "campoComplementario3": "",
+                      "campoComplementario4": "",
+                      "campoComplementario5": "3255017",
+                      "campoComplementario6": "",
+                      "campoComplementario7": "",
+                      "campoComplementario8": "",
+                      "campoComplementario9": "",
+                      "glosas": [
+                        "DEPOSITO EN EFECTIVO"
+                      ],
+                      "adicionales": []
+                    },
+                    {
+                      "secuencial": "29de6ab0-764f-46ae-abac-5e3dc584d6c1",
+                      "codigoTransaccionCore": "646",
+                      "descripcionTransaccionCore": "COMPRA COMERCIO NAC/INT",
+                      "codigoExtendidoCore": "00000",
+                      "descripcionCorta": "PAGO REDCOMPRA",
+                      "descripcionLarga": "PAGO:MERPAGO*SODEXO SO",
+                      "descripcionOficina": "OFICINA CENTRAL",
+                      "indicadorCreditoDebito": "D",
+                      "numeroDocumento": "",
+                      "monto": 2890,
+                      "saldoContableDelDia": 2913176,
+                      "saldoDisponibleDelDia": 0,
+                      "saldoDisponibleAcumulado": 2613176,
+                      "fechaContable": "20240819",
+                      "fechaTransaccion": "20240819",
+                      "fechaValorTransaccion": "20240819",
+                      "fechaHoraRealTransaccion": "20240819 11:01:39",
+                      "indicadorImpresionLibreta": "N",
+                      "codigoOrigen": "ATM_BCH",
+                      "idInternoTransaccion": "55161123456",
+                      "campoComplementario1": "000123456",
+                      "campoComplementario2": "MERPAGO*SODEXO SO",
+                      "campoComplementario3": "11020",
+                      "campoComplementario4": "A9",
+                      "campoComplementario5": "",
+                      "campoComplementario6": "",
+                      "campoComplementario7": "",
+                      "campoComplementario8": "",
+                      "campoComplementario9": "",
+                      "glosas": [
+                        "PAGO:MERPAGO*SODEXO SO"
+                      ],
+                      "adicionales": []
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Mal requerimiento"
+          }
+        }
+      }
+    },
+    "/obtener-periodo": {
+      "post": {
+        "tags": [
+          "movimientos-periodo-controller"
+        ],
+        "summary": "Devuelve los movimientos de un periodo determinado.",
+        "operationId": "getMovimientosByFechas",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "bearerAuth",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Bearer eyJhbGciOiJSUzI1..."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsultaMovimientosFechasRq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Movimientos de una cuenta",
+            "content": {
+              "application/json": {
+                "example": {
+                  "codigoRetorno": null,
+                  "glosaRespuesta": "EXITO",
+                  "tokenTipoProducto": "CTD",
+                  "numeroCuenta": "000005123456",
+                  "moneda": "CLP",
+                  "nombreTitular": "Bustos Pedro",
+                  "nombreSegundoTitular": "",
+                  "representanteLegal": "",
+                  "saldoDisponible": 2863902,
+                  "saldoContable": 2863902,
+                  "totalCargo": 35401323,
+                  "totalAbono": 8208436,
+                  "saldoDisponibleAcumuladoDelDia": 7407878,
+                  "saldoDisponibleAcumuladoAnterior": 0,
+                  "retencion1Dia": 0,
+                  "retencionNDia": 0,
+                  "montoAutorizadoLineaCredito": 2150000,
+                  "montoUtilizadoLineaCredito": 0,
+                  "saldoInicio": 7378429,
+                  "saldoFinal": 0,
+                  "indicadorLineaCredito": "N",
+                  "numeroLineaCredito": "010005282456",
+                  "montoAutorizadoLSP": 0,
+                  "llaveLibretaAhorro": "",
+                  "saldoLibreta": 0,
+                  "flagLibretaAhorro": "N",
+                  "flagGiroDiferido": "N",
+                  "flagReajustabilidad": "N",
+                  "monedaCuentaRedireccionamiento": "",
+                  "numeroMovimientos": 3,
+                  "totalRegistros": 3,
+                  "indiceInicioRespuesta": 1,
+                  "indiceTerminoRespuesta": 100,
+                  "cantidadRegistrosRespuesta": 100,
+                  "indicadorMasPaginas": "Y",
+                  "maximosGirosPerderIntereses": 0,
+                  "maximosGirosPerderReajustes": 0,
+                  "fechaUltimoCapitalIntereses": null,
+                  "fechaUltimoCapitalReajustes": null,
+                  "fechaProximaLiquidacionIntereses": null,
+                  "fechaProximaLiquidacionReajustes": null,
+                  "fechaEmisionUltimaCartola": 1722384000000,
+                  "movimientos": [
+                    {
+                      "secuencial": "00d2fd81-d5a0-410b-9452-69e72e7528bd",
+                      "codigoTransaccionCore": "56C",
+                      "descripcionTransaccionCore": "ABONO POR TRANSFERENCIA DE FONDOS",
+                      "codigoExtendidoCore": "00690",
+                      "descripcionCorta": "TRANSF. FONDOS",
+                      "descripcionLarga": "TRASPASO DE:Juan Perez por MI Pago",
+                      "descripcionOficina": "INTERNET",
+                      "indicadorCreditoDebito": "C",
+                      "numeroDocumento": "",
+                      "monto": 350000,
+                      "saldoContableDelDia": 0,
+                      "saldoDisponibleDelDia": 0,
+                      "saldoDisponibleAcumulado": 2863902,
+                      "fechaContable": "20240821",
+                      "fechaTransaccion": "20240821",
+                      "fechaValorTransaccion": "20240821",
+                      "fechaHoraRealTransaccion": "20240820 15:06:25",
+                      "indicadorImpresionLibreta": "N",
+                      "codigoOrigen": "BCAMOVIL01",
+                      "idInternoTransaccion": "55181673269",
+                      "campoComplementario1": "Pedro Bustos por MI Pago",
+                      "campoComplementario2": "000005123456",
+                      "campoComplementario3": "BancoChile",
+                      "campoComplementario4": "128123456",
+                      "campoComplementario5": "004080123456",
+                      "campoComplementario6": "Juan Perez por MI Pago",
+                      "campoComplementario7": "TEFMPGO2408201506115765390620",
+                      "campoComplementario8": "Devolucion mecanico faltan 30",
+                      "campoComplementario9": "0135123456",
+                      "glosas": [
+                        "TRASPASO DE:Juan Perez por MI Pago"
+                      ],
+                      "adicionales": [
+                        {
+                          "campos": [
+                            {
+                              "dato": "Nombre Origen:",
+                              "importancia": "N"
+                            },
+                            {
+                              "dato": "Juan Perez por MI Pago",
+                              "importancia": "N"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Rut Origen:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "128123456",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Cuenta Origen:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "004080123456",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Rut Destinatario:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "0135123456",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Cuenta Abono:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "000005123456",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Id transaccion:",
+                              "importancia": "*"
+                            },
+                            {
+                              "dato": "TEFMPGO2408201506115765390620",
+                              "importancia": "*"
+                            }
+                          ]
+                        },
+                        {
+                          "campos": [
+                            {
+                              "dato": "Comentario:",
+                              "importancia": "Z"
+                            },
+                            {
+                              "dato": "Devolucion mecanico faltan 30",
+                              "importancia": "Z"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "secuencial": "adc5c69e-7098-46b9-810c-34c56df2ee28",
+                      "codigoTransaccionCore": "G52",
+                      "descripcionTransaccionCore": "DEPOSITO EN EFECTIVO",
+                      "codigoExtendidoCore": "00000",
+                      "descripcionCorta": "DEP.EN EFECTIV",
+                      "descripcionLarga": "DEPOSITO EN EFECTIVO",
+                      "descripcionOficina": "PROVIDENCIA",
+                      "indicadorCreditoDebito": "C",
+                      "numeroDocumento": "3255017",
+                      "monto": 300000,
+                      "saldoContableDelDia": 2913176,
+                      "saldoDisponibleDelDia": 0,
+                      "saldoDisponibleAcumulado": 2913176,
+                      "fechaContable": "20240819",
+                      "fechaTransaccion": "20240819",
+                      "fechaValorTransaccion": "20240819",
+                      "fechaHoraRealTransaccion": "20240819 11:33:27",
+                      "indicadorImpresionLibreta": "N",
+                      "codigoOrigen": "CAJA",
+                      "idInternoTransaccion": "55161123456",
+                      "campoComplementario1": "",
+                      "campoComplementario2": "",
+                      "campoComplementario3": "",
+                      "campoComplementario4": "",
+                      "campoComplementario5": "3255017",
+                      "campoComplementario6": "",
+                      "campoComplementario7": "",
+                      "campoComplementario8": "",
+                      "campoComplementario9": "",
+                      "glosas": [
+                        "DEPOSITO EN EFECTIVO"
+                      ],
+                      "adicionales": []
+                    },
+                    {
+                      "secuencial": "29de6ab0-764f-46ae-abac-5e3dc584d6c1",
+                      "codigoTransaccionCore": "646",
+                      "descripcionTransaccionCore": "COMPRA COMERCIO NAC/INT",
+                      "codigoExtendidoCore": "00000",
+                      "descripcionCorta": "PAGO REDCOMPRA",
+                      "descripcionLarga": "PAGO:MERPAGO*SODEXO SO",
+                      "descripcionOficina": "OFICINA CENTRAL",
+                      "indicadorCreditoDebito": "D",
+                      "numeroDocumento": "",
+                      "monto": 2890,
+                      "saldoContableDelDia": 2913176,
+                      "saldoDisponibleDelDia": 0,
+                      "saldoDisponibleAcumulado": 2613176,
+                      "fechaContable": "20240819",
+                      "fechaTransaccion": "20240819",
+                      "fechaValorTransaccion": "20240819",
+                      "fechaHoraRealTransaccion": "20240819 11:01:39",
+                      "indicadorImpresionLibreta": "N",
+                      "codigoOrigen": "ATM_BCH",
+                      "idInternoTransaccion": "55161123456",
+                      "campoComplementario1": "000123456",
+                      "campoComplementario2": "MERPAGO*SODEXO SO",
+                      "campoComplementario3": "11020",
+                      "campoComplementario4": "A9",
+                      "campoComplementario5": "",
+                      "campoComplementario6": "",
+                      "campoComplementario7": "",
+                      "campoComplementario8": "",
+                      "campoComplementario9": "",
+                      "glosas": [
+                        "PAGO:MERPAGO*SODEXO SO"
+                      ],
+                      "adicionales": []
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Mal requerimiento"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "Client ID": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "client-id",
+        "x-key-type": "client_id"
+      },
+      "Client Secret": {
+        "type": "apiKey",
+        "in": "header",
+        "description": "Requerido solo en sandbox",
+        "name": "client-secret",
+        "x-key-type": "client_secret"
+      }
+    },
+    "schemas": {
+      "ConsultaMovCantidadRq": {
+        "required": [
+          "cantidadRegistros",
+          "cuenta",
+          "productoCuenta",
+          "rutApoderado",
+          "rutOrigen"
+        ],
+        "type": "object",
+        "properties": {
+          "rutOrigen": {
+            "type": "string",
+            "example": "12312312-1"
+          },
+          "productoCuenta": {
+            "type": "string",
+            "example": "CTD"
+          },
+          "cuenta": {
+            "type": "string",
+            "example": "123123123123"
+          },
+          "rutApoderado": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InfoApoderado"
+            }
+          },
+          "cantidadRegistros": {
+            "type": "string",
+            "example": "10"
+          },
+          "paginacionDesde": {
+            "type": "integer",
+            "format": "int32",
+            "example": 0
+          }
+        }
+      },
+      "InfoApoderado": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "example": "12312312-1"
+          }
+        }
+      },
+      "ConsultaMovResumenRq": {
+        "required": [
+          "cuenta",
+          "productoCuenta",
+          "rutApoderado",
+          "rutOrigen"
+        ],
+        "type": "object",
+        "properties": {
+          "rutOrigen": {
+            "type": "string",
+            "example": "123123123-1"
+          },
+          "productoCuenta": {
+            "type": "string",
+            "example": "CTD"
+          },
+          "cuenta": {
+            "type": "string",
+            "example": "123123123"
+          },
+          "rutApoderado": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InfoApoderado"
+            }
+          },
+          "paginacionDesde": {
+            "type": "integer",
+            "format": "int32",
+            "example": 0
+          }
+        }
+      },
+      "ConsultaMovimientosFechasRq": {
+        "required": [
+          "cuenta",
+          "productoCuenta",
+          "rutApoderado",
+          "rutOrigen"
+        ],
+        "type": "object",
+        "properties": {
+          "rutOrigen": {
+            "type": "string",
+            "example": "123123123-1"
+          },
+          "productoCuenta": {
+            "type": "string",
+            "example": "CTD"
+          },
+          "cuenta": {
+            "type": "string",
+            "example": "123123123123"
+          },
+          "rutApoderado": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InfoApoderado"
+            }
+          },
+          "fechaDesde": {
+            "type": "string",
+            "format": "date",
+            "example": "2025-01-09"
+          },
+          "fechaHasta": {
+            "type": "string",
+            "format": "date",
+            "example": "2025-09-09"
+          },
+          "paginacionDesde": {
+            "type": "integer",
+            "format": "int32",
+            "example": 0
+          }
+        }
+      },
+      "salidaErrorApi": {
+        "description": "",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "properties": {
+                "userMessage": {
+                  "type": "string"
+                },
+                "developerMessage": {
+                  "type": "string"
+                },
+                "supportMessage": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "moreInfo": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "result": {}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "security": [
+    {
+      "Client ID": [],
+      "Client Secret": []
+    }
+  ],
+  "x-ibm-endpoints": [
+    {
+      "url": "https://gw.apistore.bancochile.cl/banco-chile/sandbox/v1/movimientos-cuenta",
+      "type": [
+        "production",
+        "development"
+      ]
+    }
+  ]
+}

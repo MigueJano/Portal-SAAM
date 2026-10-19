@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Banco y correo{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1 class="h4 mb-3">Banco y correo</h1>
+  <div class="row g-3">
+    <div class="col-md-4"><div class="card h-100"><div class="card-body">
+      <h2 class="h6">Conciliación bancaria</h2>
+      <p>{{ movimientos_pendientes }} movimientos pendientes de revisión.</p>
+      {% if user.is_staff %}<a class="btn btn-outline-primary" href="{% url 'integraciones:conciliacion_bancaria' %}">Revisar movimientos</a>{% else %}<span class="text-muted small">Disponible para administradores.</span>{% endif %}
+    </div></div></div>
+    <div class="col-md-4"><div class="card h-100"><div class="card-body">
+      <h2 class="h6">Documentos tributarios</h2>
+      <p>{{ documentos_pendientes }} adjuntos pendientes de revisión.</p>
+      <a class="btn btn-outline-primary" href="{% url 'integraciones:documentos_tributarios' %}">Abrir bandeja</a>
+    </div></div></div>
+    <div class="col-md-4"><div class="card h-100"><div class="card-body">
+      <h2 class="h6">Correo saliente</h2>
+      <p>Enviar mensajes a clientes y contactos de proveedores.</p>
+      <a class="btn btn-outline-primary" href="{% url 'integraciones:redactar_correo' %}">Redactar correo</a>
+    </div></div></div>
+  </div>
+</div>
+{% endblock %}
+

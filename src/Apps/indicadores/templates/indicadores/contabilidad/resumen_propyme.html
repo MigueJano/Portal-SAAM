@@ -13,6 +13,22 @@
     </div>
   </div>
 
+  <div class="card mb-4">
+    <div class="card-header d-flex flex-wrap justify-content-between gap-2">
+      <strong>Conciliación bancaria</strong>
+      {% if user.is_staff %}<a class="btn btn-sm btn-outline-primary" href="{% url 'integraciones:conciliacion_bancaria' %}">Revisar movimientos</a>{% endif %}
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3"><div class="small text-muted">Abonos recibidos</div><strong>{{ resumen.abonos_bancarios_count }}</strong></div>
+        <div class="col-md-3"><div class="small text-muted">Total abonado</div><strong>$ {{ resumen.abonos_bancarios_total|formatear_miles }}</strong></div>
+        <div class="col-md-3"><div class="small text-muted">Pagos conciliados</div><strong>$ {{ resumen.pagos_conciliados_total|formatear_miles }}</strong></div>
+        <div class="col-md-3"><div class="small text-muted">Movimientos pendientes</div><strong>{{ resumen.abonos_pendientes_count }}</strong></div>
+      </div>
+      <p class="small text-muted mb-0 mt-3">Los abonos bancarios no se reconocen como ventas nuevas. Solo complementan la trazabilidad de cobro de ventas ya registradas.</p>
+    </div>
+  </div>
+
   <form method="get" class="row g-2 align-items-end mb-3">
     <div class="col-md-3">
       <label class="form-label">Mes</label>

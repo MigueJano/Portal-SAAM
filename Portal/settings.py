@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "Apps.indicadores.apps.IndicadoresConfig",
     "Apps.observaciones.apps.ObservacionesConfig",
     "Apps.administracion.apps.AdministracionConfig",
+    "Apps.integraciones.apps.IntegracionesConfig",
 ]
 
 
@@ -135,3 +136,29 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "/auth/login/"
 LOGIN_REDIRECT_URL = "/pedidos/inicio/"
 LOGOUT_REDIRECT_URL = "/auth/login/"
+
+
+# Integraciones externas. Las credenciales se leen exclusivamente desde el
+# entorno y nunca se guardan en Git ni en la base de datos.
+EMAIL_BACKEND = os.getenv("DJANGO_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_SMTP_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_SMTP_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_SMTP_USE_TLS", "1") == "1"
+EMAIL_HOST_USER = os.getenv("EMAIL_SMTP_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_SMTP_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "portal-saam@localhost")
+
+EMAIL_IMAP_HOST = os.getenv("EMAIL_IMAP_HOST", "imap.gmail.com")
+EMAIL_IMAP_PORT = int(os.getenv("EMAIL_IMAP_PORT", "993"))
+EMAIL_IMAP_USER = os.getenv("EMAIL_IMAP_USER", EMAIL_HOST_USER)
+EMAIL_IMAP_PASSWORD = os.getenv("EMAIL_IMAP_PASSWORD", EMAIL_HOST_PASSWORD)
+EMAIL_IMAP_FOLDER = os.getenv("EMAIL_IMAP_FOLDER", "INBOX")
+
+BANCO_CHILE_MOVIMIENTOS_URL = os.getenv("BANCO_CHILE_MOVIMIENTOS_URL", "")
+BANCO_CHILE_CLIENT_ID = os.getenv("BANCO_CHILE_CLIENT_ID", "")
+BANCO_CHILE_CLIENT_SECRET = os.getenv("BANCO_CHILE_CLIENT_SECRET", "")
+BANCO_CHILE_BEARER_TOKEN = os.getenv("BANCO_CHILE_BEARER_TOKEN", "")
+BANCO_CHILE_RUT_ORIGEN = os.getenv("BANCO_CHILE_RUT_ORIGEN", "")
+BANCO_CHILE_PRODUCTO_CUENTA = os.getenv("BANCO_CHILE_PRODUCTO_CUENTA", "CTD")
+BANCO_CHILE_CUENTA = os.getenv("BANCO_CHILE_CUENTA", "")
+BANCO_CHILE_RUT_APODERADO = os.getenv("BANCO_CHILE_RUT_APODERADO", "")

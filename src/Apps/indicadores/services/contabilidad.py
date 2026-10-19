@@ -19,6 +19,7 @@ from typing import Iterable
 from django.db.models import Case, F, IntegerField, Sum, Value, When
 
 from Apps.Pedidos.models import Producto, Recepcion, Stock, Venta
+from Apps.integraciones.models import ConciliacionPago, MovimientoBancario
 
 
 DOS_DEC = Decimal("0.01")
@@ -303,6 +304,16 @@ def obtener_resumen_periodo(periodo: Periodo) -> dict[str, Decimal | int]:
 
     costo_ventas = obtener_costo_ventas_periodo(periodo)
     margen_bruto = _q2(ventas_total_neto - costo_ventas["costo_ventas"])
+    abonos = MovimientoBancario.objects.filter(
+        fecha__year=periodo.year,
+        fecha__month=periodo.month,
+        tipo=MovimientoBancario.TIPO_ABONO,
+    )
+    pagos_confirmados = ConciliacionPago.objects.filter(
+        movimiento__fecha__year=periodo.year,
+        movimiento__fecha__month=periodo.month,
+        estado=ConciliacionPago.ESTADO_CONFIRMADA,
+    )
 
     return {
         "ventas_count": ventas.count(),
@@ -315,6 +326,10 @@ def obtener_resumen_periodo(periodo: Periodo) -> dict[str, Decimal | int]:
         "compras_total": compras_total,
         **costo_ventas,
         "margen_bruto": margen_bruto,
+        "abonos_bancarios_count": abonos.count(),
+        "abonos_bancarios_total": _q2(abonos.aggregate(total=Sum("monto"))["total"]),
+        "pagos_conciliados_total": _q2(pagos_confirmados.aggregate(total=Sum("monto_aplicado"))["total"]),
+        "abonos_pendientes_count": abonos.filter(estado=MovimientoBancario.ESTADO_PENDIENTE).count(),
     }
 
 

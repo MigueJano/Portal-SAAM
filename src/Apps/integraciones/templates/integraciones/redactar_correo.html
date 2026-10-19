@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Redactar correo{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1 class="h4">Redactar correo</h1>
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <form method="post" enctype="multipart/form-data" class="card card-body">
+        {% csrf_token %}{{ form.as_p }}
+        <button class="btn btn-primary" type="submit">Enviar correo</button>
+      </form>
+    </div>
+    <div class="col-lg-5">
+      <div class="card"><div class="card-header">Destinatarios disponibles</div><div class="card-body">
+        {% for tipo, nombre, correo in destinatarios %}
+          <button type="button" class="btn btn-link d-block p-1 text-start js-destinatario" data-correo="{{ correo }}">{{ tipo }} · {{ nombre }} — {{ correo }}</button>
+        {% empty %}<p class="text-muted mb-0">No hay correos registrados.</p>{% endfor %}
+      </div></div>
+    </div>
+  </div>
+</div>
+<script>document.querySelectorAll('.js-destinatario').forEach(function (b) { b.addEventListener('click', function () { document.getElementById('id_destinatario').value = b.dataset.correo; }); });</script>
+{% endblock %}
+

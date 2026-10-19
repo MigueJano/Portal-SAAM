@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Conciliación bancaria{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+  <h1 class="h4">Conciliación Banco de Chile</h1>
+  <p class="text-muted">Solo una confirmación explícita aplica el abono al pedido.</p>
+  {% if ultimo_saldo %}
+  <div class="row g-2 mb-3">
+    <div class="col-md-3"><div class="card card-body"><span class="small text-muted">Cuenta</span><strong>{{ ultimo_saldo.cuenta_enmascarada }}</strong></div></div>
+    <div class="col-md-3"><div class="card card-body"><span class="small text-muted">Saldo disponible</span><strong>${{ ultimo_saldo.saldo_disponible }}</strong></div></div>
+    <div class="col-md-3"><div class="card card-body"><span class="small text-muted">Saldo contable</span><strong>${{ ultimo_saldo.saldo_contable }}</strong></div></div>
+    <div class="col-md-3"><div class="card card-body"><span class="small text-muted">Última consulta</span><strong>{{ ultimo_saldo.consultado_en|date:"d-m-Y H:i" }}</strong></div></div>
+  </div>
+  {% endif %}
+  <div class="table-responsive"><table class="table table-sm table-striped align-middle">
+    <thead><tr><th>Fecha</th><th>Descripción</th><th>Referencia</th><th>Tipo</th><th>Monto</th><th>Estado / propuestas</th></tr></thead>
+    <tbody>{% for mov in movimientos %}<tr>
+      <td>{{ mov.fecha|date:"d-m-Y" }}</td><td>{{ mov.descripcion }}</td><td>{{ mov.referencia|default:"—" }}</td><td>{{ mov.get_tipo_display }}</td><td>${{ mov.monto }}</td>
+      <td><span class="badge bg-secondary">{{ mov.get_estado_display }}</span>
+        {% if mov.estado == 'PENDIENTE' %}<form class="d-inline" method="post" action="{% url 'integraciones:proponer_movimiento' mov.id %}">{% csrf_token %}<button class="btn btn-sm btn-outline-primary">Buscar coincidencia</button></form>{% endif %}
+        {% if mov.estado == 'PENDIENTE' and mov.tipo == 'ABONO' %}<form class="row g-1 mt-1" method="post" action="{% url 'integraciones:crear_conciliacion_manual' mov.id %}">{% csrf_token %}<div class="col"><select class="form-select form-select-sm" name="pedido" required><option value="">Pedido entregado…</option>{% for pedido in pedidos_entregados %}<option value="{{ pedido.id }}">#{{ pedido.id }} · {{ pedido.nombre_cliente }}</option>{% endfor %}</select></div><div class="col"><input class="form-control form-control-sm" name="monto_aplicado" type="number" min="0.01" step="0.01" max="{{ mov.monto }}" placeholder="Monto" required></div><div class="col-auto"><button class="btn btn-sm btn-outline-secondary">Asignar</button></div></form>{% endif %}
+        {% for c in mov.conciliaciones.all %}<div class="mt-1">Pedido #{{ c.pedido_id }} · {{ c.pedido.nombre_cliente }} · ${{ c.monto_aplicado }} · {{ c.get_estado_display }}
+          {% if c.estado == 'PROPUESTA' %}<form class="d-inline" method="post" action="{% url 'integraciones:confirmar' c.id %}">{% csrf_token %}<button class="btn btn-sm btn-success">Confirmar</button></form>{% endif %}
+        </div>{% endfor %}
+      </td>
+    </tr>{% empty %}<tr><td colspan="6" class="text-center text-muted">No hay movimientos importados.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}
