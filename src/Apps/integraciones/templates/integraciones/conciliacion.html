@@ -4,6 +4,18 @@
 <div class="container-fluid py-4">
   <h1 class="h4">Conciliación Banco de Chile</h1>
   <p class="text-muted">Solo una confirmación explícita aplica el abono al pedido.</p>
+  <div class="card mb-3">
+    <div class="card-header"><strong>Consultar movimientos y saldos</strong></div>
+    <div class="card-body">
+      <form method="post" action="{% url 'integraciones:sincronizar_banco' %}" class="row g-2 align-items-end">
+        {% csrf_token %}
+        <div class="col-md-4"><label class="form-label" for="{{ consulta_form.desde.id_for_label }}">{{ consulta_form.desde.label }}</label>{{ consulta_form.desde }}</div>
+        <div class="col-md-4"><label class="form-label" for="{{ consulta_form.hasta.id_for_label }}">{{ consulta_form.hasta.label }}</label>{{ consulta_form.hasta }}</div>
+        <div class="col-md-4"><button type="submit" class="btn btn-primary w-100">Consultar Banco de Chile</button></div>
+      </form>
+      <div class="form-text mt-2">La consulta es de solo lectura y no concilia pagos automáticamente.</div>
+    </div>
+  </div>
   {% if ultimo_saldo %}
   <div class="row g-2 mb-3">
     <div class="col-md-3"><div class="card card-body"><span class="small text-muted">Cuenta</span><strong>{{ ultimo_saldo.cuenta_enmascarada }}</strong></div></div>

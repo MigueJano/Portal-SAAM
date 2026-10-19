@@ -3,10 +3,12 @@ import json
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from django.urls import reverse
 
 from Apps.Pedidos.models import Cliente, Pedido, Venta
 from Apps.integraciones.models import (
@@ -181,3 +183,34 @@ class DocumentoEntranteTests(TestCase):
                 )
                 self.assertFalse(creado_otra_vez)
                 self.assertEqual(DocumentoTributarioEntrante.objects.count(), 1)
+
+
+class SincronizacionBancoViewTests(TestCase):
+    def setUp(self):
+        self.usuario = get_user_model().objects.create_user(
+            "admin_banco", password="x", is_staff=True
+        )
+        self.client.force_login(self.usuario)
+
+    def test_pantalla_muestra_consulta_y_post_sincroniza(self):
+        respuesta = {"movimientos": [], "saldoDisponible": 1000}
+        saldo = SimpleNamespace(saldo_disponible=Decimal("1000"))
+        with patch(
+            "Apps.integraciones.views.consultar_movimientos",
+            return_value=respuesta,
+        ) as consultar, patch(
+            "Apps.integraciones.views.guardar_resultado",
+            return_value=(0, 0, saldo, True),
+        ) as guardar:
+            get_response = self.client.get(reverse("integraciones:conciliacion_bancaria"))
+            post_response = self.client.post(
+                reverse("integraciones:sincronizar_banco"),
+                {"desde": "2026-10-18", "hasta": "2026-10-19"},
+                follow=True,
+            )
+
+        self.assertContains(get_response, "Consultar Banco de Chile")
+        self.assertEqual(post_response.status_code, 200)
+        self.assertContains(post_response, "Consulta completada")
+        consultar.assert_called_once_with(date(2026, 10, 18), date(2026, 10, 19))
+        guardar.assert_called_once()

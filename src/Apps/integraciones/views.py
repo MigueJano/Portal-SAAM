@@ -3,10 +3,11 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from .forms import ConciliacionManualForm, CorreoForm, destinatarios_disponibles
+from .forms import ConsultaBancoForm, ConciliacionManualForm, CorreoForm, destinatarios_disponibles
 from .models import ConciliacionPago, DocumentoTributarioEntrante, MovimientoBancario, SaldoBancario
 from .services.conciliacion import confirmar_conciliacion, proponer_conciliaciones
 from .services.correo import enviar_correo
+from .services.banco_chile import consultar_movimientos, guardar_resultado
 
 
 @login_required
@@ -68,8 +69,37 @@ def conciliacion_bancaria(request):
             "movimientos": movimientos,
             "pedidos_entregados": pedidos,
             "ultimo_saldo": SaldoBancario.objects.first(),
+            "consulta_form": ConsultaBancoForm(),
         },
     )
+
+
+@require_POST
+@user_passes_test(lambda usuario: usuario.is_staff)
+def sincronizar_banco(request):
+    form = ConsultaBancoForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Revise el rango de fechas de la consulta bancaria.")
+        return redirect("integraciones:conciliacion_bancaria")
+    desde = form.cleaned_data["desde"]
+    hasta = form.cleaned_data["hasta"]
+    try:
+        respuesta = consultar_movimientos(desde, hasta)
+        creados, existentes, saldo, saldo_creado = guardar_resultado(
+            respuesta,
+            desde=desde,
+            hasta=hasta,
+        )
+    except Exception as exc:
+        messages.error(request, f"No fue posible consultar Banco de Chile: {exc}")
+    else:
+        estado_saldo = "registrado" if saldo_creado else "ya existente"
+        messages.success(
+            request,
+            f"Consulta completada: {creados} movimientos nuevos, "
+            f"{existentes} ya existentes y saldo {estado_saldo} (${saldo.saldo_disponible}).",
+        )
+    return redirect("integraciones:conciliacion_bancaria")
 
 
 @require_POST
