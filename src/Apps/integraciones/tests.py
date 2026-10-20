@@ -111,6 +111,34 @@ class BancoChileImportTests(TestCase):
         self.assertEqual(cuerpo_2["paginacionDesde"], 100)
         self.assertEqual(requests[0].get_header("Authorization"), "Bearer token")
 
+    @override_settings(
+        BANCO_CHILE_MOVIMIENTOS_URL="https://gw.example/sandbox/v1/movimientos-cuenta",
+        BANCO_CHILE_CLIENT_ID="cliente",
+        BANCO_CHILE_CLIENT_SECRET="secreto",
+        BANCO_CHILE_BEARER_TOKEN="token",
+        BANCO_CHILE_RUT_ORIGEN="76123456-7",
+        BANCO_CHILE_PRODUCTO_CUENTA="CTD",
+        BANCO_CHILE_CUENTA="123456789",
+        BANCO_CHILE_RUT_APODERADO="11111111-1",
+    )
+    def test_cursor_repetido_cierra_paginacion_y_elimina_duplicados(self):
+        respuesta = {
+            "codigoRetorno": None,
+            "movimientos": [{"secuencial": "1"}],
+            "indicadorMasPaginas": "Y",
+            "indiceTerminoRespuesta": 0,
+        }
+
+        with patch(
+            "Apps.integraciones.services.banco_chile._solicitar_pagina",
+            return_value=respuesta,
+        ) as solicitar:
+            resultado = consultar_movimientos(date(2026, 10, 1), date(2026, 10, 19))
+
+        self.assertEqual(resultado["movimientos"], [{"secuencial": "1"}])
+        self.assertIn("repitió el cursor", resultado["advertenciasPaginacion"][0])
+        solicitar.assert_called_once()
+
 
 class ConciliacionTests(TestCase):
     def setUp(self):

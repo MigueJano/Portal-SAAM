@@ -205,26 +205,49 @@ def consultar_movimientos(desde: date, hasta: date) -> dict:
         raise BancoChileError("La fecha inicial no puede ser posterior a la fecha final.")
     config = _configuracion()
     movimientos = []
+    movimientos_vistos = set()
     pagina = 0
     cursores_usados = set()
     respuesta_final = {}
+    advertencias = []
     for _ in range(100):
         if pagina in cursores_usados:
-            raise BancoChileError("La API repitió el cursor de paginación.")
+            advertencias.append(
+                f"Banco de Chile repitió el cursor {pagina}; la paginación se cerró de forma segura."
+            )
+            break
         cursores_usados.add(pagina)
         respuesta = _solicitar_pagina(config, desde, hasta, pagina)
-        movimientos.extend(respuesta.get("movimientos", []))
+        for movimiento in respuesta.get("movimientos", []):
+            firma = json.dumps(
+                movimiento,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            if firma not in movimientos_vistos:
+                movimientos_vistos.add(firma)
+                movimientos.append(movimiento)
         respuesta_final = respuesta
         if str(respuesta.get("indicadorMasPaginas", "N")).upper() != "Y":
             break
         try:
-            pagina = int(respuesta.get("indiceTerminoRespuesta"))
+            pagina_siguiente = int(respuesta.get("indiceTerminoRespuesta"))
         except (TypeError, ValueError) as exc:
             raise BancoChileError("La API indicó más páginas sin entregar un cursor válido.") from exc
+        if pagina_siguiente in cursores_usados:
+            advertencias.append(
+                f"Banco de Chile repitió el cursor {pagina_siguiente}; "
+                "se conservaron los movimientos recibidos y la paginación se cerró de forma segura."
+            )
+            break
+        pagina = pagina_siguiente
     else:
         raise BancoChileError("La consulta superó el máximo de 100 páginas permitido por seguridad.")
     respuesta_final = dict(respuesta_final)
     respuesta_final["movimientos"] = movimientos
+    if advertencias:
+        respuesta_final["advertenciasPaginacion"] = advertencias
     return respuesta_final
 
 
