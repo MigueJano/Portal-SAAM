@@ -14,6 +14,26 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 
+def _load_local_env(path: Path) -> None:
+    """Carga un .env local sencillo sin reemplazar variables del servidor."""
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if value[:1] == value[-1:] and value[:1] in {'"', "'"}:
+            value = value[1:-1]
+        if key:
+            os.environ.setdefault(key, value)
+
+
+_load_local_env(BASE_DIR / ".env")
+
+
 DB_SELECTION_FILE = BASE_DIR / "Database" / "active_database.json"
 
 
