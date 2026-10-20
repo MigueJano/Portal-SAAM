@@ -334,6 +334,10 @@ def flujo_inventario_producto(request, producto_id):
             }
         )
 
+    # El saldo de cada fila se calcula cronologicamente, pero el usuario
+    # consulta primero los movimientos mas recientes.
+    movimientos_rows.reverse()
+
     stock_disponible = subtotal - reservas_pendientes
 
     return render(

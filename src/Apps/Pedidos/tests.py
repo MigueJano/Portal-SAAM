@@ -1560,18 +1560,20 @@ class InventarioPeriodoTests(TestCase):
 
         movimientos = resp.context["movimientos_rows"]
         self.assertEqual(len(movimientos), 3)
-        self.assertEqual(movimientos[0]["transaccion"], "Entrada / Factura #1001")
+        self.assertEqual(movimientos[0]["transaccion"], "Salida - Despacho")
         self.assertEqual(movimientos[1]["transaccion"], "Entrada / Factura #1002")
-        self.assertEqual(movimientos[2]["transaccion"], "Salida - Despacho")
-        self.assertEqual(movimientos[0]["subtotal"], 10)
+        self.assertEqual(movimientos[2]["transaccion"], "Entrada / Factura #1001")
+        self.assertEqual(movimientos[0]["subtotal"], 28)
         self.assertEqual(movimientos[1]["subtotal"], 30)
-        self.assertEqual(movimientos[2]["subtotal"], 28)
-        self.assertFalse(movimientos[0]["es_salida"])
-        self.assertTrue(movimientos[2]["es_salida"])
+        self.assertEqual(movimientos[2]["subtotal"], 10)
+        self.assertTrue(movimientos[0]["es_salida"])
+        self.assertFalse(movimientos[2]["es_salida"])
         self.assertEqual(resp.context["subtotal_entradas"], 30)
         self.assertEqual(resp.context["subtotal_salidas"], 2)
         self.assertEqual(resp.context["reservas_pendientes"], 4)
         self.assertEqual(resp.context["subtotal_final"], 24)
+        self.assertContains(resp, 'data-page-length="25"')
+        self.assertContains(resp, "m&aacute;s reciente al m&aacute;s antiguo")
 
     def test_flujo_inventario_producto_muestre_responsable_desde_stock(self):
         Stock.objects.filter(pk=self.ingreso_enero.pk).update(responsable=self.user)
@@ -1584,7 +1586,8 @@ class InventarioPeriodoTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         movimientos = resp.context["movimientos_rows"]
 
-        self.assertEqual(movimientos[0]["responsable"], self.user.username)
+        ingreso = next(row for row in movimientos if row["movimiento_id"] == self.ingreso_enero.id)
+        self.assertEqual(ingreso["responsable"], self.user.username)
         self.assertNotIn("Reserva pendiente", [row["transaccion"] for row in movimientos])
         self.assertEqual(resp.context["reservas_pendientes"], 4)
 
