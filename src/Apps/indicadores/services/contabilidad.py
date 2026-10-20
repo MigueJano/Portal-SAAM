@@ -405,7 +405,11 @@ def filas_stock_contable(periodo: Periodo | None = None) -> list[dict]:
     despachos = _agregar_por_producto("DESPACHO", fecha_corte=fecha_corte)
     valuacion = _valuacion_fifo_por_producto(fecha_corte=fecha_corte)
 
-    productos = Producto.objects.all().order_by("nombre_producto")
+    # Los packs son productos comerciales virtuales: su disponibilidad se
+    # obtiene desde sus componentes y no constituye una existencia fisica
+    # adicional. Incluirlos aqui duplicaria el catalogo de inventario y podria
+    # inducir a sumar dos veces las mismas unidades.
+    productos = Producto.objects.filter(tipo_producto="SIMPLE").order_by("nombre_producto")
     filas: list[dict] = []
     for prod in productos:
         qty_res = int(reservas.get(prod.id, 0))

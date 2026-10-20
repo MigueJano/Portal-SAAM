@@ -1309,6 +1309,38 @@ class InventarioPeriodoTests(TestCase):
         self.assertEqual(fila_marzo["costo_unitario_fifo"], Decimal("135.71"))
         self.assertEqual(fila_marzo["total_producto"], Decimal("3800.00"))
 
+    def test_inventario_fisico_excluye_productos_pack(self):
+        pack = Producto.objects.create(
+            categoria_producto=self.categoria,
+            subcategoria_producto=self.subcategoria,
+            tipo_producto="PACK",
+            codigo_producto_interno="INVPK001",
+            nombre_producto="Pack Virtual Inventario",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=0,
+            empaque_primario=self.emp_p,
+            empaque_secundario=self.emp_s,
+            empaque_terciario=self.emp_t,
+        )
+
+        filas = filas_stock_contable(Periodo(year=2026, month=3))
+        self.assertNotIn(pack.id, {fila["producto_id"] for fila in filas})
+
+        resp = self.client.get(
+            reverse("stock_productos"),
+            data={"year": 2026, "month": 3, "stock_view": "todos"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, pack.nombre_producto)
+        self.assertContains(
+            resp,
+            "Los packs no se contabilizan como existencias independientes",
+        )
+
     def test_costo_ventas_usa_inventario_inicial_compras_e_inventario_final(self):
         febrero = obtener_costo_ventas_periodo(Periodo(year=2026, month=2))
         self.assertEqual(febrero["inventario_inicial"], Decimal("1000.00"))
