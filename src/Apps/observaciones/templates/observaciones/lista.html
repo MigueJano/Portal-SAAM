@@ -15,6 +15,7 @@
         <option value="MEJORA" {% if tipo == 'MEJORA' %}selected{% endif %}>Mejora</option>
         <option value="ERROR" {% if tipo == 'ERROR' %}selected{% endif %}>Error</option>
         <option value="PREGUNTA" {% if tipo == 'PREGUNTA' %}selected{% endif %}>Pregunta</option>
+        <option value="COMENTARIO" {% if tipo == 'COMENTARIO' %}selected{% endif %}>Comentarios</option>
       </select>
 
       <input type="search" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="Buscar texto...">
@@ -29,7 +30,7 @@
           <th>ID</th>
           <th>Fecha</th>
           <th>Usuario</th>
-          <th>Tipo</th>
+          <th>Tipo de requerimiento</th>
           <th>Observacion</th>
           <th>Accion</th>
         </tr>
@@ -41,7 +42,7 @@
           <td data-order="{{ o.creado_en|date:'Y-m-d H:i:s' }}">{{ o.creado_en|date:"d/m/Y H:i" }}</td>
           <td>{{ o.usuario|default:'(anonimo)' }}</td>
           <td class="text-center">
-            <span class="badge {% if o.tipo == 'ERROR' %}bg-danger{% elif o.tipo == 'PREGUNTA' %}bg-warning text-dark{% else %}bg-primary{% endif %}">
+            <span class="badge {% if o.tipo == 'ERROR' %}bg-danger{% elif o.tipo == 'PREGUNTA' %}bg-warning text-dark{% elif o.tipo == 'COMENTARIO' %}bg-info text-dark{% else %}bg-primary{% endif %}">
               {{ o.get_tipo_display }}
             </span>
           </td>

@@ -33,6 +33,7 @@ class IndicadoresViewsTests(TestCase):
         self.urls = [
             reverse("dashboard_financiero_simple"),
             reverse("dashboard_ventas"),
+            reverse("informe_productos"),
             reverse("dashboard_operaciones"),
             reverse("dashboard_estrategia"),
             reverse("dashboard_estrategia_precios"),
@@ -72,6 +73,8 @@ class IndicadoresViewsTests(TestCase):
         self.assertContains(resp, "Contabilidad Pro Pyme", count=1)
         self.assertContains(resp, "Listas de Precios Vigentes", count=1)
         self.assertContains(resp, "Precios por Cliente", count=1)
+        self.assertContains(resp, "Productos")
+        self.assertContains(resp, reverse("informe_productos"), count=1)
         self.assertNotContains(resp, reverse("dashboard_inventario"))
         self.assertContains(resp, reverse("stock_productos"))
         self.assertContains(resp, "css/style_base.css?v=")
@@ -118,6 +121,98 @@ class IndicadoresViewsTests(TestCase):
             with self.subTest(table=etiqueta):
                 self.assertIn('data-tabla-filtros="false"', etiqueta)
                 self.assertNotIn("js-tabla-filtros", etiqueta)
+
+
+class InformeProductosTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("informe_productos", password="test123")
+        self.client.force_login(self.user)
+        self.categoria = Categoria.objects.create(categoria="Categoría informe")
+        self.producto = Producto.objects.create(
+            categoria_producto=self.categoria,
+            codigo_producto_interno="INF-1",
+            nombre_producto="Producto informe",
+            qty_terciario=4,
+            qty_secundario=6,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        self.cliente = Cliente.objects.create(
+            nombre_cliente="Comprador informe",
+            rut_cliente="77666666-6",
+            direccion_cliente="Dirección cliente",
+            direccion_bodega_cliente="Dirección bodega",
+            cliente_activo=True,
+            telefono_cliente="+56966666666",
+            correo_cliente="comprador@test.local",
+            categoria="PYME",
+        )
+        self.pedido = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=date(2026, 10, 10),
+            estado_pedido="Finalizado",
+        )
+        self.venta = Venta.objects.create(
+            pedidoid=self.pedido,
+            fecha_venta=date(2026, 10, 15),
+            documento_pedido="Factura",
+            num_documento=321,
+            venta_neto_pedido=Decimal("3000.00"),
+            venta_iva_pedido=Decimal("570.00"),
+            venta_total_pedido=Decimal("3570.00"),
+        )
+        UtilidadProducto.objects.create(
+            venta=self.venta,
+            producto=self.producto,
+            empaque="SECUNDARIO",
+            cantidad=12,
+            precio_compra_unitario=Decimal("100.00"),
+            precio_venta_unitario=Decimal("250.00"),
+            utilidad=Decimal("150.00"),
+            utilidad_porcentaje=Decimal("60.00"),
+            fecha=timezone.now(),
+        )
+
+    def test_informe_muestra_venta_y_comprador_en_unidad_primaria(self):
+        resp = self.client.get(
+            reverse("informe_productos"),
+            data={"fecha_desde": "2026-10-01", "fecha_hasta": "2026-10-31"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["resumen"]["cantidad"], Decimal("12"))
+        self.assertEqual(resp.context["resumen"]["total_venta"], Decimal("3000.00"))
+        self.assertEqual(resp.context["resumen"]["compradores"], 1)
+        self.assertContains(resp, "Comprador informe")
+        self.assertContains(resp, "Producto informe")
+        self.assertContains(resp, "grafico-productos")
+
+    def test_informe_convierte_cantidad_y_precio_a_unidad_secundaria(self):
+        resp = self.client.get(
+            reverse("informe_productos"),
+            data={
+                "fecha_desde": "2026-10-01",
+                "fecha_hasta": "2026-10-31",
+                "unidad": "SECUNDARIO",
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["resumen"]["cantidad"], Decimal("2"))
+        self.assertEqual(resp.context["filas"][0]["precio"], Decimal("1500.00"))
+        self.assertEqual(resp.context["filas"][0]["total"], Decimal("3000.00"))
+
+    def test_informe_respeta_periodo_sin_alterar_ventas(self):
+        resp = self.client.get(
+            reverse("informe_productos"),
+            data={"fecha_desde": "2026-09-01", "fecha_hasta": "2026-09-30"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["filas"], [])
+        self.assertEqual(UtilidadProducto.objects.get().cantidad, 12)
 
 
 class DashboardFinancieroPpmTests(TestCase):

@@ -5,6 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .models import ActualizacionSistema, Observacion, VersionRegistro
+from .forms import ObservacionForm
 from .services import GitStatus, SystemUpdateError, _python_executable
 
 
@@ -25,6 +26,24 @@ class ResolverObservacionTests(TestCase):
         }
         data.update(kwargs)
         return Observacion.objects.create(**data)
+
+    def test_comentarios_disponible_como_tipo_de_requerimiento(self):
+        form = ObservacionForm()
+        self.assertIn(("COMENTARIO", "Comentarios"), form.fields["tipo"].choices)
+
+        observacion = self._crear_observacion(
+            tipo="COMENTARIO",
+            observacion="Comentario general del usuario.",
+        )
+        response = self.client.get(
+            reverse("lista_observaciones"),
+            data={"tipo": "COMENTARIO"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Comentario general del usuario.")
+        self.assertContains(response, "Comentarios")
+        self.assertEqual(list(response.context["observaciones"]), [observacion])
 
     def test_resolver_sin_cambio_mantiene_version_actual(self):
         VersionRegistro.objects.create(

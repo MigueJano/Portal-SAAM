@@ -12,6 +12,7 @@ from .views import (
     dashboard_inventario,
     dashboard_operaciones,
     dashboard_ventas,
+    informe_productos,
     exportar_inventario_propyme,
     exportar_libro_compras_propyme,
     exportar_libro_ventas_propyme,
@@ -22,6 +23,7 @@ from .views import (
 urlpatterns = [
     path('financiero-simple/', dashboard_financiero_simple, name='dashboard_financiero_simple'),
     path('ventas/', dashboard_ventas, name='dashboard_ventas'),
+    path('productos/', informe_productos, name='informe_productos'),
     path('inventario/', dashboard_inventario, name='dashboard_inventario'),
     path('inventario/flujo/<int:producto_id>/', flujo_inventario_producto, name='flujo_inventario_producto'),
     path('operaciones/', dashboard_operaciones, name='dashboard_operaciones'),

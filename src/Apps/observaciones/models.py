@@ -7,6 +7,7 @@ class Observacion(models.Model):
         ('MEJORA', 'Mejora'),
         ('ERROR', 'Error'),
         ('PREGUNTA', 'Pregunta'),
+        ('COMENTARIO', 'Comentarios'),
     ]
 
     usuario     = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)

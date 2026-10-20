@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block CSS %}
+<style>
+  .productos-resumen .card { height: 100%; }
+  .productos-grafico { min-height: 360px; position: relative; }
+  #grafico-productos { display: block; height: 340px; width: 100%; }
+  .tabla-productos td, .tabla-productos th { padding: .4rem .5rem; }
+  @media (max-width: 767.98px) {
+    .productos-grafico { min-height: 300px; }
+    #grafico-productos { height: 280px; }
+  }
+</style>
+{% endblock CSS %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mt-3 mb-3">
+    <div>
+      <h1 class="h4 mb-1">Informe de venta de productos</h1>
+      <div class="small text-muted">{{ inicio|date:"d-m-Y" }} al {{ fin|date:"d-m-Y" }}</div>
+    </div>
+  </div>
+
+  <form method="get" class="row row-cols-1 row-cols-md-5 align-items-end g-2 mb-3">
+    <div class="col">
+      <label class="form-label" for="{{ form.fecha_desde.id_for_label }}">{{ form.fecha_desde.label }}</label>
+      {{ form.fecha_desde }}
+    </div>
+    <div class="col">
+      <label class="form-label" for="{{ form.fecha_hasta.id_for_label }}">{{ form.fecha_hasta.label }}</label>
+      {{ form.fecha_hasta }}
+    </div>
+    <div class="col">
+      <label class="form-label" for="{{ form.producto.id_for_label }}">{{ form.producto.label }}</label>
+      {{ form.producto|add_class:"form-select" }}
+    </div>
+    <div class="col">
+      <label class="form-label" for="{{ form.unidad.id_for_label }}">{{ form.unidad.label }}</label>
+      {{ form.unidad|add_class:"form-select" }}
+    </div>
+    <div class="col d-flex gap-2">
+      <button type="submit" class="btn btn-primary w-100">Aplicar</button>
+      <a href="{% url 'informe_productos' %}" class="btn btn-outline-secondary w-100">Limpiar</a>
+    </div>
+  </form>
+
+  <div class="row g-2 mb-3 productos-resumen">
+    <div class="col-6 col-lg-3">
+      <div class="card"><div class="card-body">
+        <div class="small text-muted">Cantidad (unidades {{ unidad_label }})</div>
+        <div class="h5 mb-0">{{ resumen.cantidad|floatformat:2|formatear_miles }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card"><div class="card-body">
+        <div class="small text-muted">Venta neta de productos</div>
+        <div class="h5 mb-0">${{ resumen.total_venta|floatformat:0|formatear_miles }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card"><div class="card-body">
+        <div class="small text-muted">Productos vendidos</div>
+        <div class="h5 mb-0">{{ resumen.productos|formatear_miles }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card"><div class="card-body">
+        <div class="small text-muted">Compradores</div>
+        <div class="h5 mb-0">{{ resumen.compradores|formatear_miles }}</div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body productos-grafico">
+      <h2 class="h6">Cantidad vendida en el tiempo</h2>
+      {% if grafico %}
+        <canvas id="grafico-productos" role="img" aria-label="Gráfico de barras de cantidad vendida por fecha"></canvas>
+      {% else %}
+        <div class="text-center text-muted py-5">No hay ventas de productos para el período seleccionado.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="table-responsive py-2">
+    <h2 class="h6">Detalle y lista de compradores ({{ filas|length }})</h2>
+    <table id="tabla-productos" class="table table-striped table-bordered table-sm align-middle tabla-productos js-tabla-filtros" data-page-length="50">
+      <thead class="table-light text-center">
+        <tr>
+          <th>Fecha</th>
+          <th>Código</th>
+          <th>Producto</th>
+          <th>Comprador</th>
+          <th>Documento</th>
+          <th>Cantidad</th>
+          <th>Unidad</th>
+          <th>Precio unitario neto</th>
+          <th>Total neto</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fila in filas %}
+        <tr>
+          <td class="text-center" data-order="{{ fila.fecha|date:'Y-m-d' }}">{{ fila.fecha|date:"d-m-Y" }}</td>
+          <td>{{ fila.producto.codigo_producto_interno }}</td>
+          <td>{{ fila.producto.nombre_producto }}</td>
+          <td>{{ fila.cliente.nombre_cliente }} <span class="text-muted">({{ fila.cliente.rut_cliente }})</span></td>
+          <td class="text-center">{{ fila.venta.get_documento_pedido_display }} N&deg; {{ fila.venta.num_documento }}</td>
+          <td class="text-end" data-order="{{ fila.cantidad|stringformat:'f' }}">{{ fila.cantidad|floatformat:2|formatear_miles }}</td>
+          <td>{{ fila.nombre_unidad }}</td>
+          <td class="text-end" data-order="{{ fila.precio|stringformat:'f' }}">${{ fila.precio|floatformat:2|formatear_miles }}</td>
+          <td class="text-end" data-order="{{ fila.total|stringformat:'f' }}">${{ fila.total|floatformat:0|formatear_miles }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-center text-muted">Sin datos para los filtros seleccionados.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{ grafico|json_script:"datos-grafico-productos" }}
+{% endblock content %}
+
+{% block script %}
+<script>
+(function () {
+  const canvas = document.getElementById("grafico-productos");
+  const dataNode = document.getElementById("datos-grafico-productos");
+  if (!canvas || !dataNode) return;
+  const datos = JSON.parse(dataNode.textContent);
+  if (!datos.length) return;
+
+  function dibujar() {
+    const ratio = window.devicePixelRatio || 1;
+    const ancho = Math.max(canvas.clientWidth, 320);
+    const alto = canvas.clientHeight;
+    canvas.width = ancho * ratio;
+    canvas.height = alto * ratio;
+    const ctx = canvas.getContext("2d");
+    ctx.scale(ratio, ratio);
+
+    const margen = { top: 18, right: 20, bottom: 68, left: 72 };
+    const areaW = ancho - margen.left - margen.right;
+    const areaH = alto - margen.top - margen.bottom;
+    const maximo = Math.max(...datos.map(d => d.cantidad), 1);
+    const pasos = 5;
+
+    ctx.font = "12px system-ui, sans-serif";
+    ctx.strokeStyle = "#dee2e6";
+    ctx.fillStyle = "#6c757d";
+    ctx.textAlign = "right";
+    for (let i = 0; i <= pasos; i += 1) {
+      const y = margen.top + areaH - (areaH * i / pasos);
+      const valor = maximo * i / pasos;
+      ctx.beginPath(); ctx.moveTo(margen.left, y); ctx.lineTo(ancho - margen.right, y); ctx.stroke();
+      ctx.fillText(valor.toLocaleString("es-CL", { maximumFractionDigits: 2 }), margen.left - 8, y + 4);
+    }
+
+    const espacio = areaW / datos.length;
+    const barra = Math.max(Math.min(espacio * .65, 56), 3);
+    ctx.fillStyle = "#0d6efd";
+    datos.forEach((dato, indice) => {
+      const h = areaH * dato.cantidad / maximo;
+      const x = margen.left + espacio * indice + (espacio - barra) / 2;
+      ctx.fillRect(x, margen.top + areaH - h, barra, h);
+    });
+
+    const salto = Math.max(Math.ceil(datos.length / Math.max(Math.floor(areaW / 75), 1)), 1);
+    ctx.fillStyle = "#495057";
+    ctx.textAlign = "center";
+    datos.forEach((dato, indice) => {
+      if (indice % salto === 0 || indice === datos.length - 1) {
+        ctx.fillText(dato.fecha, margen.left + espacio * (indice + .5), alto - margen.bottom + 22);
+      }
+    });
+    ctx.fillText("Tiempo", margen.left + areaW / 2, alto - 10);
+    ctx.save();
+    ctx.translate(16, margen.top + areaH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("Cantidad (unidades {{ unidad_label }})", 0, 0);
+    ctx.restore();
+  }
+
+  dibujar();
+  window.addEventListener("resize", dibujar);
+})();
+</script>
+{% endblock script %}

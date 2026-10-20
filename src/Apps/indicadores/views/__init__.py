@@ -1,5 +1,6 @@
 from .financieros import dashboard_financiero_simple
 from .ventas import dashboard_ventas
+from .productos import informe_productos
 from .inventario import dashboard_inventario, flujo_inventario_producto
 from .operaciones import dashboard_operaciones
 from .estrategia import (

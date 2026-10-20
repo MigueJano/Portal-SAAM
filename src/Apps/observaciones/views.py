@@ -183,7 +183,7 @@ def lista_observaciones(request):
     q = request.GET.get("q", "").strip()
     estado = request.GET.get("estado", "pendientes")
 
-    if tipo in {"MEJORA", "ERROR", "PREGUNTA"}:
+    if tipo in {"MEJORA", "ERROR", "PREGUNTA", "COMENTARIO"}:
         qs = qs.filter(tipo=tipo)
 
     if q:

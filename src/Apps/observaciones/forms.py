@@ -12,7 +12,7 @@ class ObservacionForm(forms.ModelForm):
             'observacion': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': 'Cuéntanos tu observación…'}),
         }
         labels = {
-            'tipo': 'Tipo',
+            'tipo': 'Tipo de requerimiento',
             'observacion': 'Observación',
         }
 

@@ -14,7 +14,7 @@
     <div class="card-body">
       <div class="mb-3">
         <div class="small text-muted">Tipo</div>
-        <span class="badge {% if observacion.tipo == 'ERROR' %}bg-danger{% elif observacion.tipo == 'PREGUNTA' %}bg-warning text-dark{% else %}bg-primary{% endif %}">
+        <span class="badge {% if observacion.tipo == 'ERROR' %}bg-danger{% elif observacion.tipo == 'PREGUNTA' %}bg-warning text-dark{% elif observacion.tipo == 'COMENTARIO' %}bg-info text-dark{% else %}bg-primary{% endif %}">
           {{ observacion.get_tipo_display }}
         </span>
       </div>
