@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-3">
+    <div>
+      <h1 class="h4 mb-1">Stock Pack</h1>
+      <div class="text-muted">Cantidad de packs que pueden armarse con el stock disponible de sus componentes.</div>
+    </div>
+    <a href="{% url 'stock_productos' %}" class="btn btn-outline-secondary">Volver a stock</a>
+  </div>
+
+  <div class="alert alert-light border mb-3">
+    Los packs son virtuales y no duplican existencias. El c&aacute;lculo descuenta reservas y despachos de cada producto componente;
+    la cantidad disponible queda determinada por el componente limitante.
+  </div>
+
+  <div class="row g-2 mb-3">
+    <div class="col-md-4">
+      <div class="card h-100"><div class="card-body">
+        <div class="small text-muted">Packs configurados</div>
+        <div class="h5 mb-0">{{ packs_total|formatear_miles }}</div>
+      </div></div>
+    </div>
+    <div class="col-md-4">
+      <div class="card h-100 border-success"><div class="card-body">
+        <div class="small text-muted">Con disponibilidad</div>
+        <div class="h5 mb-0 text-success">{{ packs_disponibles|formatear_miles }}</div>
+      </div></div>
+    </div>
+    <div class="col-md-4">
+      <div class="card h-100 border-danger"><div class="card-body">
+        <div class="small text-muted">Sin disponibilidad</div>
+        <div class="h5 mb-0 text-danger">{{ packs_agotados|formatear_miles }}</div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-striped table-bordered table-sm align-middle js-tabla-filtros" data-page-length="25">
+      <thead class="table-light text-center">
+        <tr>
+          <th>C&oacute;digo</th>
+          <th>Pack</th>
+          <th>Estado</th>
+          <th>Stock Pack</th>
+          <th>Componentes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fila in filas %}
+          <tr>
+            <td>{{ fila.pack.codigo_producto_interno }}</td>
+            <td>{{ fila.pack.nombre_producto }}</td>
+            <td class="text-center">
+              <span class="badge {{ fila.pack.estado_badge_class }}">{{ fila.pack.get_estado_operativo_display }}</span>
+            </td>
+            <td class="text-end fw-semibold{% if fila.cantidad_disponible <= 0 %} text-danger{% else %} text-success{% endif %}"
+                data-order="{{ fila.cantidad_disponible }}">
+              {{ fila.cantidad_disponible|formatear_miles }}
+            </td>
+            <td>
+              {% if fila.sin_componentes %}
+                <span class="text-danger">Sin componentes configurados</span>
+              {% else %}
+                <ul class="list-unstyled mb-0 small">
+                  {% for componente in fila.componentes %}
+                    <li{% if componente.es_limitante %} class="fw-semibold"{% endif %}>
+                      {{ componente.obj.producto.codigo_producto_interno }} - {{ componente.obj.producto.nombre_producto }}:
+                      requiere {{ componente.requerido_uprim|formatear_miles }},
+                      disponible {{ componente.disponible_uprim|formatear_miles }}
+                      (arma {{ componente.packs_posibles|formatear_miles }})
+                      {% if componente.es_limitante %}<span class="badge bg-warning text-dark">Limitante</span>{% endif %}
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="text-center text-muted">No hay packs configurados.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

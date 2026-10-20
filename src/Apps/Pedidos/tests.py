@@ -2490,6 +2490,53 @@ class PackFlowTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, reverse("crear_pack"))
 
+    def test_stock_pack_calcula_disponibilidad_desde_componentes(self):
+        pack = Producto.objects.create(
+            tipo_producto="PACK",
+            codigo_producto_interno="PKSTOCK",
+            nombre_producto="Pack Stock Disponible",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=0,
+        )
+        PackComponente.objects.create(
+            pack=pack,
+            producto=self.producto_cloro,
+            empaque="PRIMARIO",
+            cantidad=1,
+            orden=0,
+        )
+        PackComponente.objects.create(
+            pack=pack,
+            producto=self.producto_aerosol,
+            empaque="PRIMARIO",
+            cantidad=2,
+            orden=1,
+        )
+        PackComponente.objects.create(
+            pack=pack,
+            producto=self.producto_crema,
+            empaque="PRIMARIO",
+            cantidad=1,
+            orden=2,
+        )
+
+        resp = self.client.get(reverse("stock_pack"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Stock Pack")
+        self.assertContains(resp, pack.nombre_producto)
+        self.assertContains(resp, "Limitante")
+        fila = next(item for item in resp.context["filas"] if item["pack"].id == pack.id)
+        self.assertEqual(fila["cantidad_disponible"], 7)
+        limitantes = [item for item in fila["componentes"] if item["es_limitante"]]
+        self.assertEqual(len(limitantes), 1)
+        self.assertEqual(limitantes[0]["obj"].producto_id, self.producto_cloro.id)
+        self.assertFalse(Stock.objects.filter(producto=pack).exists())
+
     def test_crear_pack_y_venderlo_desglosa_stock_y_utilidad(self):
         resp_get = self.client.get(reverse("crear_pack"))
         self.assertEqual(resp_get.status_code, 200)

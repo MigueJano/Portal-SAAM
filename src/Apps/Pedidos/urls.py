@@ -61,6 +61,7 @@ urlpatterns = [
     # Productos
     path("productos/", _private(views.lista_productos), name="lista_productos"),
     path("productos/stock", _private(views.stock_productos), name="stock_productos"),
+    path("productos/stock-pack/", _private(views.stock_pack), name="stock_pack"),
     path("productos/crear/", _private(views.crear_producto), name="crear_producto"),
     path("productos/crear-pack/", _private(views.crear_pack), name="crear_pack"),
     path("productos/editar/<int:id>/", _private(views.editar_producto), name="editar_producto"),

@@ -712,6 +712,47 @@ def stock_productos(request):
     return render_informe_inventario(request)
 
 
+def stock_pack(request):
+    """Muestra cuantos packs pueden armarse con el stock fisico disponible."""
+    stock_actual = stock_cache_simple()
+    packs = (
+        Producto.objects
+        .filter(tipo_producto='PACK')
+        .prefetch_related('componentes_pack__producto')
+        .order_by('nombre_producto', 'id')
+    )
+
+    filas = []
+    for pack in packs:
+        disponibles_pack = stock_disponible_pack(pack, cache=stock_actual)
+        componentes = []
+        for item in pack.componentes_pack.all():
+            requerido = int(item.cantidad or 0) * factor_empaque(item.producto, item.empaque)
+            disponible = max(0, int(stock_actual.get(item.producto_id, 0) or 0))
+            packs_posibles = disponible // requerido if requerido > 0 else 0
+            componentes.append({
+                'obj': item,
+                'requerido_uprim': requerido,
+                'disponible_uprim': disponible,
+                'packs_posibles': packs_posibles,
+                'es_limitante': packs_posibles == disponibles_pack,
+            })
+
+        filas.append({
+            'pack': pack,
+            'cantidad_disponible': disponibles_pack,
+            'componentes': componentes,
+            'sin_componentes': not componentes,
+        })
+
+    return render(request, 'views/producto/stock_pack.html', {
+        'filas': filas,
+        'packs_total': len(filas),
+        'packs_disponibles': sum(1 for fila in filas if fila['cantidad_disponible'] > 0),
+        'packs_agotados': sum(1 for fila in filas if fila['cantidad_disponible'] <= 0),
+    })
+
+
 # =========
 # EMPAQUES
 # =========
