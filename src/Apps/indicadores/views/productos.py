@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 
 from Apps.Pedidos.models import UtilidadProducto
-from Apps.indicadores.forms import FiltroProductosForm
+from Apps.indicadores.forms import FiltroProductosForm, inicio_tres_meses_naturales
 
 
 DOS_DEC = Decimal("0.01")
@@ -21,7 +21,13 @@ def _factor_unidad(producto, unidad):
 @login_required
 def informe_productos(request):
     if request.GET:
-        form = FiltroProductosForm(request.GET)
+        hoy = date.today()
+        filtros = request.GET.copy()
+        if not filtros.get("fecha_desde"):
+            filtros["fecha_desde"] = inicio_tres_meses_naturales(hoy).isoformat()
+        if not filtros.get("fecha_hasta"):
+            filtros["fecha_hasta"] = hoy.isoformat()
+        form = FiltroProductosForm(filtros)
         form.is_valid()
         inicio = form.cleaned_data["fecha_desde"]
         fin = form.cleaned_data["fecha_hasta"]
@@ -29,7 +35,7 @@ def informe_productos(request):
         unidad = form.cleaned_data["unidad"]
     else:
         hoy = date.today()
-        inicio = hoy.replace(day=1)
+        inicio = inicio_tres_meses_naturales(hoy)
         fin = hoy
         producto = None
         unidad = "PRIMARIO"

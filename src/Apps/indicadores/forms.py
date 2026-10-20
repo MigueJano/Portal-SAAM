@@ -5,6 +5,17 @@ from django import forms
 from Apps.Pedidos.models import Categoria, Cliente, Producto, Proveedor
 
 
+def inicio_tres_meses_naturales(hoy: date | None = None) -> date:
+    """Primer dia del mes actual menos dos meses calendario."""
+    hoy = hoy or date.today()
+    year = hoy.year
+    month = hoy.month - 2
+    while month <= 0:
+        month += 12
+        year -= 1
+    return date(year, month, 1)
+
+
 class FiltroFinancieroForm(forms.Form):
     fecha_desde = forms.DateField(
         required=False,
@@ -113,7 +124,7 @@ class FiltroProductosForm(forms.Form):
     def clean(self):
         data = super().clean()
         hoy = date.today()
-        data["fecha_desde"] = data.get("fecha_desde") or hoy.replace(day=1)
+        data["fecha_desde"] = data.get("fecha_desde") or inicio_tres_meses_naturales(hoy)
         data["fecha_hasta"] = data.get("fecha_hasta") or hoy
         if data["fecha_desde"] > data["fecha_hasta"]:
             data["fecha_desde"], data["fecha_hasta"] = (

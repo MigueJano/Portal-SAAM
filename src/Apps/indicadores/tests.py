@@ -175,6 +175,33 @@ class InformeProductosTests(TestCase):
             fecha=timezone.now(),
         )
 
+    def test_informe_usa_tres_meses_naturales_por_defecto(self):
+        hoy = date.today()
+        month = hoy.month - 2
+        year = hoy.year
+        while month <= 0:
+            month += 12
+            year -= 1
+        inicio_esperado = date(year, month, 1)
+
+        resp_inicial = self.client.get(reverse("informe_productos"))
+        resp_fechas_vacias = self.client.get(
+            reverse("informe_productos"),
+            data={
+                "fecha_desde": "",
+                "fecha_hasta": "",
+                "producto": self.producto.id,
+                "unidad": "PRIMARIO",
+            },
+        )
+
+        for resp in (resp_inicial, resp_fechas_vacias):
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.context["inicio"], inicio_esperado)
+            self.assertEqual(resp.context["fin"], hoy)
+            self.assertEqual(str(resp.context["form"]["fecha_desde"].value()), inicio_esperado.isoformat())
+            self.assertEqual(str(resp.context["form"]["fecha_hasta"].value()), hoy.isoformat())
+
     def test_informe_muestra_venta_y_comprador_en_unidad_primaria(self):
         resp = self.client.get(
             reverse("informe_productos"),
