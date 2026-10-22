@@ -22,6 +22,18 @@ from .views import (
 
 urlpatterns = [
     path('financiero-simple/', dashboard_financiero_simple, name='dashboard_financiero_simple'),
+    path(
+        'comercial-gestion/',
+        dashboard_financiero_simple,
+        {'seccion': 'comercial'},
+        name='dashboard_comercial_gestion',
+    ),
+    path(
+        'control-riesgo/',
+        dashboard_financiero_simple,
+        {'seccion': 'control'},
+        name='dashboard_control_riesgo',
+    ),
     path('ventas/', dashboard_ventas, name='dashboard_ventas'),
     path('productos/', informe_productos, name='informe_productos'),
     path('inventario/', dashboard_inventario, name='dashboard_inventario'),

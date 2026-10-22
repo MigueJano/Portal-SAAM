@@ -1,8 +1,19 @@
+from calendar import monthrange
 from datetime import date
 
 from django import forms
 
 from Apps.Pedidos.models import Categoria, Cliente, Producto, Proveedor
+
+
+def ultimo_mes_natural(hoy: date | None = None) -> tuple[date, date]:
+    """Retorna el primer y ultimo dia del mes calendario anterior."""
+    hoy = hoy or date.today()
+    if hoy.month == 1:
+        year, month = hoy.year - 1, 12
+    else:
+        year, month = hoy.year, hoy.month - 1
+    return date(year, month, 1), date(year, month, monthrange(year, month)[1])
 
 
 def inicio_tres_meses_naturales(hoy: date | None = None) -> date:
@@ -28,11 +39,11 @@ class FiltroFinancieroForm(forms.Form):
 
     def clean(self):
         data = super().clean()
-        hoy = date.today()
+        desde_default, hasta_default = ultimo_mes_natural()
         if not data.get("fecha_desde"):
-            data["fecha_desde"] = hoy.replace(day=1)
+            data["fecha_desde"] = desde_default
         if not data.get("fecha_hasta"):
-            data["fecha_hasta"] = hoy
+            data["fecha_hasta"] = hasta_default
         if data["fecha_desde"] > data["fecha_hasta"]:
             data["fecha_desde"], data["fecha_hasta"] = (
                 data["fecha_hasta"],

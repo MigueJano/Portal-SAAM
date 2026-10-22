@@ -1,14 +1,30 @@
 {% extends "base.html" %}
 {% load custom_filters %}
 
+{% block CSS %}
+<style>
+  .portal-tabs { display:flex; gap:1.5rem; border-bottom:1px solid #dee2e6; margin-bottom:2rem; overflow-x:auto; }
+  .portal-tabs a { display:inline-flex; align-items:center; flex:0 0 auto; padding:.8rem .1rem; border-bottom:3px solid transparent; color:#6c757d; font-size:.88rem; font-weight:600; text-decoration:none; white-space:nowrap; }
+  .portal-tabs a:hover, .portal-tabs a[aria-current="page"] { color:#212529; border-bottom-color:#0d6efd; }
+  .portal-tabs a[aria-current="page"] { font-weight:700; }
+  .metric-card { height:100%; }
+  .metric-value { font-size:1.35rem; font-weight:700; }
+  .report-note { border-left:4px solid #0d6efd; background:#f8f9fa; }
+  .ventas-stock-grafico { min-height:340px; position:relative; }
+  #grafico-ventas-stock { display:block; width:100%; height:320px; }
+</style>
+{% endblock CSS %}
+
 {% block content %}
 <div class="container-fluid mt-3">
 
   <div class="d-flex justify-content-between align-items-center mb-2">
-    <h1 class="h4 mb-0">Dashboard Financiero</h1>
+    <h1 class="h4 mb-0">{{ seccion.titulo }}</h1>
   </div>
 
   <form method="get" class="row g-2 align-items-end mb-3">
+    <input type="hidden" name="informe" value="{{ informe_activo }}">
+    {% if informe_activo == 'ventas_stock' and informe.producto_seleccionado %}<input type="hidden" name="producto" value="{{ informe.producto_seleccionado.id }}">{% endif %}
     <div class="col-sm-3">
       <label class="form-label mb-1">Fecha desde</label>
       {{ form.fecha_desde }}
@@ -20,7 +36,7 @@
 
     <div class="col-sm-6 d-flex gap-2 align-items-end">
       <button type="submit" class="btn btn-outline-primary">Aplicar</button>
-      <a href="{% url 'dashboard_financiero_simple' %}" class="btn btn-outline-secondary">Limpiar</a>
+      <a href="{% url seccion.url_name %}" class="btn btn-outline-secondary">Limpiar</a>
 
       <!-- Rango rápido -->
       <div class="ms-auto d-flex gap-2 align-items-end">
@@ -52,13 +68,65 @@
       </div>
     </div>
 
-    </div>
   </form>
 
   {% if desde and hasta %}
   <p class="text-muted">Período: <strong>{{ desde|date:"d-m-Y" }}</strong> a <strong>{{ hasta|date:"d-m-Y" }}</strong></p>
   {% endif %}
 
+  <nav class="portal-tabs mb-3" aria-label="Informes de indicadores">
+    {% if seccion_activa == 'financieros' %}
+      <a href="?informe=resultados&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'resultados' %} aria-current="page"{% endif %}>Estado de Resultados</a>
+      <a href="?informe=balance&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'balance' %} aria-current="page"{% endif %}>Balance General</a>
+      <a href="?informe=flujo&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'flujo' %} aria-current="page"{% endif %}>Flujo de Efectivo</a>
+    {% elif seccion_activa == 'comercial' %}
+      <a href="?informe=presupuesto&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'presupuesto' %} aria-current="page"{% endif %}>Presupuesto vs. Real</a>
+      <a href="?informe=rentabilidad&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'rentabilidad' %} aria-current="page"{% endif %}>Rentabilidad</a>
+      <a href="?informe=pipeline&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'pipeline' %} aria-current="page"{% endif %}>Pipeline de Ventas</a>
+      <a href="?informe=ventas_stock&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'ventas_stock' %} aria-current="page"{% endif %}>Ventas y flujo de stock</a>
+    {% else %}
+      <a href="?informe=cxc&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'cxc' %} aria-current="page"{% endif %}>Cuentas por Cobrar</a>
+      <a href="?informe=cxp&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'cxp' %} aria-current="page"{% endif %}>Cuentas por Pagar</a>
+      <a href="?informe=inventario&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'inventario' %} aria-current="page"{% endif %}>Rotación de Inventario</a>
+    {% endif %}
+  </nav>
+
+  {% if informe_activo == 'resultados' %}
+  <div class="alert report-note py-2">
+    <strong>Criterio:</strong> ingresos por fecha de venta; costo de ventas reconocido como venta neta menos utilidad FIFO registrada.
+    Las compras del período son movimiento de inventario y no se descuentan otra vez como gasto.
+  </div>
+
+    <div class="row g-3">
+      <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card"><div class="card-body">
+        <div class="small text-muted">Ingresos por ventas netas</div>
+        <div class="metric-value">${{ informe.ventas_netas|formatear_miles }}</div>
+        <div class="small text-muted">{{ informe.documentos }} documentos</div>
+      </div></div></div>
+      <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card"><div class="card-body">
+        <div class="small text-muted">Costo de ventas reconocido</div>
+        <div class="metric-value">${{ informe.costo_ventas|formatear_miles }}</div>
+        <div class="small text-muted">Costo asociado a ventas del período</div>
+      </div></div></div>
+      <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card"><div class="card-body">
+        <div class="small text-muted">Utilidad bruta</div>
+        <div class="metric-value {% if informe.utilidad_bruta < 0 %}text-danger{% else %}text-success{% endif %}">${{ informe.utilidad_bruta|formatear_miles }}</div>
+        <div class="small text-muted">Ventas netas menos costo de ventas</div>
+      </div></div></div>
+      <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card"><div class="card-body">
+        <div class="small text-muted">Margen bruto</div>
+        <div class="metric-value">{{ informe.margen_bruto|floatformat:2 }}%</div>
+        <div class="small text-muted">Sobre ventas con costo: ${{ informe.ventas_netas_con_costo|formatear_miles }}</div>
+        <div class="small text-muted">{{ informe.documentos_con_costo }} con costo / {{ informe.documentos_sin_costo }} sin costo</div>
+      </div></div></div>
+    </div>
+    <div class="alert alert-warning mt-3">
+      <strong>Utilidad neta no disponible:</strong> faltan gastos operacionales, remuneraciones, depreciaciones e intereses.
+      La cifra presentada es utilidad bruta FIFO.
+    </div>
+
+    <details class="mt-3">
+      <summary class="fw-semibold text-primary">Ver detalle documental, IVA y PPM</summary>
     <!-- Fila 1: Compras, Ventas, Indicadores -->
     <div class="row g-3">
       <!-- Compras / Recepciones -->
@@ -431,6 +499,10 @@
         </div>
       </div>
     </div>
+    </details>
+  {% else %}
+    {% include "indicadores/_informe_profesional.html" %}
+  {% endif %}
 
 {% endblock content %}
 
@@ -535,6 +607,95 @@
     // Envío por GET (no requiere CSRF)
     sel.closest('form').submit();
   }
+
+  (function dibujarVentasStock() {
+    const canvas = document.getElementById('grafico-ventas-stock');
+    const dataNode = document.getElementById('datos-grafico-ventas-stock');
+    if (!canvas || !dataNode) return;
+    const datos = JSON.parse(dataNode.textContent);
+    if (!datos.length) return;
+
+    function dibujar() {
+      const ratio = window.devicePixelRatio || 1;
+      const ancho = Math.max(canvas.clientWidth, 320);
+      const alto = canvas.clientHeight;
+      canvas.width = ancho * ratio;
+      canvas.height = alto * ratio;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(ratio, ratio);
+      const margen = {top: 52, right: 20, bottom: 55, left: 68};
+      const areaW = ancho - margen.left - margen.right;
+      const areaH = alto - margen.top - margen.bottom;
+      const valoresGrafico = datos
+        .flatMap(d => [d.vendidas, d.entradas, d.despachos, d.stock])
+        .filter(valor => Number.isFinite(valor));
+      const maximoDato = Math.max(...valoresGrafico, 1);
+      const margenNegativo = Math.max(Math.ceil(maximoDato * .1), 1);
+      const minimo = Math.min(...valoresGrafico, -margenNegativo);
+      const maximo = maximoDato;
+      const rango = Math.max(maximo - minimo, 1);
+      const colores = ['#0d6efd', '#198754', '#dc3545', '#6f42c1'];
+      const etiquetas = ['Ventas', 'Entradas', 'Despachos', 'Stock inicial'];
+      const campos = ['vendidas', 'entradas', 'despachos', 'stock'];
+
+      ctx.font = '12px system-ui, sans-serif';
+      const pasos = Math.min(5, Math.ceil(rango));
+      for (let i = 0; i <= pasos; i += 1) {
+        const y = margen.top + areaH - areaH * i / pasos;
+        const valorEje = minimo + rango * i / pasos;
+        ctx.strokeStyle = Math.abs(valorEje) < rango / (pasos * 2) ? '#495057' : '#dee2e6';
+        ctx.lineWidth = Math.abs(valorEje) < rango / (pasos * 2) ? 1.5 : 1;
+        ctx.beginPath(); ctx.moveTo(margen.left, y); ctx.lineTo(ancho - margen.right, y); ctx.stroke();
+        ctx.fillStyle = '#6c757d'; ctx.textAlign = 'right';
+        ctx.fillText(Math.round(valorEje).toLocaleString('es-CL'), margen.left - 7, y + 4);
+      }
+      const yCero = margen.top + areaH - areaH * (0 - minimo) / rango;
+      ctx.strokeStyle = '#495057'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(margen.left, yCero); ctx.lineTo(ancho - margen.right, yCero); ctx.stroke();
+      etiquetas.forEach((etiqueta, i) => {
+        const x = margen.left + (i % 2) * 125;
+        const y = 7 + Math.floor(i / 2) * 19;
+        ctx.fillStyle = colores[i]; ctx.fillRect(x, y, 13, 13);
+        ctx.fillStyle = '#495057'; ctx.textAlign = 'left'; ctx.fillText(etiqueta, x + 18, y + 11);
+      });
+      const grupoW = datos.length > 1 ? areaW / (datos.length - 1) : 0;
+      const saltoEtiquetas = Math.max(Math.ceil(datos.length / Math.max(Math.floor(areaW / 70), 1)), 1);
+      campos.forEach((campo, serie) => {
+        ctx.strokeStyle = colores[serie];
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        let trazoIniciado = false;
+        datos.forEach((dato, indice) => {
+          if (!Number.isFinite(dato[campo])) return;
+          const x = datos.length > 1 ? margen.left + indice * grupoW : margen.left + areaW / 2;
+          const y = margen.top + areaH - areaH * (dato[campo] - minimo) / rango;
+          if (!trazoIniciado) {
+            ctx.moveTo(x, y);
+            trazoIniciado = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        ctx.stroke();
+        datos.forEach((dato, indice) => {
+          if (!Number.isFinite(dato[campo])) return;
+          const x = datos.length > 1 ? margen.left + indice * grupoW : margen.left + areaW / 2;
+          const y = margen.top + areaH - areaH * (dato[campo] - minimo) / rango;
+          ctx.fillStyle = colores[serie];
+          ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+        });
+      });
+      datos.forEach((dato, indice) => {
+        if (indice % saltoEtiquetas === 0 || indice === datos.length - 1) {
+          ctx.fillStyle = '#495057'; ctx.textAlign = 'center';
+          const x = datos.length > 1 ? margen.left + indice * grupoW : margen.left + areaW / 2;
+          ctx.fillText(dato.mes, x, alto - 23);
+        }
+      });
+    }
+    dibujar();
+    window.addEventListener('resize', dibujar);
+  })();
 </script>
 
 {% endblock script %}

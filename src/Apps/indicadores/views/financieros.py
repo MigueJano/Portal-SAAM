@@ -7,7 +7,8 @@ from django.db.models.functions import Coalesce, TruncMonth
 from django.shortcuts import render
 
 from Apps.Pedidos.models import Recepcion, Venta
-from Apps.indicadores.forms import FiltroFinancieroForm
+from Apps.indicadores.forms import FiltroFinancieroForm, ultimo_mes_natural
+from Apps.indicadores.services.reportes import construir_informe
 
 # Constantes
 DEC = Decimal('0.00')
@@ -45,20 +46,57 @@ def _ppm_value(monto: Decimal) -> Decimal:
 
 
 @login_required
-def dashboard_financiero_simple(request):
-    """
-    ÚNICA TABLA:
-    - Todas las cifras mostradas en POSITIVO (proveedores y ventas).
-    - En el TOTAL GENERAL: Proveedores RESTAN y Ventas SUMAN.
-    """
-    form = FiltroFinancieroForm(request.GET or None)
+def dashboard_financiero_simple(request, seccion=None):
+    """Concentra los informes por sección y conserva el detalle financiero histórico."""
+    filtros = request.GET.copy()
+    desde_default, hasta_default = ultimo_mes_natural()
+    if not filtros.get('fecha_desde'):
+        filtros['fecha_desde'] = desde_default.isoformat()
+    if not filtros.get('fecha_hasta'):
+        filtros['fecha_hasta'] = hasta_default.isoformat()
+    form = FiltroFinancieroForm(filtros)
     if form.is_valid():
         desde = form.cleaned_data['fecha_desde']
         hasta = form.cleaned_data['fecha_hasta']
     else:
-        hoy = date.today()
-        desde = hoy.replace(day=1)
-        hasta = hoy
+        desde, hasta = desde_default, hasta_default
+
+    informes_por_seccion = {
+        'financieros': ('resultados', 'balance', 'flujo'),
+        'comercial': ('presupuesto', 'rentabilidad', 'pipeline', 'ventas_stock'),
+        'control': ('cxc', 'cxp', 'inventario'),
+    }
+    secciones = {
+        'financieros': {
+            'titulo': 'Indicadores financieros',
+            'url_name': 'dashboard_financiero_simple',
+        },
+        'comercial': {
+            'titulo': 'Comercial y gestión',
+            'url_name': 'dashboard_comercial_gestion',
+        },
+        'control': {
+            'titulo': 'Control y riesgo',
+            'url_name': 'dashboard_control_riesgo',
+        },
+    }
+    informe_solicitado = request.GET.get('informe')
+    if seccion not in informes_por_seccion:
+        seccion = next(
+            (
+                clave
+                for clave, informes in informes_por_seccion.items()
+                if informe_solicitado in informes
+            ),
+            'financieros',
+        )
+    informe_activo = informe_solicitado or informes_por_seccion[seccion][0]
+    if informe_activo not in informes_por_seccion[seccion]:
+        informe_activo = informes_por_seccion[seccion][0]
+    try:
+        producto_id = int(request.GET.get('producto') or 0) or None
+    except (TypeError, ValueError):
+        producto_id = None
 
     # Querysets base
     recep_qs = (Recepcion.objects
@@ -349,5 +387,9 @@ def dashboard_financiero_simple(request):
         # Total general (ventas suman, proveedores restan)
         'total_general_mes': total_general_mes,
         'total_general_total': total_general_total,
+        'informe_activo': informe_activo,
+        'informe': construir_informe(informe_activo, desde, hasta, producto_id),
+        'seccion_activa': seccion,
+        'seccion': secciones[seccion],
     }
     return render(request, 'indicadores/financieros.html', context)

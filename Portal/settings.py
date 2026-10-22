@@ -8,6 +8,7 @@ import os
 import sys
 
 from django.core.exceptions import ImproperlyConfigured
+from django.core.management.utils import get_random_secret_key
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -78,7 +79,14 @@ DEBUG = _env_bool("DJANGO_DEBUG", default=False)
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "").strip()
 if not SECRET_KEY:
-    raise ImproperlyConfigured("DJANGO_SECRET_KEY es obligatoria en todos los ambientes.")
+    if DEBUG:
+        # Facilita el desarrollo local sin mantener una clave conocida en el codigo.
+        # Cambia en cada reinicio, por lo que las sesiones locales pueden invalidarse.
+        SECRET_KEY = get_random_secret_key()
+    else:
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY es obligatoria cuando DJANGO_DEBUG esta desactivado."
+        )
 
 ALLOWED_HOSTS = _env_list("DJANGO_ALLOWED_HOSTS")
 if not ALLOWED_HOSTS:

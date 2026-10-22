@@ -25,6 +25,13 @@ from Apps.Pedidos.models import (
     Venta,
 )
 from Apps.indicadores.models import RevisionCambioPrecioCompra
+from Apps.indicadores.services.reportes import (
+    informe_cuentas_por_cobrar,
+    informe_flujo_efectivo,
+    informe_resultados,
+    informe_ventas_stock_mensual,
+)
+from Apps.integraciones.models import ConciliacionPago, MovimientoBancario
 
 
 class IndicadoresViewsTests(TestCase):
@@ -66,15 +73,15 @@ class IndicadoresViewsTests(TestCase):
             f'{reverse("stock_productos")}?year=2026&month=5&stock_view=todos',
         )
 
-    def test_menu_contabilidad_en_indicadores(self):
+    def test_menu_indicadores_consolida_acceso_en_finanzas(self):
         self.client.force_login(self.user)
         resp = self.client.get(reverse("home"))
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "Contabilidad Pro Pyme", count=1)
-        self.assertContains(resp, "Listas de Precios Vigentes", count=1)
-        self.assertContains(resp, "Precios por Cliente", count=1)
-        self.assertContains(resp, "Productos")
-        self.assertContains(resp, reverse("informe_productos"), count=1)
+        self.assertContains(resp, reverse("dashboard_financiero_simple"), count=1)
+        self.assertContains(resp, reverse("dashboard_comercial_gestion"), count=1)
+        self.assertContains(resp, reverse("dashboard_control_riesgo"), count=1)
+        self.assertNotContains(resp, reverse("informe_productos"))
+        self.assertNotContains(resp, reverse("dashboard_operaciones"))
         self.assertNotContains(resp, reverse("dashboard_inventario"))
         self.assertContains(resp, reverse("stock_productos"))
         self.assertContains(resp, "css/style_base.css?v=")
@@ -121,6 +128,269 @@ class IndicadoresViewsTests(TestCase):
             with self.subTest(table=etiqueta):
                 self.assertIn('data-tabla-filtros="false"', etiqueta)
                 self.assertNotIn("js-tabla-filtros", etiqueta)
+
+
+class InformesProfesionalesTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("informes_profesionales", password="test123")
+        self.client.force_login(self.user)
+
+    def test_diez_informes_renderizan_en_portal_tabs(self):
+        tabs = (
+            "resultados", "balance", "flujo", "presupuesto", "rentabilidad",
+            "pipeline", "ventas_stock", "cxc", "cxp", "inventario",
+        )
+        for tab in tabs:
+            with self.subTest(tab=tab):
+                response = self.client.get(
+                    reverse("dashboard_financiero_simple"),
+                    data={
+                        "informe": tab,
+                        "fecha_desde": "2026-09-01",
+                        "fecha_hasta": "2026-09-30",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context["informe_activo"], tab)
+                self.assertContains(response, 'class="portal-tabs mb-3"')
+
+    def test_accesos_separan_los_portal_tabs_por_seccion(self):
+        casos = (
+            ("dashboard_financiero_simple", "financieros", "Estado de Resultados", "Presupuesto vs. Real"),
+            ("dashboard_comercial_gestion", "comercial", "Ventas y flujo de stock", "Balance General"),
+            ("dashboard_control_riesgo", "control", "Cuentas por Cobrar", "Pipeline de Ventas"),
+        )
+        for url_name, seccion, visible, ausente in casos:
+            with self.subTest(seccion=seccion):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context["seccion_activa"], seccion)
+                self.assertContains(response, visible)
+                self.assertNotContains(response, ausente)
+
+    def test_periodo_predeterminado_es_ultimo_mes_natural(self):
+        response = self.client.get(reverse("dashboard_financiero_simple"))
+        hoy = date.today()
+        ultimo_dia_mes_anterior = hoy.replace(day=1) - timedelta(days=1)
+
+        self.assertEqual(response.context["hasta"], ultimo_dia_mes_anterior)
+        self.assertEqual(response.context["desde"], ultimo_dia_mes_anterior.replace(day=1))
+
+    def test_estado_resultados_declara_limite_de_utilidad_neta(self):
+        response = self.client.get(
+            reverse("dashboard_financiero_simple"),
+            data={"fecha_desde": "2026-09-01", "fecha_hasta": "2026-09-30"},
+        )
+        self.assertContains(response, "Utilidad neta no disponible")
+        self.assertContains(response, "Costo de ventas reconocido")
+
+    def test_resultados_separa_costo_fifo_de_compras_del_periodo(self):
+        cliente = Cliente.objects.create(
+            nombre_cliente="Cliente reportes",
+            rut_cliente="77111111-1",
+            direccion_cliente="Dirección",
+            direccion_bodega_cliente="Bodega",
+            cliente_activo=True,
+            telefono_cliente="1",
+            correo_cliente="reportes@test.local",
+            categoria="PYME",
+        )
+        pedido = Pedido.objects.create(
+            nombre_cliente=cliente,
+            fecha_pedido=date(2026, 9, 10),
+            estado_pedido="Finalizado",
+        )
+        Venta.objects.create(
+            pedidoid=pedido,
+            fecha_venta=date(2026, 9, 15),
+            documento_pedido="Factura",
+            num_documento=100,
+            venta_neto_pedido=Decimal("1000.00"),
+            venta_iva_pedido=Decimal("190.00"),
+            venta_total_pedido=Decimal("1190.00"),
+            ganancia_total=Decimal("300.00"),
+            ganancia_porcentaje=Decimal("30.00"),
+        )
+        pedido_sin_costo = Pedido.objects.create(
+            nombre_cliente=cliente,
+            fecha_pedido=date(2026, 9, 20),
+            estado_pedido="Finalizado",
+        )
+        Venta.objects.create(
+            pedidoid=pedido_sin_costo,
+            fecha_venta=date(2026, 9, 21),
+            documento_pedido="Factura",
+            num_documento=101,
+            venta_neto_pedido=Decimal("500.00"),
+            venta_iva_pedido=Decimal("95.00"),
+            venta_total_pedido=Decimal("595.00"),
+        )
+
+        informe = informe_resultados(date(2026, 9, 1), date(2026, 9, 30))
+
+        self.assertEqual(informe["ventas_netas"], Decimal("1500.00"))
+        self.assertEqual(informe["ventas_netas_con_costo"], Decimal("1000.00"))
+        self.assertEqual(informe["costo_ventas"], Decimal("700.00"))
+        self.assertEqual(informe["utilidad_bruta"], Decimal("300.00"))
+        self.assertEqual(informe["margen_bruto"], Decimal("30.00"))
+        self.assertEqual(informe["documentos_sin_costo"], 1)
+
+    def test_flujo_usa_movimientos_bancarios_y_cxc_resta_solo_pago_confirmado(self):
+        cliente = Cliente.objects.create(
+            nombre_cliente="Cliente caja",
+            rut_cliente="77222222-2",
+            direccion_cliente="Dirección",
+            direccion_bodega_cliente="Bodega",
+            cliente_activo=True,
+            telefono_cliente="2",
+            correo_cliente="caja@test.local",
+            categoria="PYME",
+        )
+        pedido = Pedido.objects.create(
+            nombre_cliente=cliente,
+            fecha_pedido=date(2026, 9, 1),
+            estado_pedido="Finalizado",
+        )
+        Venta.objects.create(
+            pedidoid=pedido,
+            fecha_venta=date(2026, 9, 2),
+            documento_pedido="Factura",
+            num_documento=200,
+            venta_neto_pedido=Decimal("1000.00"),
+            venta_iva_pedido=Decimal("190.00"),
+            venta_total_pedido=Decimal("1190.00"),
+        )
+        abono = MovimientoBancario.objects.create(
+            identificador_externo="abono-reportes",
+            fecha=date(2026, 9, 20),
+            tipo=MovimientoBancario.TIPO_ABONO,
+            monto=Decimal("500.00"),
+        )
+        MovimientoBancario.objects.create(
+            identificador_externo="cargo-reportes",
+            fecha=date(2026, 9, 21),
+            tipo=MovimientoBancario.TIPO_CARGO,
+            monto=Decimal("200.00"),
+        )
+        ConciliacionPago.objects.create(
+            movimiento=abono,
+            pedido=pedido,
+            monto_aplicado=Decimal("500.00"),
+            estado=ConciliacionPago.ESTADO_CONFIRMADA,
+        )
+
+        flujo = informe_flujo_efectivo(date(2026, 9, 1), date(2026, 9, 30))
+        cxc = informe_cuentas_por_cobrar(date(2026, 9, 30))
+
+        self.assertEqual(flujo["entradas"], Decimal("500.00"))
+        self.assertEqual(flujo["salidas"], Decimal("200.00"))
+        self.assertEqual(flujo["flujo_neto"], Decimal("300.00"))
+        self.assertEqual(cxc["total_pendiente"], Decimal("690.00"))
+
+    def test_ventas_y_stock_agrupa_por_mes_en_unidades_primarias(self):
+        categoria = Categoria.objects.create(categoria="Categoría flujo mensual")
+        producto = Producto.objects.create(
+            categoria_producto=categoria,
+            codigo_producto_interno="MES-1",
+            nombre_producto="Producto mensual",
+            qty_terciario=4,
+            qty_secundario=6,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        cliente = Cliente.objects.create(
+            nombre_cliente="Cliente mensual",
+            rut_cliente="77333333-3",
+            direccion_cliente="Dirección",
+            direccion_bodega_cliente="Bodega",
+            cliente_activo=True,
+            telefono_cliente="3",
+            correo_cliente="mensual@test.local",
+            categoria="PYME",
+        )
+        pedido = Pedido.objects.create(
+            nombre_cliente=cliente,
+            fecha_pedido=date(2026, 9, 10),
+            estado_pedido="Finalizado",
+        )
+        venta = Venta.objects.create(
+            pedidoid=pedido,
+            fecha_venta=date(2026, 9, 15),
+            documento_pedido="Factura",
+            num_documento=300,
+            venta_neto_pedido=Decimal("3000.00"),
+            venta_iva_pedido=Decimal("570.00"),
+            venta_total_pedido=Decimal("3570.00"),
+        )
+        UtilidadProducto.objects.create(
+            venta=venta,
+            producto=producto,
+            empaque="SECUNDARIO",
+            cantidad=12,
+            precio_compra_unitario=Decimal("100.00"),
+            precio_venta_unitario=Decimal("250.00"),
+            utilidad=Decimal("150.00"),
+            utilidad_porcentaje=Decimal("60.00"),
+            fecha=timezone.now(),
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=producto,
+            qty=3,
+            empaque="PRIMARIO",
+            fecha_movimiento=date(2026, 8, 20),
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=producto,
+            qty=2,
+            empaque="SECUNDARIO",
+            fecha_movimiento=date(2026, 9, 5),
+        )
+        Stock.objects.create(
+            tipo_movimiento="DESPACHO",
+            producto=producto,
+            qty=5,
+            empaque="PRIMARIO",
+            fecha_movimiento=date(2026, 9, 16),
+        )
+
+        informe = informe_ventas_stock_mensual(date(2026, 9, 1), date(2026, 9, 30))
+
+        self.assertEqual(informe["unidades_vendidas"], Decimal("12.00"))
+        self.assertEqual(informe["venta_neta"], Decimal("3000.00"))
+        self.assertEqual(informe["entradas"], Decimal("12.00"))
+        self.assertEqual(informe["salidas"], Decimal("5.00"))
+        self.assertEqual(informe["filas"][0]["movimiento_neto"], Decimal("7.00"))
+        self.assertEqual(informe["serie"][0]["vendidas"], 12)
+        self.assertEqual(informe["serie"][0]["entradas"], 12)
+        self.assertEqual(informe["serie"][0]["despachos"], 5)
+        self.assertEqual(informe["serie"][0]["stock"], 3)
+        self.assertEqual(informe["serie"][1]["mes"], "10-2026")
+        self.assertEqual(informe["serie"][1]["stock"], 10)
+        self.assertIsNone(informe["serie"][1]["vendidas"])
+        self.assertEqual(informe["stock_inicio_siguiente"], Decimal("10.00"))
+        self.assertEqual(informe["filas"][0]["stock_inicio_siguiente"], Decimal("10.00"))
+        self.assertEqual(informe["filas"][0]["mes_siguiente"], date(2026, 10, 1))
+
+        response = self.client.get(
+            reverse("dashboard_comercial_gestion"),
+            data={
+                "informe": "ventas_stock",
+                "fecha_desde": "2026-09-01",
+                "fecha_hasta": "2026-09-30",
+                "producto": producto.id,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["informe"]["producto_seleccionado"], producto)
+        self.assertContains(response, reverse("flujo_inventario_producto", args=[producto.id]))
+        self.assertContains(response, 'aria-label="Ver flujo de inventario"')
+        self.assertContains(response, 'aria-label="Ver producto en la gráfica"')
+        self.assertContains(response, "Despachos de stock")
+        self.assertContains(response, "falta de saldo registrada")
 
 
 class InformeProductosTests(TestCase):
