@@ -399,21 +399,36 @@ def _resumen_estrategia_precios(pricing_rows):
     }
 
 
-def _enriquecer_cambios_precio_compra(cambios, pricing_rows):
-    precios_venta = {
-        row["producto_id"]: row["precio_minimo_venta"]
-        for row in pricing_rows
-        if row["precio_minimo_venta"] is not None
-    }
+def _precios_venta_vigentes_para_alerta():
+    """Retorna el precio unitario vigente de la lista activa usada comercialmente."""
+    lista_vigente = (
+        ListaPreciosPredeterminada.objects.filter(activa=True)
+        .order_by("nombre_listaprecios", "id")
+        .first()
+    )
+    filas_vigentes = _filas_lista_precios_vigentes(lista_vigente)
+    precios_venta = {}
+    for row in filas_vigentes:
+        producto_id = row["producto_id"]
+        precio = row["precio_venta"]
+        actual = precios_venta.get(producto_id)
+        # Si una lista contiene mas de un empaque, se usa el menor precio
+        # normalizado por unidad primaria como referencia conservadora.
+        if actual is None or precio < actual:
+            precios_venta[producto_id] = precio
+    return lista_vigente, precios_venta
+
+
+def _enriquecer_cambios_precio_compra(cambios, precios_venta_vigentes):
 
     for cambio in cambios:
-        precio_minimo_venta = precios_venta.get(cambio["producto_id"])
-        cambio["precio_minimo_venta"] = precio_minimo_venta
+        precio_venta_vigente = precios_venta_vigentes.get(cambio["producto_id"])
+        cambio["precio_venta_vigente"] = precio_venta_vigente
         cambio["diferencia_venta_pesos"] = None
         cambio["diferencia_venta_pct"] = None
 
-        if precio_minimo_venta is not None:
-            diferencia = _q2(precio_minimo_venta - cambio["precio_nuevo"])
+        if precio_venta_vigente is not None:
+            diferencia = _q2(precio_venta_vigente - cambio["precio_nuevo"])
             cambio["diferencia_venta_pesos"] = diferencia
             if cambio["precio_nuevo"] and cambio["precio_nuevo"] > 0:
                 cambio["diferencia_venta_pct"] = _q2((diferencia / cambio["precio_nuevo"]) * Decimal("100"))
@@ -476,7 +491,7 @@ def _aplicar_checker_cambios_compra(cambios, filtros):
         cambio["diferencia_compra_pct"] = pct_compra
 
         margen = cambio.get("diferencia_venta_pesos")
-        sin_venta = cambio.get("precio_minimo_venta") is None
+        sin_venta = cambio.get("precio_venta_vigente") is None
         cambio["requiere_revision"] = bool(
             cambio["es_alza"]
             and (sin_venta or margen is None or margen <= 0 or (pct_compra is not None and pct_compra >= umbral_pct))
@@ -780,7 +795,11 @@ def dashboard_estrategia_precios(request):
         categoria_id=filtros_categoria["categoria_id"],
         subcategoria_id=filtros_categoria["subcategoria_id"],
     )
-    cambios_precio_compra = _enriquecer_cambios_precio_compra(cambios_precio_compra, pricing_rows)
+    lista_precios_alerta, precios_venta_vigentes = _precios_venta_vigentes_para_alerta()
+    cambios_precio_compra = _enriquecer_cambios_precio_compra(
+        cambios_precio_compra,
+        precios_venta_vigentes,
+    )
     cambios_precio_compra = _adjuntar_revision_humana(cambios_precio_compra)
     proveedores_cambios = sorted(
         {
@@ -809,6 +828,7 @@ def dashboard_estrategia_precios(request):
             "total_cambios_precio_compra": total_cambios_precio_compra,
             "cambios_precio_compra_revision_total": cambios_precio_compra_revision_total,
             "proveedores_cambios": proveedores_cambios,
+            "lista_precios_alerta": lista_precios_alerta,
             **filtros_revision,
             **filtros_categoria,
             **resumen,

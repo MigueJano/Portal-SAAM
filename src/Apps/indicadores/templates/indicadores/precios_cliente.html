@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="container-fluid">
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-2">
     <div>
       <h1 class="h4 mb-1">Precios por Cliente</h1>
       {% if selected_cliente %}
@@ -19,13 +19,8 @@
         <div class="small text-muted">No hay clientes registrados.</div>
       {% endif %}
     </div>
-    <div class="btn-group" role="group" aria-label="Secciones de estrategia">
-      <a href="{% url 'dashboard_estrategia' %}" class="btn btn-outline-primary">Informe</a>
-      <a href="{% url 'dashboard_estrategia_precios' %}" class="btn btn-outline-primary">Precios</a>
-      <a href="{% url 'dashboard_lista_precios_vigentes' %}" class="btn btn-outline-primary">Listas Vigentes</a>
-      <a href="{% url 'dashboard_precios_cliente' %}" class="btn btn-primary">Precios Cliente</a>
-    </div>
   </div>
+  {% include "indicadores/_estrategia_tabs.html" with estrategia_tab="clientes" %}
 
   <form method="get" class="row g-2 align-items-end mb-3">
     <div class="col-md-6 col-lg-4">

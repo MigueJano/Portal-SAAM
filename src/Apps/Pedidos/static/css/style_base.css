@@ -73,6 +73,38 @@ body {
   overflow-x: hidden;
 }
 
+/* Navegación secundaria reutilizable para portales e informes */
+.portal-tabs {
+  display: flex;
+  gap: 1.5rem;
+  overflow-x: auto;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.portal-tabs a {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: .8rem .1rem;
+  border-bottom: 3px solid transparent;
+  color: #6c757d;
+  font-size: .88rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.portal-tabs a:hover,
+.portal-tabs a[aria-current="page"] {
+  border-bottom-color: #0d6efd;
+  color: #212529;
+}
+
+.portal-tabs a[aria-current="page"] {
+  font-weight: 700;
+}
+
 /* Contenedor principal */
 .custom-container {
   background-color: var(--fondo-contenedor);

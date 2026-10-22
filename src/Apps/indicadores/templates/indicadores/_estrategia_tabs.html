@@ -1,0 +1,6 @@
+<nav class="portal-tabs mb-3" aria-label="Informes estratégicos">
+  <a href="{% url 'dashboard_estrategia' %}"{% if estrategia_tab == "informe" %} aria-current="page"{% endif %}>Informe Estratégico</a>
+  <a href="{% url 'dashboard_estrategia_precios' %}"{% if estrategia_tab == "precios" %} aria-current="page"{% endif %}>Estrategia de Precios</a>
+  <a href="{% url 'dashboard_lista_precios_vigentes' %}"{% if estrategia_tab == "listas" %} aria-current="page"{% endif %}>Listas de Precios Vigentes</a>
+  <a href="{% url 'dashboard_precios_cliente' %}"{% if estrategia_tab == "clientes" %} aria-current="page"{% endif %}>Precios por Cliente</a>
+</nav>

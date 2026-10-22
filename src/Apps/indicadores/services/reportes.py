@@ -300,16 +300,17 @@ def informe_ventas_stock_mensual(desde: date, hasta: date, producto_id: int | No
     serie = []
     mes = desde.replace(day=1)
     ultimo_mes = hasta.replace(day=1)
+    stock_inicial_periodo = sum(saldo_stock.values(), start=ZERO)
     while mes <= ultimo_mes:
         stock_inicio = sum(saldo_stock.values(), start=ZERO)
+        for producto_stock_id in productos_stock:
+            clave = (mes, producto_stock_id)
+            if clave in filas_por_clave:
+                filas_por_clave[clave]["stock_inicial"] = saldo_stock[producto_stock_id]
         for movimiento in movimientos_stock_por_mes.get(mes, []):
             cantidad = _cantidad_unidad_primaria(movimiento)
             signo = Decimal(1) if movimiento.tipo_movimiento == "DISPONIBLE" else Decimal(-1)
             saldo_stock[movimiento.producto_id] += signo * cantidad
-        for producto_stock_id in productos_stock:
-            clave = (mes, producto_stock_id)
-            if clave in filas_por_clave:
-                filas_por_clave[clave]["stock_inicio_siguiente"] = saldo_stock[producto_stock_id]
         valores = serie_por_mes[mes]
         serie.append(
             {
@@ -322,26 +323,9 @@ def informe_ventas_stock_mensual(desde: date, hasta: date, producto_id: int | No
         )
         mes = date(mes.year + (1 if mes.month == 12 else 0), 1 if mes.month == 12 else mes.month + 1, 1)
 
-    mes_siguiente = mes
-    stock_inicio_siguiente = sum(saldo_stock.values(), start=ZERO)
-    serie.append(
-        {
-            "mes": mes_siguiente.strftime("%m-%Y"),
-            "vendidas": None,
-            "entradas": None,
-            "despachos": None,
-            "stock": int(stock_inicio_siguiente),
-        }
-    )
-
     for fila in filas:
-        fila["stock_inicio_siguiente"] = _q2(
-            filas_por_clave[(fila["mes"], fila["producto"].id)].get("stock_inicio_siguiente")
-        )
-        fila["mes_siguiente"] = date(
-            fila["mes"].year + (1 if fila["mes"].month == 12 else 0),
-            1 if fila["mes"].month == 12 else fila["mes"].month + 1,
-            1,
+        fila["stock_inicial"] = _q2(
+            filas_por_clave[(fila["mes"], fila["producto"].id)].get("stock_inicial")
         )
     return {
         "filas": filas,
@@ -350,8 +334,7 @@ def informe_ventas_stock_mensual(desde: date, hasta: date, producto_id: int | No
         "venta_neta": _q2(sum((fila["venta_neta"] for fila in filas), start=ZERO)),
         "entradas": _q2(sum((fila["entradas"] for fila in filas), start=ZERO)),
         "salidas": _q2(sum((fila["salidas"] for fila in filas), start=ZERO)),
-        "stock_inicio_siguiente": _q2(stock_inicio_siguiente),
-        "mes_siguiente": mes_siguiente,
+        "stock_inicial": _q2(stock_inicial_periodo),
         "producto_seleccionado": Producto.objects.filter(pk=producto_id).first() if producto_id else None,
     }
 

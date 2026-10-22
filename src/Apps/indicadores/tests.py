@@ -157,6 +157,26 @@ class InformesProfesionalesTests(TestCase):
                 self.assertEqual(response.context["informe_activo"], tab)
                 self.assertContains(response, 'class="portal-tabs mb-3"')
 
+    def test_informes_estrategicos_usan_portal_tabs_y_un_solo_link_precios(self):
+        casos = (
+            ("dashboard_estrategia", "Informe Estratégico"),
+            ("dashboard_estrategia_precios", "Estrategia de Precios"),
+            ("dashboard_lista_precios_vigentes", "Listas de Precios Vigentes"),
+            ("dashboard_precios_cliente", "Precios por Cliente"),
+        )
+        for url_name, titulo in casos:
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'class="portal-tabs mb-3"')
+                self.assertContains(response, 'aria-label="Informes estratégicos"')
+                self.assertContains(response, 'aria-current="page"', count=1)
+                self.assertContains(response, "data-indicadores-precios", count=1)
+                self.assertContains(response, titulo)
+                for link_name, etiqueta in casos:
+                    self.assertContains(response, reverse(link_name))
+                    self.assertContains(response, etiqueta)
+
     def test_pipeline_se_elimina_y_la_url_antigua_vuelve_a_presupuesto(self):
         response = self.client.get(
             reverse("dashboard_comercial_gestion"),
@@ -187,7 +207,7 @@ class InformesProfesionalesTests(TestCase):
                 self.assertIn(clase, contenido)
                 self.assertIn(icono, contenido)
 
-    def test_grafico_ventas_stock_dibuja_valores_con_color_y_espaciado(self):
+    def test_grafico_ventas_stock_muestra_cuatro_filas_de_valores_por_mes(self):
         response = self.client.get(
             reverse("dashboard_comercial_gestion"),
             data={
@@ -197,10 +217,12 @@ class InformesProfesionalesTests(TestCase):
             },
         )
 
-        self.assertContains(response, "puntosEtiquetados")
-        self.assertContains(response, "desplazamientos")
+        self.assertContains(response, 'data-serie="ventas"')
+        self.assertContains(response, 'data-serie="entradas"')
+        self.assertContains(response, 'data-serie="despachos"')
+        self.assertContains(response, 'data-serie="stock-inicial"')
+        self.assertNotContains(response, "puntosEtiquetados")
         self.assertContains(response, "datos.length * 95")
-        self.assertContains(response, "ctx.fillText(texto")
 
     def test_accesos_separan_los_portal_tabs_por_seccion(self):
         casos = (
@@ -591,12 +613,14 @@ class InformesProfesionalesTests(TestCase):
         self.assertEqual(informe["serie"][0]["entradas"], 12)
         self.assertEqual(informe["serie"][0]["despachos"], 5)
         self.assertEqual(informe["serie"][0]["stock"], 3)
-        self.assertEqual(informe["serie"][1]["mes"], "10-2026")
-        self.assertEqual(informe["serie"][1]["stock"], 10)
-        self.assertIsNone(informe["serie"][1]["vendidas"])
-        self.assertEqual(informe["stock_inicio_siguiente"], Decimal("10.00"))
-        self.assertEqual(informe["filas"][0]["stock_inicio_siguiente"], Decimal("10.00"))
-        self.assertEqual(informe["filas"][0]["mes_siguiente"], date(2026, 10, 1))
+        self.assertEqual(len(informe["serie"]), 1)
+        self.assertEqual(informe["stock_inicial"], Decimal("3.00"))
+        self.assertEqual(informe["filas"][0]["stock_inicial"], Decimal("3.00"))
+
+        informe_octubre = informe_ventas_stock_mensual(date(2026, 10, 1), date(2026, 10, 31))
+        self.assertEqual(informe_octubre["serie"][0]["mes"], "10-2026")
+        self.assertEqual(informe_octubre["serie"][0]["stock"], 10)
+        self.assertEqual(informe_octubre["stock_inicial"], Decimal("10.00"))
 
         response = self.client.get(
             reverse("dashboard_comercial_gestion"),
@@ -613,7 +637,21 @@ class InformesProfesionalesTests(TestCase):
         self.assertContains(response, 'aria-label="Ver flujo de inventario"')
         self.assertContains(response, 'aria-label="Ver producto en la gráfica"')
         self.assertContains(response, "Despachos de stock")
-        self.assertContains(response, "falta de saldo registrada")
+        self.assertContains(response, "saldo acumulado al cierre del mes anterior")
+        self.assertContains(response, 'data-serie="stock-inicial"')
+
+        response_dos_meses = self.client.get(
+            reverse("dashboard_comercial_gestion"),
+            data={
+                "informe": "ventas_stock",
+                "fecha_desde": "2026-08-01",
+                "fecha_hasta": "2026-09-30",
+                "producto": producto.id,
+            },
+        )
+        self.assertEqual(len(response_dos_meses.context["informe"]["serie"]), 2)
+        self.assertContains(response_dos_meses, "<th>08-2026</th>", html=True)
+        self.assertContains(response_dos_meses, "<th>09-2026</th>", html=True)
 
 
 class InformeProductosTests(TestCase):
@@ -1001,6 +1039,17 @@ class EstrategiaPreciosTests(TestCase):
             correo_cliente="cliente@estrategia.local",
             categoria="PYME",
         )
+        self.lista_precios_vigente = ListaPreciosPredeterminada.objects.create(
+            nombre_listaprecios="Lista vigente estrategia",
+            activa=True,
+        )
+        self.precio_venta_vigente = ListaPreciosPredItem.objects.create(
+            listaprecios=self.lista_precios_vigente,
+            nombre_producto=self.producto,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("200.00"),
+            vigencia=self.hoy,
+        )
 
         recepcion_1 = Recepcion.objects.create(
             proveedor=self.proveedor,
@@ -1151,7 +1200,7 @@ class EstrategiaPreciosTests(TestCase):
         )
 
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "Informe Estrategico")
+        self.assertContains(resp, "Informe Estratégico")
         self.assertContains(resp, "Lectura Rapida")
         self.assertContains(resp, "Cliente Estrategia")
         self.assertContains(resp, "<th>Neto</th>", html=True)
@@ -1225,7 +1274,8 @@ class EstrategiaPreciosTests(TestCase):
         self.assertContains(resp, "Cambios precio compra")
         self.assertContains(resp, 'id="tabla-cambios-precio-compra"')
         self.assertContains(resp, "Jugo Mango")
-        self.assertContains(resp, "Precio minimo venta")
+        self.assertContains(resp, "Precio venta vigente")
+        self.assertContains(resp, "no con ventas históricas")
         self.assertContains(resp, "Diferencia $")
         self.assertContains(resp, "Diferencia %")
         self.assertContains(resp, "Proveedor Estrategia")
@@ -1239,11 +1289,58 @@ class EstrategiaPreciosTests(TestCase):
         self.assertContains(resp, "text-danger")
 
         row = resp.context["cambios_precio_compra"][0]
-        self.assertEqual(row["precio_minimo_venta"], Decimal("200.00"))
+        self.assertEqual(row["precio_venta_vigente"], Decimal("200.00"))
         self.assertEqual(row["diferencia_venta_pesos"], Decimal("20.00"))
         self.assertEqual(row["diferencia_venta_pct"], Decimal("11.11"))
         self.assertEqual(row["diferencia_compra_pct"], Decimal("20.00"))
         self.assertTrue(row["requiere_revision"])
+
+    def test_alerta_aumento_usa_precio_vigente_y_no_ventas_historicas(self):
+        self.precio_venta_vigente.precio_venta = Decimal("260.00")
+        self.precio_venta_vigente.save()
+        lista_inactiva = ListaPreciosPredeterminada.objects.create(
+            nombre_listaprecios="Lista historica inactiva",
+            activa=False,
+        )
+        ListaPreciosPredItem.objects.create(
+            listaprecios=lista_inactiva,
+            nombre_producto=self.producto,
+            empaque="PRIMARIO",
+            precio_venta=Decimal("50.00"),
+            vigencia=self.hoy - timedelta(days=365),
+        )
+        recepcion = Recepcion.objects.create(
+            proveedor=self.proveedor,
+            fecha_recepcion=self.hoy,
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=5003,
+            total_neto_recepcion=Decimal("180.00"),
+            iva_recepcion=Decimal("34.20"),
+            total_recepcion=Decimal("214.20"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=self.producto,
+            qty=1,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("180.00"),
+            recepcion=recepcion,
+        )
+
+        resp = self.client.get(
+            reverse("dashboard_estrategia_precios"),
+            data={"range_months": 6},
+        )
+
+        row = resp.context["cambios_precio_compra"][0]
+        self.assertEqual(row["precio_venta_vigente"], Decimal("260.00"))
+        self.assertEqual(row["diferencia_venta_pesos"], Decimal("80.00"))
+        self.assertEqual(row["diferencia_venta_pct"], Decimal("44.44"))
+        self.assertNotEqual(row["precio_venta_vigente"], Decimal("200.00"))
+        self.assertNotEqual(row["precio_venta_vigente"], Decimal("50.00"))
 
     def test_dashboard_estrategia_precios_checker_filtra_cambios_compra(self):
         recepcion_alza = Recepcion.objects.create(

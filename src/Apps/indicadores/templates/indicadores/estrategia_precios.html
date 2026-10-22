@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="container-fluid">
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-2">
     <div>
       <h1 class="h4 mb-1">Estrategia de Precios</h1>
       <div class="small text-muted">
@@ -14,13 +14,8 @@
         {% endif %}
       </div>
     </div>
-    <div class="btn-group" role="group" aria-label="Secciones de estrategia">
-      <a href="{% url 'dashboard_estrategia' %}" class="btn btn-outline-primary">Informe</a>
-      <a href="{% url 'dashboard_estrategia_precios' %}" class="btn btn-primary">Precios</a>
-      <a href="{% url 'dashboard_lista_precios_vigentes' %}" class="btn btn-outline-primary">Listas Vigentes</a>
-      <a href="{% url 'dashboard_precios_cliente' %}" class="btn btn-outline-primary">Precios Cliente</a>
-    </div>
   </div>
+  {% include "indicadores/_estrategia_tabs.html" with estrategia_tab="precios" %}
 
   <form method="get" class="row g-2 align-items-end mb-3">
     <div class="col-md-3">
@@ -179,7 +174,7 @@
       <div>
         <h2 class="h6 mb-1">Cambios de Precio de Compra</h2>
         <div class="small text-muted">
-          Bandeja filtrada de cambios consecutivos dentro del historico evaluado. En revision: {{ cambios_precio_compra_revision_total|formatear_miles }}.
+          Cada aumento se compara con el precio de venta actualmente vigente{% if lista_precios_alerta %} en {{ lista_precios_alerta.nombre_listaprecios }}{% endif %}, no con ventas históricas. En revisión: {{ cambios_precio_compra_revision_total|formatear_miles }}.
         </div>
       </div>
     </div>
@@ -194,7 +189,7 @@
           <th>Precio anterior</th>
           <th>Precio nuevo</th>
           <th>Diferencia compra</th>
-          <th>Precio mínimo venta</th>
+          <th>Precio venta vigente</th>
           <th>Diferencia</th>
           <th class="no-sort">Detalle</th>
         </tr>
@@ -246,9 +241,9 @@
             </td>
 
             <td class="text-end"
-                data-order="{% if row.precio_minimo_venta is not None %}{{ row.precio_minimo_venta|floatformat:'2u' }}{% endif %}">
-              {% if row.precio_minimo_venta is not None %}
-                $ {{ row.precio_minimo_venta|formatear_miles }}
+                data-order="{% if row.precio_venta_vigente is not None %}{{ row.precio_venta_vigente|floatformat:'2u' }}{% endif %}">
+              {% if row.precio_venta_vigente is not None %}
+                $ {{ row.precio_venta_vigente|formatear_miles }}
               {% else %}
                 <span class="text-muted">-</span>
               {% endif %}

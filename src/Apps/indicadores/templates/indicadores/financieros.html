@@ -3,10 +3,6 @@
 
 {% block CSS %}
 <style>
-  .portal-tabs { display:flex; gap:1.5rem; border-bottom:1px solid #dee2e6; margin-bottom:2rem; overflow-x:auto; }
-  .portal-tabs a { display:inline-flex; align-items:center; flex:0 0 auto; padding:.8rem .1rem; border-bottom:3px solid transparent; color:#6c757d; font-size:.88rem; font-weight:600; text-decoration:none; white-space:nowrap; }
-  .portal-tabs a:hover, .portal-tabs a[aria-current="page"] { color:#212529; border-bottom-color:#0d6efd; }
-  .portal-tabs a[aria-current="page"] { font-weight:700; }
   .metric-card { height:100%; }
   .metric-value { font-size:1.35rem; font-weight:700; }
   .report-note { border-left:4px solid #0d6efd; background:#f8f9fa; }
@@ -622,7 +618,7 @@
       canvas.height = alto * ratio;
       const ctx = canvas.getContext('2d');
       ctx.scale(ratio, ratio);
-      const margen = {top: 78, right: 28, bottom: 68, left: 72};
+      const margen = {top: 28, right: 28, bottom: 68, left: 72};
       const areaW = ancho - margen.left - margen.right;
       const areaH = alto - margen.top - margen.bottom;
       const valoresGrafico = datos
@@ -635,14 +631,7 @@
       const maximo = maximoDato + holguraVertical;
       const rango = Math.max(maximo - minimo, 1);
       const colores = ['#0d6efd', '#198754', '#dc3545', '#6f42c1'];
-      const etiquetas = ['Ventas', 'Entradas', 'Despachos', 'Stock inicial'];
       const campos = ['vendidas', 'entradas', 'despachos', 'stock'];
-      const desplazamientos = [
-        {dx: 0, dy: -13},
-        {dx: 12, dy: -28},
-        {dx: 12, dy: 18},
-        {dx: -12, dy: 33},
-      ];
 
       ctx.font = '12px system-ui, sans-serif';
       const pasos = Math.min(5, Math.ceil(rango));
@@ -658,15 +647,8 @@
       const yCero = margen.top + areaH - areaH * (0 - minimo) / rango;
       ctx.strokeStyle = '#495057'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(margen.left, yCero); ctx.lineTo(ancho - margen.right, yCero); ctx.stroke();
-      etiquetas.forEach((etiqueta, i) => {
-        const x = margen.left + (i % 2) * 125;
-        const y = 7 + Math.floor(i / 2) * 19;
-        ctx.fillStyle = colores[i]; ctx.fillRect(x, y, 13, 13);
-        ctx.fillStyle = '#495057'; ctx.textAlign = 'left'; ctx.fillText(etiqueta, x + 18, y + 11);
-      });
       const grupoW = datos.length > 1 ? areaW / (datos.length - 1) : 0;
       const saltoEtiquetas = Math.max(Math.ceil(datos.length / Math.max(Math.floor(areaW / 70), 1)), 1);
-      const puntosEtiquetados = [];
       campos.forEach((campo, serie) => {
         ctx.strokeStyle = colores[serie];
         ctx.lineWidth = 2;
@@ -690,34 +672,8 @@
           const y = margen.top + areaH - areaH * (dato[campo] - minimo) / rango;
           ctx.fillStyle = colores[serie];
           ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
-          puntosEtiquetados.push({x, y, valor: dato[campo], serie});
         });
       });
-      ctx.font = '600 11px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      puntosEtiquetados.forEach((punto) => {
-        const texto = Number(punto.valor).toLocaleString('es-CL');
-        const anchoTexto = ctx.measureText(texto).width + 8;
-        const altoTexto = 17;
-        const desplazamiento = desplazamientos[punto.serie];
-        const xEtiqueta = Math.min(
-          Math.max(punto.x + desplazamiento.dx, margen.left + anchoTexto / 2),
-          ancho - margen.right - anchoTexto / 2,
-        );
-        const yEtiqueta = Math.min(
-          Math.max(punto.y + desplazamiento.dy, margen.top + altoTexto / 2),
-          margen.top + areaH - altoTexto / 2,
-        );
-        ctx.fillStyle = 'rgba(255, 255, 255, .9)';
-        ctx.fillRect(xEtiqueta - anchoTexto / 2, yEtiqueta - altoTexto / 2, anchoTexto, altoTexto);
-        ctx.strokeStyle = colores[punto.serie];
-        ctx.lineWidth = 1;
-        ctx.strokeRect(xEtiqueta - anchoTexto / 2, yEtiqueta - altoTexto / 2, anchoTexto, altoTexto);
-        ctx.fillStyle = colores[punto.serie];
-        ctx.fillText(texto, xEtiqueta, yEtiqueta + .5);
-      });
-      ctx.textBaseline = 'alphabetic';
       ctx.font = '12px system-ui, sans-serif';
       datos.forEach((dato, indice) => {
         if (indice % saltoEtiquetas === 0 || indice === datos.length - 1) {
