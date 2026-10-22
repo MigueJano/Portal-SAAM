@@ -63,6 +63,7 @@
               <li><hr class="dropdown-divider"></li>
               {% if user.is_staff %}
               <li><a class="dropdown-item" href="{% url 'integraciones:conciliacion_bancaria' %}">Banco</a></li>
+              <li><a class="dropdown-item" href="{% url 'integraciones:compras_agiles' %}">Compras Ágiles</a></li>
               {% endif %}
               <li><a class="dropdown-item" href="{% url 'integraciones:correo' %}">Correo</a></li>
             </ul>

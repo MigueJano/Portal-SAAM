@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Filtros de Compras Ágiles{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h1 class="h4 mb-1">Filtros de Compras Ágiles</h1>
+      <p class="text-muted mb-0">Las palabras clave se combinan como alternativas; regiones y montos acotan cada búsqueda.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'integraciones:compras_agiles' %}">Volver a resultados</a>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-xl-5">
+      <div class="card shadow-sm">
+        <div class="card-header"><strong>{% if filtro_editado %}Editar filtro{% else %}Nuevo filtro{% endif %}</strong></div>
+        <div class="card-body">
+          <form method="post">
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+            {% for field in form %}
+              {% if field.name == 'activo' %}
+              <div class="form-check mb-3">{{ field }} <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label></div>
+              {% else %}
+              <div class="mb-3">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              </div>
+              {% endif %}
+            {% endfor %}
+            <button class="btn btn-primary" type="submit">Guardar filtro</button>
+            {% if filtro_editado %}<a class="btn btn-outline-secondary" href="{% url 'integraciones:filtros_compras_agiles' %}">Cancelar</a>{% endif %}
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-7">
+      <div class="card shadow-sm">
+        <div class="card-header"><strong>Filtros configurados</strong></div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Nombre</th><th>Criterios</th><th>Estado</th><th></th></tr></thead>
+            <tbody>
+              {% for filtro in filtros %}
+              <tr>
+                <td>{{ filtro.nombre }}</td>
+                <td>
+                  {% if filtro.regiones %}Regiones: {{ filtro.nombres_regiones|join:", " }}<br>{% endif %}
+                  {% if filtro.lugar %}Lugar: {{ filtro.lugar }}<br>{% endif %}
+                  {% if filtro.palabras_clave %}<span class="text-break">Palabras: {{ filtro.palabras_clave|linebreaksbr }}</span>{% endif %}
+                </td>
+                <td>{% if filtro.activo %}<span class="badge text-bg-success">Activo</span>{% else %}<span class="badge text-bg-secondary">Inactivo</span>{% endif %}</td>
+                <td><a class="btn btn-sm btn-outline-primary" href="{% url 'integraciones:editar_filtro_compra_agil' filtro.id %}">Editar</a></td>
+              </tr>
+              {% empty %}<tr><td colspan="4" class="text-center text-muted py-3">Aún no hay filtros.</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

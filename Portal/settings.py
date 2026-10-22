@@ -7,6 +7,8 @@ from pathlib import Path
 import os
 import sys
 
+from django.core.exceptions import ImproperlyConfigured
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SRC_DIR = BASE_DIR / "src"
@@ -32,6 +34,17 @@ def _load_local_env(path: Path) -> None:
 
 
 _load_local_env(BASE_DIR / ".env")
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_list(name: str) -> list[str]:
+    return [value.strip() for value in os.getenv(name, "").split(",") if value.strip()]
 
 
 DB_SELECTION_FILE = BASE_DIR / "Database" / "active_database.json"
@@ -61,9 +74,20 @@ def _resolve_db_name(default_name: Path) -> str:
     return str(default_name.resolve())
 
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key-portal-saam")
-DEBUG = os.getenv("DJANGO_DEBUG", "1") == "1"
-ALLOWED_HOSTS = ["*"]
+DEBUG = _env_bool("DJANGO_DEBUG", default=False)
+
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    raise ImproperlyConfigured("DJANGO_SECRET_KEY es obligatoria en todos los ambientes.")
+
+ALLOWED_HOSTS = _env_list("DJANGO_ALLOWED_HOSTS")
+if not ALLOWED_HOSTS:
+    if DEBUG:
+        ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
+    else:
+        raise ImproperlyConfigured(
+            "DJANGO_ALLOWED_HOSTS es obligatoria cuando DJANGO_DEBUG esta desactivado."
+        )
 
 
 INSTALLED_APPS = [
@@ -136,7 +160,20 @@ else:
     }
 
 
-AUTH_PASSWORD_VALIDATORS = []
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
+]
 
 LANGUAGE_CODE = "es-cl"
 TIME_ZONE = "America/Santiago"
@@ -175,10 +212,27 @@ EMAIL_IMAP_PASSWORD = os.getenv("EMAIL_IMAP_PASSWORD", EMAIL_HOST_PASSWORD)
 EMAIL_IMAP_FOLDER = os.getenv("EMAIL_IMAP_FOLDER", "INBOX")
 
 BANCO_CHILE_MOVIMIENTOS_URL = os.getenv("BANCO_CHILE_MOVIMIENTOS_URL", "")
+BANCO_CHILE_AMBIENTE = os.getenv("BANCO_CHILE_AMBIENTE", "").strip().lower()
 BANCO_CHILE_CLIENT_ID = os.getenv("BANCO_CHILE_CLIENT_ID", "")
 BANCO_CHILE_CLIENT_SECRET = os.getenv("BANCO_CHILE_CLIENT_SECRET", "")
 BANCO_CHILE_BEARER_TOKEN = os.getenv("BANCO_CHILE_BEARER_TOKEN", "")
+BANCO_CHILE_TOKEN_URL = os.getenv(
+    "BANCO_CHILE_TOKEN_URL",
+    "https://apistore.bancochile.auth0app.com/oauth/token",
+)
+BANCO_CHILE_PRIVATE_KEY_PATH = os.getenv("BANCO_CHILE_PRIVATE_KEY_PATH", "")
+BANCO_CHILE_PRIVATE_KEY_ID = os.getenv("BANCO_CHILE_PRIVATE_KEY_ID", "")
+BANCO_CHILE_AUTH0_ASSERTION_AUDIENCE = os.getenv(
+    "BANCO_CHILE_AUTH0_ASSERTION_AUDIENCE",
+    "https://apistore.bancochile.auth0app.com/",
+)
+BANCO_CHILE_API_AUDIENCE = os.getenv("BANCO_CHILE_API_AUDIENCE", "https://openbanking/")
+BANCO_CHILE_TIMEOUT = int(os.getenv("BANCO_CHILE_TIMEOUT", "35"))
 BANCO_CHILE_RUT_ORIGEN = os.getenv("BANCO_CHILE_RUT_ORIGEN", "")
 BANCO_CHILE_PRODUCTO_CUENTA = os.getenv("BANCO_CHILE_PRODUCTO_CUENTA", "CTD")
 BANCO_CHILE_CUENTA = os.getenv("BANCO_CHILE_CUENTA", "")
 BANCO_CHILE_RUT_APODERADO = os.getenv("BANCO_CHILE_RUT_APODERADO", "")
+
+MERCADO_PUBLICO_API_URL = os.getenv("MERCADO_PUBLICO_API_URL", "https://api2.mercadopublico.cl")
+MERCADO_PUBLICO_TICKET = os.getenv("MERCADO_PUBLICO_TICKET", "")
+MERCADO_PUBLICO_TIMEOUT = int(os.getenv("MERCADO_PUBLICO_TIMEOUT", "30"))

@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, datetime
+import ssl
+import threading
+import time
+import uuid
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import jwt
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
@@ -18,6 +25,16 @@ from Apps.integraciones.models import MovimientoBancario, SaldoBancario
 
 class BancoChileError(RuntimeError):
     pass
+
+
+_token_cache = {"clave": None, "access_token": "", "vence_en": 0.0}
+_token_lock = threading.Lock()
+
+
+def _contexto_tls():
+    contexto = ssl.create_default_context()
+    contexto.minimum_version = ssl.TLSVersion.TLSv1_2
+    return contexto
 
 
 def _primer_valor(fila: dict, *nombres, default=""):
@@ -132,23 +149,133 @@ def importar_filas(filas: list[dict], *, cuenta="", moneda="CLP") -> tuple[int, 
 
 
 def _configuracion():
+    url = getattr(settings, "BANCO_CHILE_MOVIMIENTOS_URL", "").strip()
+    ambiente_configurado = getattr(settings, "BANCO_CHILE_AMBIENTE", "").strip().lower()
+    ambiente = ambiente_configurado or ("sandbox" if "sandbox" in url.lower() else "production")
     valores = {
-        "url": getattr(settings, "BANCO_CHILE_MOVIMIENTOS_URL", ""),
+        "url": url,
+        "ambiente": ambiente,
         "client_id": getattr(settings, "BANCO_CHILE_CLIENT_ID", ""),
         "client_secret": getattr(settings, "BANCO_CHILE_CLIENT_SECRET", ""),
         "bearer": getattr(settings, "BANCO_CHILE_BEARER_TOKEN", ""),
+        "token_url": getattr(settings, "BANCO_CHILE_TOKEN_URL", ""),
+        "private_key_path": getattr(settings, "BANCO_CHILE_PRIVATE_KEY_PATH", ""),
+        "private_key_id": getattr(settings, "BANCO_CHILE_PRIVATE_KEY_ID", ""),
+        "assertion_audience": getattr(settings, "BANCO_CHILE_AUTH0_ASSERTION_AUDIENCE", ""),
+        "api_audience": getattr(settings, "BANCO_CHILE_API_AUDIENCE", "https://openbanking/"),
+        "timeout": getattr(settings, "BANCO_CHILE_TIMEOUT", 35),
         "rut_origen": getattr(settings, "BANCO_CHILE_RUT_ORIGEN", ""),
         "producto_cuenta": getattr(settings, "BANCO_CHILE_PRODUCTO_CUENTA", ""),
         "cuenta": getattr(settings, "BANCO_CHILE_CUENTA", ""),
         "rut_apoderado": getattr(settings, "BANCO_CHILE_RUT_APODERADO", ""),
     }
-    requeridos = ("url", "client_id", "bearer", "rut_origen", "producto_cuenta", "cuenta", "rut_apoderado")
+    if ambiente not in {"sandbox", "production"}:
+        raise ImproperlyConfigured("BANCO_CHILE_AMBIENTE debe ser sandbox o production.")
+    requeridos = ("url", "client_id", "rut_origen", "producto_cuenta", "cuenta", "rut_apoderado")
     faltantes = [nombre for nombre in requeridos if not valores[nombre]]
-    if "sandbox" in valores["url"] and not valores["client_secret"]:
+    if ambiente == "sandbox" and not valores["client_secret"]:
         faltantes.append("client_secret")
+    if ambiente == "production":
+        faltantes.extend(
+            nombre
+            for nombre in ("token_url", "private_key_path", "assertion_audience", "api_audience")
+            if not valores[nombre]
+        )
     if faltantes:
         raise ImproperlyConfigured("Configuración Banco de Chile incompleta: " + ", ".join(faltantes))
+    if not valores["url"].lower().startswith("https://"):
+        raise ImproperlyConfigured("BANCO_CHILE_MOVIMIENTOS_URL debe usar HTTPS.")
+    if ambiente == "production":
+        if not valores["token_url"].lower().startswith("https://"):
+            raise ImproperlyConfigured("BANCO_CHILE_TOKEN_URL debe usar HTTPS.")
+        if not Path(valores["private_key_path"]).is_file():
+            raise ImproperlyConfigured("BANCO_CHILE_PRIVATE_KEY_PATH no apunta a una llave PEM existente.")
+    try:
+        valores["timeout"] = int(valores["timeout"])
+    except (TypeError, ValueError) as exc:
+        raise ImproperlyConfigured("BANCO_CHILE_TIMEOUT debe ser un número entero.") from exc
     return valores
+
+
+def _crear_client_assertion(config: dict) -> str:
+    ahora = datetime.now(timezone.utc)
+    claims = {
+        "iss": config["client_id"],
+        "sub": config["client_id"],
+        "aud": config["assertion_audience"],
+        "iat": ahora,
+        "exp": ahora + timedelta(minutes=1),
+        "jti": str(uuid.uuid4()),
+    }
+    headers = {"alg": "RS256"}
+    if config["private_key_id"]:
+        headers["kid"] = config["private_key_id"]
+    try:
+        llave_privada = Path(config["private_key_path"]).read_text(encoding="utf-8")
+        return jwt.encode(claims, llave_privada, algorithm="RS256", headers=headers)
+    except (OSError, ValueError, jwt.PyJWTError) as exc:
+        raise BancoChileError("No fue posible firmar el JWT de Banco de Chile.") from exc
+
+
+def _solicitar_token_productivo(config: dict) -> tuple[str, int]:
+    formulario = urlencode(
+        {
+            "grant_type": "client_credentials",
+            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            "client_assertion": _crear_client_assertion(config),
+            "audience": config["api_audience"],
+        }
+    ).encode("utf-8")
+    request = Request(
+        config["token_url"],
+        data=formulario,
+        method="POST",
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "CLIENTE_APISTORE",
+        },
+    )
+    try:
+        with urlopen(request, timeout=config["timeout"], context=_contexto_tls()) as response:
+            respuesta = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detalle = exc.read().decode("utf-8", errors="replace")[:500]
+        raise BancoChileError(f"Auth0 Banco de Chile respondió HTTP {exc.code}: {detalle}") from exc
+    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise BancoChileError(f"No fue posible obtener el token de Banco de Chile: {exc}") from exc
+    token = respuesta.get("access_token") if isinstance(respuesta, dict) else None
+    if not token:
+        raise BancoChileError("Auth0 Banco de Chile no entregó access_token.")
+    try:
+        expires_in = max(int(respuesta.get("expires_in", 300)), 1)
+    except (TypeError, ValueError):
+        expires_in = 300
+    return str(token), expires_in
+
+
+def _obtener_bearer(config: dict) -> str:
+    if config["ambiente"] == "sandbox":
+        bearer = str(config["bearer"] or "")
+        return bearer[7:] if bearer.lower().startswith("bearer ") else bearer
+
+    clave_cache = (
+        config["client_id"],
+        config["token_url"],
+        config["private_key_path"],
+        config["api_audience"],
+    )
+    ahora = time.monotonic()
+    with _token_lock:
+        if _token_cache["clave"] == clave_cache and _token_cache["vence_en"] > ahora + 60:
+            return _token_cache["access_token"]
+        token, expires_in = _solicitar_token_productivo(config)
+        _token_cache.update(
+            clave=clave_cache,
+            access_token=token,
+            vence_en=ahora + expires_in,
+        )
+        return token
 
 
 def _url_periodo(url: str) -> str:
@@ -166,14 +293,16 @@ def _solicitar_pagina(config: dict, desde: date, hasta: date, paginacion_desde: 
         "fechaHasta": hasta.isoformat(),
         "paginacionDesde": paginacion_desde,
     }
-    bearer = config["bearer"]
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
         "client-id": config["client_id"],
-        "Authorization": bearer if bearer.lower().startswith("bearer ") else f"Bearer {bearer}",
+        "User-Agent": "CLIENTE_APISTORE",
     }
-    if config["client_secret"]:
+    bearer = _obtener_bearer(config)
+    if bearer:
+        headers["Authorization"] = f"Bearer {bearer}"
+    if config["ambiente"] == "sandbox" and config["client_secret"]:
         headers["client-secret"] = config["client_secret"]
     request = Request(
         _url_periodo(config["url"]),
@@ -182,18 +311,26 @@ def _solicitar_pagina(config: dict, desde: date, hasta: date, paginacion_desde: 
         headers=headers,
     )
     try:
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=config["timeout"], context=_contexto_tls()) as response:
             respuesta = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         detalle = exc.read().decode("utf-8", errors="replace")[:500]
+        if 300 <= exc.code < 400:
+            destino = exc.headers.get("Location", "")
+            raise BancoChileError(
+                f"Banco de Chile respondió HTTP {exc.code} con una redirección del gateway"
+                f"{f' hacia {destino}' if destino else ''}; se esperaba JSON."
+            ) from exc
         raise BancoChileError(f"Banco de Chile respondió HTTP {exc.code}: {detalle}") from exc
     except (URLError, TimeoutError, json.JSONDecodeError) as exc:
         raise BancoChileError(f"No fue posible consultar Banco de Chile: {exc}") from exc
     if not isinstance(respuesta, dict):
         raise BancoChileError("La respuesta bancaria no es un objeto JSON.")
     if respuesta.get("codigoRetorno") not in (None, "", "0", 0):
+        codigo = respuesta.get("codigoRetorno")
+        glosa = respuesta.get("glosaRespuesta") or "Sin glosa"
         raise BancoChileError(
-            f"Banco de Chile rechazó la consulta: {respuesta.get('glosaRespuesta') or respuesta.get('codigoRetorno')}"
+            f"Banco de Chile rechazó la consulta ({codigo}): {glosa}"
         )
     if not isinstance(respuesta.get("movimientos", []), list):
         raise BancoChileError("La respuesta bancaria no contiene una lista de movimientos.")
@@ -232,7 +369,7 @@ def consultar_movimientos(desde: date, hasta: date) -> dict:
         if str(respuesta.get("indicadorMasPaginas", "N")).upper() != "Y":
             break
         try:
-            pagina_siguiente = int(respuesta.get("indiceTerminoRespuesta"))
+            pagina_siguiente = int(respuesta.get("indiceTerminoRespuesta")) + 1
         except (TypeError, ValueError) as exc:
             raise BancoChileError("La API indicó más páginas sin entregar un cursor válido.") from exc
         if pagina_siguiente in cursores_usados:

@@ -3,7 +3,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from Apps.Pedidos.models import Cliente, Contacto, Pedido
-from Apps.integraciones.models import ConciliacionPago
+from Apps.integraciones.models import ConciliacionPago, FiltroCompraAgil
 
 
 class CorreoForm(forms.Form):
@@ -72,4 +72,70 @@ def destinatarios_disponibles():
         for c in contactos
     )
     return sorted(filas, key=lambda fila: (fila[0], fila[1].lower()))
+
+
+class FiltroCompraAgilForm(forms.ModelForm):
+    regiones = forms.MultipleChoiceField(
+        label="Regiones",
+        choices=FiltroCompraAgil.REGIONES,
+        required=False,
+        widget=forms.SelectMultiple(attrs={"class": "form-select", "size": 8}),
+        help_text="Sin selección consulta todas las regiones.",
+    )
+    estados = forms.MultipleChoiceField(
+        label="Estados de Mercado Público",
+        choices=FiltroCompraAgil.ESTADOS_API,
+        required=False,
+        initial=["publicada"],
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    class Meta:
+        model = FiltroCompraAgil
+        fields = (
+            "nombre",
+            "activo",
+            "regiones",
+            "lugar",
+            "palabras_clave",
+            "estados",
+            "monto_minimo",
+            "monto_maximo",
+        )
+        widgets = {
+            "nombre": forms.TextInput(attrs={"class": "form-control"}),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "lugar": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Ej.: Santiago, Providencia"}
+            ),
+            "palabras_clave": forms.Textarea(
+                attrs={
+                    "class": "form-control",
+                    "rows": 5,
+                    "placeholder": "garantía\nequipamiento médico\nreactivos",
+                }
+            ),
+            "monto_minimo": forms.NumberInput(attrs={"class": "form-control", "min": 0, "step": "0.01"}),
+            "monto_maximo": forms.NumberInput(attrs={"class": "form-control", "min": 0, "step": "0.01"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.initial["regiones"] = [str(valor) for valor in self.instance.regiones]
+            self.initial["estados"] = self.instance.estados
+
+    def clean_regiones(self):
+        return [int(valor) for valor in self.cleaned_data["regiones"]]
+
+    def clean_estados(self):
+        return self.cleaned_data["estados"] or ["publicada"]
+
+    def clean(self):
+        cleaned = super().clean()
+        minimo = cleaned.get("monto_minimo")
+        maximo = cleaned.get("monto_maximo")
+        if minimo is not None and maximo is not None and minimo > maximo:
+            self.add_error("monto_maximo", "El monto máximo debe ser igual o mayor al mínimo.")
+        return cleaned
 

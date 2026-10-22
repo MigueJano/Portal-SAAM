@@ -49,7 +49,7 @@
     }
 
     .dashboard-grid {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
 </style>
@@ -215,6 +215,35 @@
             </p>
           {% endif %}
           <a href="{% url 'dashboard_estrategia_precios' %}?range_months=all" class="btn btn-outline-info btn-sm mt-2">Ver estrategia de precios</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compras Agiles encontradas -->
+    <div>
+      <div class="card shadow dashboard-card">
+        <div class="card-body">
+          <div class="dashboard-card-header">
+            <h5 class="card-title text-primary dashboard-card-title">
+              Compras Ágiles encontradas ({{ cantidad_compras_agiles }})
+              <span class="d-block fs-6 fw-normal text-body-secondary mt-1">Según filtros configurados</span>
+            </h5>
+            <a
+              href="{% url 'integraciones:filtros_compras_agiles' %}"
+              class="btn btn-sm btn-outline-primary rounded-circle d-inline-flex align-items-center justify-content-center dashboard-card-action"
+              title="Configurar filtros"
+              aria-label="Configurar filtros de Compras Ágiles"
+            ><i class="fas fa-filter"></i></a>
+          </div>
+          {% for compra in compras_agiles_preview %}
+            <div class="border p-2 rounded mb-2 bg-light-subtle">
+              <strong>{{ compra.nombre }}</strong><br>
+              <span class="small text-muted">{{ compra.codigo }} · cierre {% if compra.fecha_cierre_primer_llamado %}{{ compra.fecha_cierre_primer_llamado|date:"d/m/Y H:i" }}{% else %}sin informar{% endif %}</span>
+            </div>
+          {% empty %}
+            <p>No hay Compras Ágiles encontradas.</p>
+          {% endfor %}
+          <a href="{% url 'integraciones:compras_agiles' %}" class="btn btn-outline-primary btn-sm mt-2">Ver Compras Ágiles</a>
         </div>
       </div>
     </div>

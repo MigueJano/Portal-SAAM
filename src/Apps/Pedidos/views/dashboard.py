@@ -14,6 +14,7 @@ from Apps.Pedidos.services.listaprecios_alertas import (
     filas_precios_cliente,
 )
 from Apps.Pedidos.services.precios_compra_alertas import filas_cambios_precio_compra
+from Apps.integraciones.models import CompraAgil
 
 IVA_RATE = Decimal('0.19')
 DOS_DEC = Decimal('0.01')
@@ -113,6 +114,14 @@ def home(request):
     cantidad_cambios_precio_compra = len(cambios_precio_compra)
     cambios_precio_compra_preview = cambios_precio_compra[:5]
 
+    compras_agiles_encontradas = CompraAgil.objects.filter(
+        coincide_filtros=True,
+    ).exclude(estado_gestion=CompraAgil.ESTADO_DESCARTADA)
+    cantidad_compras_agiles = compras_agiles_encontradas.count()
+    compras_agiles_preview = list(
+        compras_agiles_encontradas.order_by("fecha_cierre_primer_llamado", "fecha_cierre", "codigo")[:5]
+    )
+
     return render(request, './views/dashboard/home.html', {
         'recepciones': recepciones,
         'cantidad_recepciones': cantidad_recepciones,
@@ -134,4 +143,6 @@ def home(request):
             cantidad_cambios_precio_compra - len(cambios_precio_compra_preview),
             0,
         ),
+        'cantidad_compras_agiles': cantidad_compras_agiles,
+        'compras_agiles_preview': compras_agiles_preview,
     })
