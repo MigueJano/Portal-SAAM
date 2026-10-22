@@ -63,7 +63,7 @@ def dashboard_financiero_simple(request, seccion=None):
 
     informes_por_seccion = {
         'financieros': ('resultados', 'balance', 'flujo'),
-        'comercial': ('presupuesto', 'rentabilidad', 'pipeline', 'ventas_stock'),
+        'comercial': ('presupuesto', 'rentabilidad', 'ventas_stock'),
         'control': ('cxc', 'cxp', 'inventario'),
     }
     secciones = {

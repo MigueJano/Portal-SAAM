@@ -10,8 +10,8 @@
   .metric-card { height:100%; }
   .metric-value { font-size:1.35rem; font-weight:700; }
   .report-note { border-left:4px solid #0d6efd; background:#f8f9fa; }
-  .ventas-stock-grafico { min-height:340px; position:relative; }
-  #grafico-ventas-stock { display:block; width:100%; height:320px; }
+  .ventas-stock-grafico { min-height:420px; overflow-x:auto; position:relative; }
+  #grafico-ventas-stock { display:block; width:100%; height:390px; }
 </style>
 {% endblock CSS %}
 
@@ -82,12 +82,11 @@
     {% elif seccion_activa == 'comercial' %}
       <a href="?informe=presupuesto&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'presupuesto' %} aria-current="page"{% endif %}>Presupuesto vs. Real</a>
       <a href="?informe=rentabilidad&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'rentabilidad' %} aria-current="page"{% endif %}>Rentabilidad</a>
-      <a href="?informe=pipeline&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'pipeline' %} aria-current="page"{% endif %}>Pipeline de Ventas</a>
       <a href="?informe=ventas_stock&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'ventas_stock' %} aria-current="page"{% endif %}>Ventas y flujo de stock</a>
     {% else %}
       <a href="?informe=cxc&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'cxc' %} aria-current="page"{% endif %}>Cuentas por Cobrar</a>
       <a href="?informe=cxp&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'cxp' %} aria-current="page"{% endif %}>Cuentas por Pagar</a>
-      <a href="?informe=inventario&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'inventario' %} aria-current="page"{% endif %}>Rotación de Inventario</a>
+      <a href="?informe=inventario&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}"{% if informe_activo == 'inventario' %} aria-current="page"{% endif %}>Inventario FIFO</a>
     {% endif %}
   </nav>
 
@@ -115,7 +114,7 @@
       </div></div></div>
       <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card"><div class="card-body">
         <div class="small text-muted">Margen bruto</div>
-        <div class="metric-value">{{ informe.margen_bruto|floatformat:2 }}%</div>
+        <div class="metric-value">{% include "indicadores/_indicador_porcentaje.html" with valor=informe.margen_bruto %}</div>
         <div class="small text-muted">Sobre ventas con costo: ${{ informe.ventas_netas_con_costo|formatear_miles }}</div>
         <div class="small text-muted">{{ informe.documentos_con_costo }} con costo / {{ informe.documentos_sin_costo }} sin costo</div>
       </div></div></div>
@@ -198,9 +197,7 @@
             <!-- Ganancia del Período % -->
             <div class="d-flex justify-content-between">
               <span>Utilidad %</span>
-                <strong class="{% if ganancia_porcentaje_periodo >= 0 %}text-success{% else %}text-danger{% endif %}">
-                  {{ ganancia_porcentaje_periodo|floatformat:2 }}%
-                </strong>
+                <strong>{% include "indicadores/_indicador_porcentaje.html" with valor=ganancia_porcentaje_periodo %}</strong>
             </div>
 
             <!-- Diferencia de IVA -->
@@ -617,26 +614,35 @@
 
     function dibujar() {
       const ratio = window.devicePixelRatio || 1;
+      const anchoContenedor = canvas.parentElement ? canvas.parentElement.clientWidth : 320;
+      canvas.style.width = `${Math.max(anchoContenedor, datos.length * 95)}px`;
       const ancho = Math.max(canvas.clientWidth, 320);
       const alto = canvas.clientHeight;
       canvas.width = ancho * ratio;
       canvas.height = alto * ratio;
       const ctx = canvas.getContext('2d');
       ctx.scale(ratio, ratio);
-      const margen = {top: 52, right: 20, bottom: 55, left: 68};
+      const margen = {top: 78, right: 28, bottom: 68, left: 72};
       const areaW = ancho - margen.left - margen.right;
       const areaH = alto - margen.top - margen.bottom;
       const valoresGrafico = datos
         .flatMap(d => [d.vendidas, d.entradas, d.despachos, d.stock])
         .filter(valor => Number.isFinite(valor));
+      const minimoDato = Math.min(...valoresGrafico, 0);
       const maximoDato = Math.max(...valoresGrafico, 1);
-      const margenNegativo = Math.max(Math.ceil(maximoDato * .1), 1);
-      const minimo = Math.min(...valoresGrafico, -margenNegativo);
-      const maximo = maximoDato;
+      const holguraVertical = Math.max((maximoDato - minimoDato) * .18, 1);
+      const minimo = minimoDato - holguraVertical;
+      const maximo = maximoDato + holguraVertical;
       const rango = Math.max(maximo - minimo, 1);
       const colores = ['#0d6efd', '#198754', '#dc3545', '#6f42c1'];
       const etiquetas = ['Ventas', 'Entradas', 'Despachos', 'Stock inicial'];
       const campos = ['vendidas', 'entradas', 'despachos', 'stock'];
+      const desplazamientos = [
+        {dx: 0, dy: -13},
+        {dx: 12, dy: -28},
+        {dx: 12, dy: 18},
+        {dx: -12, dy: 33},
+      ];
 
       ctx.font = '12px system-ui, sans-serif';
       const pasos = Math.min(5, Math.ceil(rango));
@@ -660,6 +666,7 @@
       });
       const grupoW = datos.length > 1 ? areaW / (datos.length - 1) : 0;
       const saltoEtiquetas = Math.max(Math.ceil(datos.length / Math.max(Math.floor(areaW / 70), 1)), 1);
+      const puntosEtiquetados = [];
       campos.forEach((campo, serie) => {
         ctx.strokeStyle = colores[serie];
         ctx.lineWidth = 2;
@@ -683,8 +690,35 @@
           const y = margen.top + areaH - areaH * (dato[campo] - minimo) / rango;
           ctx.fillStyle = colores[serie];
           ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+          puntosEtiquetados.push({x, y, valor: dato[campo], serie});
         });
       });
+      ctx.font = '600 11px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      puntosEtiquetados.forEach((punto) => {
+        const texto = Number(punto.valor).toLocaleString('es-CL');
+        const anchoTexto = ctx.measureText(texto).width + 8;
+        const altoTexto = 17;
+        const desplazamiento = desplazamientos[punto.serie];
+        const xEtiqueta = Math.min(
+          Math.max(punto.x + desplazamiento.dx, margen.left + anchoTexto / 2),
+          ancho - margen.right - anchoTexto / 2,
+        );
+        const yEtiqueta = Math.min(
+          Math.max(punto.y + desplazamiento.dy, margen.top + altoTexto / 2),
+          margen.top + areaH - altoTexto / 2,
+        );
+        ctx.fillStyle = 'rgba(255, 255, 255, .9)';
+        ctx.fillRect(xEtiqueta - anchoTexto / 2, yEtiqueta - altoTexto / 2, anchoTexto, altoTexto);
+        ctx.strokeStyle = colores[punto.serie];
+        ctx.lineWidth = 1;
+        ctx.strokeRect(xEtiqueta - anchoTexto / 2, yEtiqueta - altoTexto / 2, anchoTexto, altoTexto);
+        ctx.fillStyle = colores[punto.serie];
+        ctx.fillText(texto, xEtiqueta, yEtiqueta + .5);
+      });
+      ctx.textBaseline = 'alphabetic';
+      ctx.font = '12px system-ui, sans-serif';
       datos.forEach((dato, indice) => {
         if (indice % saltoEtiquetas === 0 || indice === datos.length - 1) {
           ctx.fillStyle = '#495057'; ctx.textAlign = 'center';

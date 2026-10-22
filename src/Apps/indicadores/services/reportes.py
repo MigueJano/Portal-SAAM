@@ -4,14 +4,13 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.db.models import DecimalField, ExpressionWrapper, F, Sum
 
-from Apps.Pedidos.models import Cotizacion, Pedido, Producto, Recepcion, Stock, UtilidadProducto, Venta
-from Apps.integraciones.models import ConciliacionPago, MovimientoBancario, SaldoBancario
+from Apps.Pedidos.models import Producto, Recepcion, Stock, UtilidadProducto, Venta
+from Apps.integraciones.models import ConciliacionPago, SaldoBancario
 from Apps.indicadores.services.contabilidad import _cantidad_unidad_primaria, _valuacion_fifo_por_producto
 
 
 ZERO = Decimal("0.00")
 DOS_DEC = Decimal("0.01")
-IVA_FACTOR = Decimal("1.19")
 
 
 def _q2(value) -> Decimal:
@@ -86,18 +85,54 @@ def informe_balance(hasta: date) -> dict:
 
 
 def informe_flujo_efectivo(desde: date, hasta: date) -> dict:
-    movimientos = MovimientoBancario.objects.filter(fecha__range=(desde, hasta)).order_by("-fecha", "-id")
-    abonos = movimientos.filter(tipo=MovimientoBancario.TIPO_ABONO)
-    cargos = movimientos.filter(tipo=MovimientoBancario.TIPO_CARGO)
-    entradas = _sum(abonos, "monto")
-    salidas = _sum(cargos, "monto")
+    ventas_pagadas = (
+        Venta.objects.filter(
+            fecha_venta__range=(desde, hasta),
+            documento_pedido__in=("Factura", "Boleta"),
+        )
+        .select_related("pedidoid__nombre_cliente")
+        .order_by("-fecha_venta", "-id")
+    )
+    compras_pagadas = (
+        Recepcion.objects.filter(fecha_recepcion__range=(desde, hasta))
+        .exclude(estado_recepcion="Rechazado")
+        .exclude(documento_recepcion="Credito")
+        .select_related("proveedor")
+        .order_by("-fecha_recepcion", "-id")
+    )
+
+    entradas = _sum(ventas_pagadas, "venta_total_pedido")
+    salidas = _sum(compras_pagadas, "total_recepcion")
+    movimientos = [
+        {
+            "fecha": venta.fecha_venta,
+            "tipo": "Entrada",
+            "documento": f"{venta.get_documento_pedido_display()} #{venta.num_documento}",
+            "contraparte": venta.pedidoid.nombre_cliente.nombre_cliente,
+            "monto": _q2(venta.venta_total_pedido),
+            "orden": venta.id,
+        }
+        for venta in ventas_pagadas
+    ]
+    movimientos.extend(
+        {
+            "fecha": compra.fecha_recepcion,
+            "tipo": "Salida",
+            "documento": f"{compra.get_documento_recepcion_display()} #{compra.num_documento_recepcion}",
+            "contraparte": compra.proveedor.nombre_proveedor,
+            "monto": _q2(compra.total_recepcion),
+            "orden": compra.id,
+        }
+        for compra in compras_pagadas
+    )
+    movimientos.sort(key=lambda fila: (fila["fecha"], fila["orden"]), reverse=True)
     return {
         "entradas": entradas,
         "salidas": salidas,
         "flujo_neto": _q2(entradas - salidas),
         "movimientos": movimientos[:100],
-        "cantidad": movimientos.count(),
-        "disponible": movimientos.exists(),
+        "cantidad": len(movimientos),
+        "disponible": bool(movimientos),
         "clasificacion_disponible": False,
     }
 
@@ -166,38 +201,6 @@ def informe_rentabilidad(desde: date, hasta: date) -> dict:
         fila["utilidad"] = _q2(fila["utilidad"])
         fila["margen"] = _q2((fila["utilidad"] / fila["ventas"]) * 100) if fila["ventas"] else ZERO
     return {"clientes": clientes_rows, "productos": productos_rows}
-
-
-def _total_pedido(pedido: Pedido) -> Decimal:
-    neto = sum(
-        (Decimal(linea.cantidad or 0) * Decimal(linea.precio_unitario or 0) for linea in pedido.lineas.all()),
-        start=ZERO,
-    )
-    return _q2(neto * IVA_FACTOR)
-
-
-def informe_pipeline(desde: date, hasta: date) -> dict:
-    pendientes = list(
-        Pedido.objects.filter(fecha_pedido__range=(desde, hasta), estado_pedido="Pendiente")
-        .select_related("nombre_cliente", "num_cotizacion")
-        .prefetch_related("lineas")
-        .order_by("fecha_pedido", "id")
-    )
-    filas = [{"pedido": pedido, "monto": _total_pedido(pedido)} for pedido in pendientes]
-    cotizaciones = Cotizacion.objects.filter(fecha_cotizacion__range=(desde, hasta))
-    cotizaciones_vinculadas = set(
-        Pedido.objects.filter(num_cotizacion__isnull=False, fecha_pedido__range=(desde, hasta)).values_list(
-            "num_cotizacion_id", flat=True
-        )
-    )
-    return {
-        "pedidos": filas,
-        "monto_pedidos": _q2(sum((fila["monto"] for fila in filas), start=ZERO)),
-        "cotizaciones_total": cotizaciones.count(),
-        "cotizaciones_convertidas": cotizaciones.filter(id__in=cotizaciones_vinculadas).count(),
-        "cotizaciones_abiertas": cotizaciones.exclude(id__in=cotizaciones_vinculadas).count(),
-        "probabilidades_disponibles": False,
-    }
 
 
 def informe_ventas_stock_mensual(desde: date, hasta: date, producto_id: int | None = None) -> dict:
@@ -355,7 +358,7 @@ def informe_ventas_stock_mensual(desde: date, hasta: date, producto_id: int | No
 
 def informe_cuentas_por_cobrar(hasta: date) -> dict:
     ventas = (
-        Venta.objects.filter(fecha_venta__lte=hasta)
+        Venta.objects.filter(fecha_venta__lte=hasta, documento_pedido="Credito")
         .select_related("pedidoid__nombre_cliente")
         .order_by("fecha_venta", "id")
     )
@@ -403,7 +406,7 @@ def informe_cuentas_por_cobrar(hasta: date) -> dict:
 
 def informe_cuentas_por_pagar(hasta: date) -> dict:
     recepciones = (
-        Recepcion.objects.filter(fecha_recepcion__lte=hasta)
+        Recepcion.objects.filter(fecha_recepcion__lte=hasta, documento_recepcion="Credito")
         .exclude(estado_recepcion="Rechazado")
         .select_related("proveedor")
         .order_by("fecha_recepcion", "id")
@@ -419,9 +422,9 @@ def informe_cuentas_por_pagar(hasta: date) -> dict:
             }
         )
     return {
-        "disponible": False,
+        "disponible": True,
         "documentos": filas,
-        "total_documentado": _sum(recepciones, "total_recepcion"),
+        "total_pendiente": _sum(recepciones, "total_recepcion"),
     }
 
 
@@ -442,8 +445,16 @@ def informe_rotacion_inventario(desde: date, hasta: date) -> dict:
     )
     costos = {fila["producto_id"]: _q2(fila["costo"]) for fila in utilidad_rows}
     producto_ids = set(apertura) | set(cierre) | set(costos)
-    nombres = dict(Producto.objects.filter(id__in=producto_ids).values_list("id", "nombre_producto"))
+    productos = Producto.objects.in_bulk(producto_ids)
+    recepcion_ids = {
+        capa["recepcion_id"]
+        for resultado in cierre.values()
+        for capa in resultado.get("capas", [])
+        if capa.get("recepcion_id")
+    }
+    recepciones = Recepcion.objects.in_bulk(recepcion_ids)
     filas = []
+    capas_fifo = []
     costo_total = ZERO
     inventario_inicial = ZERO
     inventario_final = ZERO
@@ -457,26 +468,57 @@ def informe_rotacion_inventario(desde: date, hasta: date) -> dict:
         fecha_antigua = min((capa["fecha"] for capa in capas), default=None)
         filas.append(
             {
-                "producto": nombres.get(producto_id, f"Producto #{producto_id}"),
+                "producto": productos.get(producto_id),
                 "costo_ventas": costo,
                 "inventario_promedio": promedio,
+                "stock_final": _q2(cierre.get(producto_id, {}).get("cantidad")),
+                "valor_final": final,
                 "rotacion": rotacion,
                 "dias_stock_antiguo": (hasta - fecha_antigua).days if fecha_antigua else None,
             }
         )
+        producto = productos.get(producto_id)
+        for capa in capas:
+            recepcion = recepciones.get(capa.get("recepcion_id"))
+            stock_capa = _q2(capa["cantidad"])
+            costo_unitario = _q2(capa["costo_unitario"])
+            capas_fifo.append(
+                {
+                    "producto": producto,
+                    "documento": (
+                        f"{recepcion.get_documento_recepcion_display()} #{recepcion.num_documento_recepcion}"
+                        if recepcion
+                        else f"Stock #{capa['stock_id']} sin recepcion"
+                    ),
+                    "fecha": capa["fecha"],
+                    "cantidad_documento": _q2(capa.get("cantidad_documento", capa["cantidad"])),
+                    "stock": stock_capa,
+                    "valor_unitario": costo_unitario,
+                    "valor_total": _q2(stock_capa * costo_unitario),
+                }
+            )
         costo_total += costo
         inventario_inicial += inicial
         inventario_final += final
-    filas.sort(key=lambda row: (row["rotacion"], row["inventario_promedio"]))
+    filas.sort(key=lambda row: row["producto"].nombre_producto if row["producto"] else "")
+    capas_fifo.sort(
+        key=lambda row: (
+            row["producto"].nombre_producto if row["producto"] else "",
+            row["fecha"],
+            row["documento"],
+        )
+    )
     promedio_total = _q2((inventario_inicial + inventario_final) / 2)
     rotacion_total = _q2(costo_total / promedio_total) if promedio_total > 0 else ZERO
     dias_periodo = max((hasta - desde).days + 1, 1)
     dias_inventario = _q2(dias_periodo / rotacion_total) if rotacion_total > 0 else None
     return {
         "filas": filas,
+        "capas_fifo": capas_fifo,
         "costo_ventas": _q2(costo_total),
         "inventario_inicial": _q2(inventario_inicial),
         "inventario_final": _q2(inventario_final),
+        "total_stock": _q2(inventario_final),
         "inventario_promedio": promedio_total,
         "rotacion": rotacion_total,
         "dias_inventario": dias_inventario,
@@ -490,7 +532,6 @@ def construir_informe(nombre: str, desde: date, hasta: date, producto_id: int | 
         "flujo": lambda: informe_flujo_efectivo(desde, hasta),
         "presupuesto": lambda: informe_presupuesto(desde, hasta),
         "rentabilidad": lambda: informe_rentabilidad(desde, hasta),
-        "pipeline": lambda: informe_pipeline(desde, hasta),
         "ventas_stock": lambda: informe_ventas_stock_mensual(desde, hasta, producto_id),
         "cxc": lambda: informe_cuentas_por_cobrar(hasta),
         "cxp": lambda: informe_cuentas_por_pagar(hasta),

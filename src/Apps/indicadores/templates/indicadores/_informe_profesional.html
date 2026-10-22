@@ -6,10 +6,10 @@
     <span class="badge bg-warning text-dark">Cobertura parcial</span>
   </div>
   <div class="row g-3 mb-3">
-    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Efectivo bancario</div><div class="metric-value">${{ informe.efectivo|formatear_miles }}</div></div></div></div>
-    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Inventario FIFO</div><div class="metric-value">${{ informe.inventario|formatear_miles }}</div></div></div></div>
-    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Saldos por conciliar</div><div class="metric-value">${{ informe.cuentas_por_cobrar|formatear_miles }}</div></div></div></div>
-    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Activos identificados</div><div class="metric-value">${{ informe.activos_identificados|formatear_miles }}</div></div></div></div>
+    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Efectivo bancario</div><div class="metric-value {% if informe.efectivo < 0 %}text-danger{% endif %}">${{ informe.efectivo|formatear_miles }}</div></div></div></div>
+    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Inventario FIFO</div><div class="metric-value {% if informe.inventario < 0 %}text-danger{% endif %}">${{ informe.inventario|formatear_miles }}</div></div></div></div>
+    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Saldos por conciliar</div><div class="metric-value {% if informe.cuentas_por_cobrar < 0 %}text-danger{% endif %}">${{ informe.cuentas_por_cobrar|formatear_miles }}</div></div></div></div>
+    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Activos identificados</div><div class="metric-value {% if informe.activos_identificados < 0 %}text-danger{% endif %}">${{ informe.activos_identificados|formatear_miles }}</div></div></div></div>
   </div>
   <div class="alert alert-warning">
     <strong>No es un Balance General completo.</strong> Faltan cuentas por pagar confirmadas, impuestos por pagar, activos fijos,
@@ -17,22 +17,22 @@
   </div>
   <div class="table-responsive"><table class="table table-sm table-bordered js-tabla-filtros">
     <thead class="table-light"><tr><th>Cuenta bancaria</th><th>Moneda</th><th>Última consulta</th><th>Saldo disponible</th></tr></thead>
-    <tbody>{% for saldo in informe.saldos %}<tr><td>{{ saldo.cuenta_enmascarada }}</td><td>{{ saldo.moneda }}</td><td>{{ saldo.consultado_en|date:"d-m-Y H:i" }}</td><td class="text-end">${{ saldo.saldo_disponible|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="4" class="text-center text-muted">Sin saldos bancarios importados para la fecha de corte.</td></tr>{% endfor %}</tbody>
+    <tbody>{% for saldo in informe.saldos %}<tr><td>{{ saldo.cuenta_enmascarada }}</td><td>{{ saldo.moneda }}</td><td>{{ saldo.consultado_en|date:"d-m-Y H:i" }}</td><td class="text-end {% if saldo.saldo_disponible < 0 %}text-danger{% endif %}">${{ saldo.saldo_disponible|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="4" class="text-center text-muted">Sin saldos bancarios importados para la fecha de corte.</td></tr>{% endfor %}</tbody>
   </table></div>
 
 {% elif informe_activo == "flujo" %}
   <h2 class="h5">Estado de Flujo de Efectivo</h2>
-  <div class="alert report-note py-2">Usa movimientos bancarios reales del período. No confunde ventas facturadas con cobros ni compras registradas con pagos.</div>
+  <div class="alert report-note py-2">Flujo operacional estimado: las recepciones no rechazadas y que no sean a cr&eacute;dito se consideran pagadas al contado; toda venta con boleta o factura se considera cobrada. Las operaciones a cr&eacute;dito quedan pendientes y no se incluyen como efectivo.</div>
   <div class="row g-3 mb-3">
-    <div class="col-md-4"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Entradas bancarias</div><div class="metric-value text-success">${{ informe.entradas|formatear_miles }}</div></div></div></div>
-    <div class="col-md-4"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Salidas bancarias</div><div class="metric-value text-danger">${{ informe.salidas|formatear_miles }}</div></div></div></div>
-    <div class="col-md-4"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Flujo neto</div><div class="metric-value">${{ informe.flujo_neto|formatear_miles }}</div></div></div></div>
+    <div class="col-md-4"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Ventas cobradas</div><div class="metric-value text-success">${{ informe.entradas|formatear_miles }}</div></div></div></div>
+    <div class="col-md-4"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Recepciones pagadas</div><div class="metric-value text-danger">${{ informe.salidas|formatear_miles }}</div></div></div></div>
+    <div class="col-md-4"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Flujo neto</div><div class="metric-value {% if informe.flujo_neto < 0 %}text-danger{% endif %}">${{ informe.flujo_neto|formatear_miles }}</div></div></div></div>
   </div>
-  {% if not informe.disponible %}<div class="alert alert-warning">No existen movimientos bancarios importados en el período.</div>{% endif %}
-  <div class="alert alert-secondary py-2">La clasificación entre operación, inversión y financiamiento no está disponible porque los movimientos bancarios aún no poseen categoría contable.</div>
+  {% if not informe.disponible %}<div class="alert alert-warning">No existen ventas cobradas ni recepciones pagadas en el per&iacute;odo.</div>{% endif %}
+  <div class="alert alert-secondary py-2">Este informe representa flujo operacional seg&uacute;n los documentos registrados. No incorpora todav&iacute;a inversi&oacute;n, financiamiento ni otros egresos sin recepci&oacute;n.</div>
   <div class="table-responsive"><table class="table table-sm table-bordered js-tabla-filtros">
-    <thead class="table-light"><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Contraparte</th><th>Estado</th><th>Monto</th></tr></thead>
-    <tbody>{% for mov in informe.movimientos %}<tr><td data-order="{{ mov.fecha|date:'Y-m-d' }}">{{ mov.fecha|date:"d-m-Y" }}</td><td>{{ mov.get_tipo_display }}</td><td>{{ mov.descripcion }}</td><td>{{ mov.nombre_contraparte|default:"—" }}</td><td>{{ mov.get_estado_display }}</td><td class="text-end">${{ mov.monto|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="6" class="text-center text-muted">Sin movimientos.</td></tr>{% endfor %}</tbody>
+    <thead class="table-light"><tr><th>Fecha</th><th>Tipo</th><th>Documento</th><th>Contraparte</th><th>Monto</th></tr></thead>
+    <tbody>{% for mov in informe.movimientos %}<tr><td data-order="{{ mov.fecha|date:'Y-m-d' }}">{{ mov.fecha|date:"d-m-Y" }}</td><td>{{ mov.tipo }}</td><td>{{ mov.documento }}</td><td>{{ mov.contraparte }}</td><td class="text-end {% if mov.tipo == 'Salida' %}text-danger{% else %}text-success{% endif %}">${{ mov.monto|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="5" class="text-center text-muted">Sin movimientos.</td></tr>{% endfor %}</tbody>
   </table></div>
 
 {% elif informe_activo == "presupuesto" %}
@@ -40,7 +40,7 @@
   <div class="alert alert-warning"><strong>Presupuesto no registrado.</strong> Portal SAAM no tiene metas presupuestarias por período o cuenta. Se muestran los valores reales disponibles sin calcular una desviación ficticia.</div>
   <div class="table-responsive"><table class="table table-sm table-bordered js-tabla-filtros">
     <thead class="table-light"><tr><th>Concepto</th><th>Presupuesto</th><th>Real</th><th>Desviación</th></tr></thead>
-    <tbody>{% for fila in informe.reales %}<tr><td>{{ fila.concepto }}</td><td class="text-center text-muted">Sin dato</td><td class="text-end">${{ fila.monto|formatear_miles }}</td><td class="text-center text-muted">No calculable</td></tr>{% endfor %}</tbody>
+    <tbody>{% for fila in informe.reales %}<tr><td>{{ fila.concepto }}</td><td class="text-center text-muted">Sin dato</td><td class="text-end {% if fila.monto < 0 %}text-danger{% endif %}">${{ fila.monto|formatear_miles }}</td><td class="text-center text-muted">No calculable</td></tr>{% endfor %}</tbody>
   </table></div>
 
 {% elif informe_activo == "rentabilidad" %}
@@ -49,26 +49,12 @@
   <h3 class="h6 mt-3">Clientes</h3>
   <div class="table-responsive"><table class="table table-sm table-bordered js-tabla-filtros">
     <thead class="table-light"><tr><th>Cliente</th><th>Documentos</th><th>Ventas netas</th><th>Utilidad bruta</th><th>Margen</th><th>Sin costo</th></tr></thead>
-    <tbody>{% for fila in informe.clientes %}<tr><td>{{ fila.nombre }}</td><td class="text-end">{{ fila.documentos }}</td><td class="text-end">${{ fila.ventas|formatear_miles }}</td><td class="text-end {% if fila.utilidad < 0 %}text-danger{% endif %}">${{ fila.utilidad|formatear_miles }}</td><td class="text-end">{{ fila.margen|floatformat:2 }}%</td><td class="text-end">{{ fila.sin_costo }}</td></tr>{% empty %}<tr><td colspan="6" class="text-center text-muted">Sin ventas en el período.</td></tr>{% endfor %}</tbody>
+    <tbody>{% for fila in informe.clientes %}<tr><td>{{ fila.nombre }}</td><td class="text-end">{{ fila.documentos }}</td><td class="text-end {% if fila.ventas < 0 %}text-danger{% endif %}">${{ fila.ventas|formatear_miles }}</td><td class="text-end {% if fila.utilidad < 0 %}text-danger{% endif %}">${{ fila.utilidad|formatear_miles }}</td><td class="text-end">{% include "indicadores/_indicador_porcentaje.html" with valor=fila.margen %}</td><td class="text-end">{{ fila.sin_costo }}</td></tr>{% empty %}<tr><td colspan="6" class="text-center text-muted">Sin ventas en el período.</td></tr>{% endfor %}</tbody>
   </table></div>
   <h3 class="h6 mt-4">Productos</h3>
   <div class="table-responsive"><table class="table table-sm table-bordered js-tabla-filtros">
     <thead class="table-light"><tr><th>Código</th><th>Producto</th><th>Unidades primarias</th><th>Ventas netas</th><th>Utilidad bruta</th><th>Margen</th></tr></thead>
-    <tbody>{% for fila in informe.productos %}<tr><td>{{ fila.producto__codigo_producto_interno }}</td><td>{{ fila.producto__nombre_producto }}</td><td class="text-end">{{ fila.unidades|formatear_miles }}</td><td class="text-end">${{ fila.ventas|formatear_miles }}</td><td class="text-end {% if fila.utilidad < 0 %}text-danger{% endif %}">${{ fila.utilidad|formatear_miles }}</td><td class="text-end">{{ fila.margen|floatformat:2 }}%</td></tr>{% empty %}<tr><td colspan="6" class="text-center text-muted">Sin productos vendidos en el período.</td></tr>{% endfor %}</tbody>
-  </table></div>
-
-{% elif informe_activo == "pipeline" %}
-  <h2 class="h5">Pipeline o Embudo de Ventas</h2>
-  <div class="row g-3 mb-3">
-    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Cotizaciones emitidas</div><div class="metric-value">{{ informe.cotizaciones_total }}</div></div></div></div>
-    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Convertidas en pedido</div><div class="metric-value">{{ informe.cotizaciones_convertidas }}</div></div></div></div>
-    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Sin pedido asociado</div><div class="metric-value">{{ informe.cotizaciones_abiertas }}</div></div></div></div>
-    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Pedidos pendientes</div><div class="metric-value">${{ informe.monto_pedidos|formatear_miles }}</div></div></div></div>
-  </div>
-  <div class="alert alert-warning">Las cotizaciones no guardan monto, etapa, probabilidad ni fecha estimada de cierre. El ingreso futuro muestra pedidos pendientes del período a valor total con IVA; no es un forecast probabilístico.</div>
-  <div class="table-responsive"><table class="table table-sm table-bordered js-tabla-filtros">
-    <thead class="table-light"><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Cotización</th><th>Monto total estimado</th></tr></thead>
-    <tbody>{% for fila in informe.pedidos %}<tr><td>#{{ fila.pedido.id }}</td><td>{{ fila.pedido.fecha_pedido|date:"d-m-Y" }}</td><td>{{ fila.pedido.nombre_cliente.nombre_cliente }}</td><td>{{ fila.pedido.num_cotizacion.num_cotizacion|default:"—" }}</td><td class="text-end">${{ fila.monto|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="5" class="text-center text-muted">Sin pedidos pendientes en el período.</td></tr>{% endfor %}</tbody>
+    <tbody>{% for fila in informe.productos %}<tr><td>{{ fila.producto__codigo_producto_interno }}</td><td>{{ fila.producto__nombre_producto }}</td><td class="text-end">{{ fila.unidades|formatear_miles }}</td><td class="text-end {% if fila.ventas < 0 %}text-danger{% endif %}">${{ fila.ventas|formatear_miles }}</td><td class="text-end {% if fila.utilidad < 0 %}text-danger{% endif %}">${{ fila.utilidad|formatear_miles }}</td><td class="text-end">{% include "indicadores/_indicador_porcentaje.html" with valor=fila.margen %}</td></tr>{% empty %}<tr><td colspan="6" class="text-center text-muted">Sin productos vendidos en el período.</td></tr>{% endfor %}</tbody>
   </table></div>
 
 {% elif informe_activo == "ventas_stock" %}
@@ -84,7 +70,7 @@
   {% endif %}
   <div class="row g-3 mb-3">
     <div class="col-6 col-lg"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Unidades vendidas</div><div class="metric-value">{{ informe.unidades_vendidas|floatformat:0|formatear_miles }}</div></div></div></div>
-    <div class="col-6 col-lg"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Venta neta</div><div class="metric-value">${{ informe.venta_neta|formatear_miles }}</div></div></div></div>
+    <div class="col-6 col-lg"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Venta neta</div><div class="metric-value {% if informe.venta_neta < 0 %}text-danger{% endif %}">${{ informe.venta_neta|formatear_miles }}</div></div></div></div>
     <div class="col-6 col-lg"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Entradas por recepciones</div><div class="metric-value text-success">{{ informe.entradas|floatformat:0|formatear_miles }}</div></div></div></div>
     <div class="col-6 col-lg"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Despachos de stock</div><div class="metric-value text-danger">{{ informe.salidas|floatformat:0|formatear_miles }}</div></div></div></div>
     <div class="col-6 col-lg"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Stock inicial {{ informe.mes_siguiente|date:"m-Y" }}</div><div class="metric-value">{{ informe.stock_inicio_siguiente|floatformat:0|formatear_miles }}</div></div></div></div>
@@ -106,32 +92,40 @@
 
 {% elif informe_activo == "cxc" %}
   <h2 class="h5">Antigüedad de Cuentas por Cobrar</h2>
-  <div class="alert alert-warning">No existen fechas de vencimiento ni condición de pago por venta. La antigüedad se mide desde la fecha de venta y el saldo resta únicamente conciliaciones bancarias confirmadas.</div>
-  <div class="row g-2 mb-3">{% for bucket in informe.buckets %}<div class="col-6 col-lg-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">{{ bucket.label }}</div><div class="h5 mb-0">${{ bucket.total|formatear_miles }}</div></div></div></div>{% endfor %}</div>
+  <div class="alert report-note py-2">Incluye solamente ventas a cr&eacute;dito con saldo pendiente y resta las conciliaciones bancarias confirmadas. Las facturas y boletas se consideran pagadas y no forman parte de este informe. Sin fecha de vencimiento contractual, la antigüedad usa la primera fecha de venta.</div>
+  <div class="row g-2 mb-3">{% for bucket in informe.buckets %}<div class="col-6 col-lg-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">{{ bucket.label }}</div><div class="h5 mb-0 {% if bucket.total < 0 %}text-danger{% endif %}">${{ bucket.total|formatear_miles }}</div></div></div></div>{% endfor %}</div>
   <div class="table-responsive"><table class="table table-sm table-bordered js-tabla-filtros">
     <thead class="table-light"><tr><th>Pedido</th><th>Cliente</th><th>Fecha base</th><th>Días</th><th>Tramo</th><th>Facturado</th><th>Conciliado</th><th>Saldo</th></tr></thead>
-    <tbody>{% for fila in informe.filas %}<tr><td>#{{ fila.pedido.id }}</td><td>{{ fila.cliente.nombre_cliente }}</td><td>{{ fila.fecha|date:"d-m-Y" }}</td><td class="text-end">{{ fila.dias }}</td><td>{{ fila.bucket }}</td><td class="text-end">${{ fila.facturado|formatear_miles }}</td><td class="text-end">${{ fila.pagado|formatear_miles }}</td><td class="text-end fw-semibold">${{ fila.saldo|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="8" class="text-center text-muted">Sin saldos pendientes identificados.</td></tr>{% endfor %}</tbody>
+    <tbody>{% for fila in informe.filas %}<tr><td>#{{ fila.pedido.id }}</td><td>{{ fila.cliente.nombre_cliente }}</td><td>{{ fila.fecha|date:"d-m-Y" }}</td><td class="text-end">{{ fila.dias }}</td><td>{{ fila.bucket }}</td><td class="text-end {% if fila.facturado < 0 %}text-danger{% endif %}">${{ fila.facturado|formatear_miles }}</td><td class="text-end {% if fila.pagado < 0 %}text-danger{% endif %}">${{ fila.pagado|formatear_miles }}</td><td class="text-end fw-semibold {% if fila.saldo < 0 %}text-danger{% endif %}">${{ fila.saldo|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="8" class="text-center text-muted">Sin saldos pendientes identificados.</td></tr>{% endfor %}</tbody>
   </table></div>
 
 {% elif informe_activo == "cxp" %}
   <h2 class="h5">Antigüedad de Cuentas por Pagar</h2>
-  <div class="alert alert-warning"><strong>No calculable con precisión.</strong> Las recepciones no guardan vencimiento, condición de pago, abonos ni conciliación con cargos bancarios. El total documentado de ${{ informe.total_documentado|formatear_miles }} no debe interpretarse como deuda pendiente.</div>
+  <div class="alert report-note py-2">Incluye recepciones con documento a cr&eacute;dito, consideradas pendientes de pago. Las compras con factura o boleta se consideran pagadas al contado. El sistema aún no registra abonos parciales ni una fecha de vencimiento contractual.</div>
+  <div class="card metric-card mb-3"><div class="card-body"><div class="small text-muted">Total pendiente de pago</div><div class="metric-value {% if informe.total_pendiente < 0 %}text-danger{% endif %}">${{ informe.total_pendiente|formatear_miles }}</div></div></div>
   <div class="table-responsive"><table class="table table-sm table-bordered js-tabla-filtros">
-    <thead class="table-light"><tr><th>Recepción</th><th>Proveedor</th><th>Fecha documento</th><th>Antigüedad</th><th>Tramo documental</th><th>Total documento</th><th>Saldo pendiente</th></tr></thead>
-    <tbody>{% for fila in informe.documentos %}<tr><td>#{{ fila.recepcion.id }}</td><td>{{ fila.recepcion.proveedor.nombre_proveedor }}</td><td>{{ fila.recepcion.fecha_recepcion|date:"d-m-Y" }}</td><td class="text-end">{{ fila.dias }} días</td><td>{{ fila.bucket }}</td><td class="text-end">${{ fila.recepcion.total_recepcion|formatear_miles }}</td><td class="text-center text-muted">Sin dato</td></tr>{% empty %}<tr><td colspan="7" class="text-center text-muted">Sin documentos de compra.</td></tr>{% endfor %}</tbody>
+    <thead class="table-light"><tr><th>Recepción</th><th>Documento</th><th>Proveedor</th><th>Fecha documento</th><th>Antigüedad</th><th>Tramo</th><th>Saldo pendiente</th></tr></thead>
+    <tbody>{% for fila in informe.documentos %}<tr><td>#{{ fila.recepcion.id }}</td><td>{{ fila.recepcion.get_documento_recepcion_display }} #{{ fila.recepcion.num_documento_recepcion }}</td><td>{{ fila.recepcion.proveedor.nombre_proveedor }}</td><td>{{ fila.recepcion.fecha_recepcion|date:"d-m-Y" }}</td><td class="text-end">{{ fila.dias }} días</td><td>{{ fila.bucket }}</td><td class="text-end fw-semibold {% if fila.recepcion.total_recepcion < 0 %}text-danger{% endif %}">${{ fila.recepcion.total_recepcion|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="7" class="text-center text-muted">Sin recepciones pendientes de pago.</td></tr>{% endfor %}</tbody>
   </table></div>
 
 {% elif informe_activo == "inventario" %}
-  <h2 class="h5">Rotación de Inventario</h2>
-  <div class="alert report-note py-2">Rotación = costo de ventas del período / inventario FIFO promedio. El inventario promedio usa la valorización al inicio y al cierre.</div>
+  <h2 class="h5">Inventario valorizado FIFO</h2>
+  <div class="alert report-note py-2">Las salidas consumen primero las capas de recepción más antiguas. Las cantidades se expresan en la unidad primaria del producto y el valor corresponde al costo unitario normalizado de cada capa.</div>
   <div class="row g-3 mb-3">
-    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Costo de ventas</div><div class="metric-value">${{ informe.costo_ventas|formatear_miles }}</div></div></div></div>
-    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Inventario promedio</div><div class="metric-value">${{ informe.inventario_promedio|formatear_miles }}</div></div></div></div>
+    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Costo de ventas</div><div class="metric-value {% if informe.costo_ventas < 0 %}text-danger{% endif %}">${{ informe.costo_ventas|formatear_miles }}</div></div></div></div>
+    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Inventario promedio</div><div class="metric-value {% if informe.inventario_promedio < 0 %}text-danger{% endif %}">${{ informe.inventario_promedio|formatear_miles }}</div></div></div></div>
     <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Rotación del período</div><div class="metric-value">{{ informe.rotacion|floatformat:2 }} veces</div></div></div></div>
-    <div class="col-md-3"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Días de inventario</div><div class="metric-value">{% if informe.dias_inventario %}{{ informe.dias_inventario|floatformat:1 }}{% else %}—{% endif %}</div></div></div></div>
+    <div class="col-md-3"><div class="card metric-card border-primary"><div class="card-body"><div class="small text-muted">Monto total del stock</div><div class="metric-value {% if informe.total_stock < 0 %}text-danger{% endif %}">${{ informe.total_stock|formatear_miles }}</div></div></div></div>
   </div>
+  <h3 class="h6">Detalle de capas FIFO disponibles</h3>
+  <div class="table-responsive mb-4"><table class="table table-sm table-bordered js-tabla-filtros">
+    <thead class="table-light"><tr><th>Código</th><th>Producto</th><th>Documento de recepción</th><th>Fecha</th><th>Unidad</th><th>Cantidad ingresada</th><th>Stock de la capa</th><th>Valor unitario</th><th>Valor total</th></tr></thead>
+    <tbody>{% for capa in informe.capas_fifo %}<tr><td>{{ capa.producto.codigo_producto_interno|default:"—" }}</td><td>{{ capa.producto.nombre_producto|default:"—" }}</td><td>{{ capa.documento }}</td><td>{{ capa.fecha|date:"d-m-Y" }}</td><td>{{ capa.producto.medida|default:"Unidad primaria" }}</td><td class="text-end">{{ capa.cantidad_documento|formatear_miles }}</td><td class="text-end fw-semibold">{{ capa.stock|formatear_miles }}</td><td class="text-end {% if capa.valor_unitario < 0 %}text-danger{% endif %}">${{ capa.valor_unitario|formatear_miles }}</td><td class="text-end fw-semibold {% if capa.valor_total < 0 %}text-danger{% endif %}">${{ capa.valor_total|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="9" class="text-center text-muted">Sin capas FIFO disponibles a la fecha de corte.</td></tr>{% endfor %}</tbody>
+    <tfoot class="table-secondary fw-bold"><tr><td colspan="8">Monto total del stock</td><td class="text-end {% if informe.total_stock < 0 %}text-danger{% endif %}">${{ informe.total_stock|formatear_miles }}</td></tr></tfoot>
+  </table></div>
+  <h3 class="h6">Resumen por producto y rotación</h3>
   <div class="table-responsive"><table class="table table-sm table-bordered js-tabla-filtros">
-    <thead class="table-light"><tr><th>Producto</th><th>Costo de ventas</th><th>Inventario promedio</th><th>Rotación</th><th>Antigüedad capa más antigua</th></tr></thead>
-    <tbody>{% for fila in informe.filas %}<tr><td>{{ fila.producto }}</td><td class="text-end">${{ fila.costo_ventas|formatear_miles }}</td><td class="text-end">${{ fila.inventario_promedio|formatear_miles }}</td><td class="text-end">{{ fila.rotacion|floatformat:2 }}</td><td class="text-end">{% if fila.dias_stock_antiguo != None %}{{ fila.dias_stock_antiguo }} días{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="5" class="text-center text-muted">Sin movimientos de inventario.</td></tr>{% endfor %}</tbody>
+    <thead class="table-light"><tr><th>Producto</th><th>Stock final</th><th>Valor stock</th><th>Costo de ventas</th><th>Inventario promedio</th><th>Rotación</th><th>Antigüedad capa más antigua</th></tr></thead>
+    <tbody>{% for fila in informe.filas %}<tr><td>{% if fila.producto %}{{ fila.producto.codigo_producto_interno }} - {{ fila.producto.nombre_producto }}{% else %}Producto sin registro{% endif %}</td><td class="text-end">{{ fila.stock_final|formatear_miles }}</td><td class="text-end {% if fila.valor_final < 0 %}text-danger{% endif %}">${{ fila.valor_final|formatear_miles }}</td><td class="text-end {% if fila.costo_ventas < 0 %}text-danger{% endif %}">${{ fila.costo_ventas|formatear_miles }}</td><td class="text-end {% if fila.inventario_promedio < 0 %}text-danger{% endif %}">${{ fila.inventario_promedio|formatear_miles }}</td><td class="text-end">{{ fila.rotacion|floatformat:2 }}</td><td class="text-end">{% if fila.dias_stock_antiguo != None %}{{ fila.dias_stock_antiguo }} días{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="7" class="text-center text-muted">Sin movimientos de inventario.</td></tr>{% endfor %}</tbody>
   </table></div>
 {% endif %}

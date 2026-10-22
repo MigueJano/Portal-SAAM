@@ -4,6 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from django.contrib.auth.models import User
+from django.template.loader import render_to_string
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -27,7 +28,9 @@ from Apps.Pedidos.models import (
 from Apps.indicadores.models import RevisionCambioPrecioCompra
 from Apps.indicadores.services.reportes import (
     informe_cuentas_por_cobrar,
+    informe_cuentas_por_pagar,
     informe_flujo_efectivo,
+    informe_rotacion_inventario,
     informe_resultados,
     informe_ventas_stock_mensual,
 )
@@ -135,10 +138,10 @@ class InformesProfesionalesTests(TestCase):
         self.user = User.objects.create_user("informes_profesionales", password="test123")
         self.client.force_login(self.user)
 
-    def test_diez_informes_renderizan_en_portal_tabs(self):
+    def test_nueve_informes_renderizan_en_portal_tabs(self):
         tabs = (
             "resultados", "balance", "flujo", "presupuesto", "rentabilidad",
-            "pipeline", "ventas_stock", "cxc", "cxp", "inventario",
+            "ventas_stock", "cxc", "cxp", "inventario",
         )
         for tab in tabs:
             with self.subTest(tab=tab):
@@ -153,6 +156,51 @@ class InformesProfesionalesTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.context["informe_activo"], tab)
                 self.assertContains(response, 'class="portal-tabs mb-3"')
+
+    def test_pipeline_se_elimina_y_la_url_antigua_vuelve_a_presupuesto(self):
+        response = self.client.get(
+            reverse("dashboard_comercial_gestion"),
+            data={
+                "informe": "pipeline",
+                "fecha_desde": "2026-09-01",
+                "fecha_hasta": "2026-09-30",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["informe_activo"], "presupuesto")
+        self.assertNotContains(response, "Pipeline de Ventas")
+
+    def test_icono_porcentaje_respeta_los_tres_tramos(self):
+        casos = (
+            (Decimal("12.01"), "text-success", "fa-arrow-up"),
+            (Decimal("12.00"), "text-warning", "fa-minus"),
+            (Decimal("0.00"), "text-warning", "fa-minus"),
+            (Decimal("-0.01"), "text-danger", "fa-arrow-down"),
+        )
+        for valor, clase, icono in casos:
+            with self.subTest(valor=valor):
+                contenido = render_to_string(
+                    "indicadores/_indicador_porcentaje.html",
+                    {"valor": valor},
+                )
+                self.assertIn(clase, contenido)
+                self.assertIn(icono, contenido)
+
+    def test_grafico_ventas_stock_dibuja_valores_con_color_y_espaciado(self):
+        response = self.client.get(
+            reverse("dashboard_comercial_gestion"),
+            data={
+                "informe": "ventas_stock",
+                "fecha_desde": "2026-09-01",
+                "fecha_hasta": "2026-09-30",
+            },
+        )
+
+        self.assertContains(response, "puntosEtiquetados")
+        self.assertContains(response, "desplazamientos")
+        self.assertContains(response, "datos.length * 95")
+        self.assertContains(response, "ctx.fillText(texto")
 
     def test_accesos_separan_los_portal_tabs_por_seccion(self):
         casos = (
@@ -235,7 +283,7 @@ class InformesProfesionalesTests(TestCase):
         self.assertEqual(informe["margen_bruto"], Decimal("30.00"))
         self.assertEqual(informe["documentos_sin_costo"], 1)
 
-    def test_flujo_usa_movimientos_bancarios_y_cxc_resta_solo_pago_confirmado(self):
+    def test_flujo_considera_facturas_boletas_y_recepciones_como_efectivo(self):
         cliente = Cliente.objects.create(
             nombre_cliente="Cliente caja",
             rut_cliente="77222222-2",
@@ -260,6 +308,75 @@ class InformesProfesionalesTests(TestCase):
             venta_iva_pedido=Decimal("190.00"),
             venta_total_pedido=Decimal("1190.00"),
         )
+        Venta.objects.create(
+            pedidoid=pedido,
+            fecha_venta=date(2026, 9, 3),
+            documento_pedido="Boleta",
+            num_documento=201,
+            venta_neto_pedido=Decimal("200.00"),
+            venta_iva_pedido=Decimal("38.00"),
+            venta_total_pedido=Decimal("238.00"),
+        )
+        pedido_credito = Pedido.objects.create(
+            nombre_cliente=cliente,
+            fecha_pedido=date(2026, 9, 4),
+            estado_pedido="Finalizado",
+        )
+        Venta.objects.create(
+            pedidoid=pedido_credito,
+            fecha_venta=date(2026, 9, 4),
+            documento_pedido="Credito",
+            num_documento=202,
+            venta_neto_pedido=Decimal("300.00"),
+            venta_iva_pedido=Decimal("57.00"),
+            venta_total_pedido=Decimal("357.00"),
+        )
+        proveedor = Proveedor.objects.create(
+            nombre_proveedor="Proveedor caja",
+            rut_proveedor="77999992-2",
+            direccion_proveedor="Direccion proveedor",
+            direccion_bodega_proveedor="Bodega proveedor",
+            empresa_activa=True,
+            banco_proveedor="Banco",
+            cta_proveedor="Corriente",
+            num_cuenta_proveedor="123456",
+        )
+        Recepcion.objects.create(
+            proveedor=proveedor,
+            fecha_recepcion=date(2026, 9, 5),
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=300,
+            total_neto_recepcion=Decimal("400.00"),
+            iva_recepcion=Decimal("76.00"),
+            total_recepcion=Decimal("476.00"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        Recepcion.objects.create(
+            proveedor=proveedor,
+            fecha_recepcion=date(2026, 9, 5),
+            estado_recepcion="Pendiente",
+            documento_recepcion="Credito",
+            num_documento_recepcion=302,
+            total_neto_recepcion=Decimal("1500.00"),
+            iva_recepcion=Decimal("285.00"),
+            total_recepcion=Decimal("1785.00"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
+        Recepcion.objects.create(
+            proveedor=proveedor,
+            fecha_recepcion=date(2026, 9, 6),
+            estado_recepcion="Rechazado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=301,
+            total_neto_recepcion=Decimal("100.00"),
+            iva_recepcion=Decimal("19.00"),
+            total_recepcion=Decimal("119.00"),
+            incluir_iva=False,
+            moneda_recepcion="CLP",
+        )
         abono = MovimientoBancario.objects.create(
             identificador_externo="abono-reportes",
             fecha=date(2026, 9, 20),
@@ -281,11 +398,117 @@ class InformesProfesionalesTests(TestCase):
 
         flujo = informe_flujo_efectivo(date(2026, 9, 1), date(2026, 9, 30))
         cxc = informe_cuentas_por_cobrar(date(2026, 9, 30))
+        cxp = informe_cuentas_por_pagar(date(2026, 9, 30))
 
-        self.assertEqual(flujo["entradas"], Decimal("500.00"))
-        self.assertEqual(flujo["salidas"], Decimal("200.00"))
-        self.assertEqual(flujo["flujo_neto"], Decimal("300.00"))
-        self.assertEqual(cxc["total_pendiente"], Decimal("690.00"))
+        self.assertEqual(flujo["entradas"], Decimal("1428.00"))
+        self.assertEqual(flujo["salidas"], Decimal("476.00"))
+        self.assertEqual(flujo["flujo_neto"], Decimal("952.00"))
+        self.assertEqual(flujo["cantidad"], 3)
+        self.assertEqual({fila["tipo"] for fila in flujo["movimientos"]}, {"Entrada", "Salida"})
+        self.assertEqual(cxc["total_pendiente"], Decimal("357.00"))
+        self.assertEqual(len(cxc["filas"]), 1)
+        self.assertEqual(cxc["filas"][0]["pedido"], pedido_credito)
+        self.assertEqual(cxp["total_pendiente"], Decimal("1785.00"))
+        self.assertEqual(len(cxp["documentos"]), 1)
+
+        response = self.client.get(
+            reverse("dashboard_financiero_simple"),
+            data={
+                "informe": "flujo",
+                "fecha_desde": "2026-09-01",
+                "fecha_hasta": "2026-09-30",
+            },
+        )
+        self.assertContains(response, 'metric-value ">$952')
+
+    def test_inventario_fifo_detalla_documento_cantidad_stock_y_valores(self):
+        categoria = Categoria.objects.create(categoria="Categoria FIFO")
+        producto = Producto.objects.create(
+            categoria_producto=categoria,
+            codigo_producto_interno="FIFO-1",
+            nombre_producto="Producto FIFO",
+            qty_terciario=1,
+            qty_secundario=1,
+            qty_primario=1,
+            qty_unidad=1,
+            medida="und",
+            qty_minima=1,
+        )
+        proveedor = Proveedor.objects.create(
+            nombre_proveedor="Proveedor FIFO",
+            rut_proveedor="77999993-3",
+            direccion_proveedor="Direccion FIFO",
+            direccion_bodega_proveedor="Bodega FIFO",
+            empresa_activa=True,
+            banco_proveedor="Banco",
+            cta_proveedor="Corriente",
+            num_cuenta_proveedor="654321",
+        )
+        recepcion_1 = Recepcion.objects.create(
+            proveedor=proveedor,
+            fecha_recepcion=date(2026, 9, 1),
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=1001,
+            moneda_recepcion="CLP",
+        )
+        recepcion_2 = Recepcion.objects.create(
+            proveedor=proveedor,
+            fecha_recepcion=date(2026, 9, 2),
+            estado_recepcion="Finalizado",
+            documento_recepcion="Factura",
+            num_documento_recepcion=1002,
+            moneda_recepcion="CLP",
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=producto,
+            qty=10,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("100.00"),
+            fecha_movimiento=date(2026, 9, 1),
+            recepcion=recepcion_1,
+        )
+        Stock.objects.create(
+            tipo_movimiento="DISPONIBLE",
+            producto=producto,
+            qty=5,
+            empaque="PRIMARIO",
+            precio_unitario=Decimal("200.00"),
+            fecha_movimiento=date(2026, 9, 2),
+            recepcion=recepcion_2,
+        )
+        Stock.objects.create(
+            tipo_movimiento="DESPACHO",
+            producto=producto,
+            qty=12,
+            empaque="PRIMARIO",
+            fecha_movimiento=date(2026, 9, 3),
+        )
+
+        informe = informe_rotacion_inventario(date(2026, 9, 1), date(2026, 9, 30))
+
+        self.assertEqual(informe["total_stock"], Decimal("600.00"))
+        self.assertEqual(len(informe["capas_fifo"]), 1)
+        capa = informe["capas_fifo"][0]
+        self.assertEqual(capa["producto"], producto)
+        self.assertEqual(capa["documento"], "Factura #1002")
+        self.assertEqual(capa["cantidad_documento"], Decimal("5.00"))
+        self.assertEqual(capa["stock"], Decimal("3.00"))
+        self.assertEqual(capa["valor_unitario"], Decimal("200.00"))
+        self.assertEqual(capa["valor_total"], Decimal("600.00"))
+
+        response = self.client.get(
+            reverse("dashboard_control_riesgo"),
+            data={
+                "informe": "inventario",
+                "fecha_desde": "2026-09-01",
+                "fecha_hasta": "2026-09-30",
+            },
+        )
+        self.assertContains(response, "Inventario valorizado FIFO")
+        self.assertContains(response, "Factura #1002")
+        self.assertContains(response, "Monto total del stock")
 
     def test_ventas_y_stock_agrupa_por_mes_en_unidades_primarias(self):
         categoria = Categoria.objects.create(categoria="Categoría flujo mensual")

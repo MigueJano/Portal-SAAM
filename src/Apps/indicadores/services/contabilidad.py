@@ -208,6 +208,7 @@ def _valuacion_fifo_por_producto(*, fecha_corte: date | None = None) -> dict[int
             continue
 
         if movimiento.tipo_movimiento == "DISPONIBLE":
+            cantidad_documento = cantidad
             if resultado["deficit_pendiente"]:
                 regularizada = min(cantidad, resultado["deficit_pendiente"])
                 resultado["deficit_pendiente"] -= regularizada
@@ -219,6 +220,7 @@ def _valuacion_fifo_por_producto(*, fecha_corte: date | None = None) -> dict[int
                     "stock_id": movimiento.id,
                     "recepcion_id": movimiento.recepcion_id,
                     "fecha": movimiento.fecha_movimiento,
+                    "cantidad_documento": cantidad_documento,
                     "cantidad": cantidad,
                     "costo_unitario": _normalizar_precio_unidad_primaria(movimiento),
                 }
