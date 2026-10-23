@@ -1,9 +1,9 @@
 {% extends 'login_base.html' %}
-{% load static %}
+{% load version_tags %}
 
 {% block content %}
 <div class="container mt-5" style="max-width: 400px;">
-  <h1 class="mb-4 text-center"><img src="{% static 'img/logo.jpg' %}" alt="Logo SAAM" style="height: 100px;" class="me-2"></h1>
+  <h1 class="mb-4 text-center"><img src="{% static_version 'img/logo.jpg' %}" alt="Logo SAAM" style="height: 100px;" class="me-2"></h1>
   <h3 class="mb-4 text-center">Iniciar sesión</h3>
 
   <form method="post">
