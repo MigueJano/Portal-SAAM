@@ -14,7 +14,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.forms import formset_factory
 from django.views.decorators.http import require_POST
-from django.http import HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
 from django.db import transaction
 from django.db.models import Sum, F, ExpressionWrapper, DecimalField
 from django.core.files.base import ContentFile
@@ -650,7 +650,7 @@ def finalizar_pedido(request, pedido_id):
     # --- Crear EntregaPedido, marcar estado y mover stock ---
     try:
         with transaction.atomic():
-            entrega = EntregaPedido.objects.create(
+            entrega = EntregaPedido(
                 pedido=pedido,
                 nombre_receptor=nombre,
                 rut_receptor=rut,
@@ -659,7 +659,7 @@ def finalizar_pedido(request, pedido_id):
             )
             filename = f"entrega_pedido_{pedido.id}_{uuid.uuid4().hex}.pdf"
             entrega.archivo_pdf.save(filename, ContentFile(pdf_bytes), save=False)
-            entrega.save(update_fields=['archivo_pdf', 'foto'] if foto_file else ['archivo_pdf'])
+            entrega.save()
 
             pedido.estado_pedido = 'Entregado'
             pedido.save(update_fields=['estado_pedido'])
@@ -676,3 +676,35 @@ def finalizar_pedido(request, pedido_id):
 
     messages.success(request, "Entrega registrada, PDF generado y pedido marcado como ENTREGADO.")
     return redirect('detalle_pedido', pedido_id=pedido.id)
+
+
+def _respuesta_archivo_entrega(entrega_id, campo, nombre_descarga):
+    entrega = get_object_or_404(EntregaPedido, id=entrega_id)
+    archivo_modelo = getattr(entrega, campo)
+    if not archivo_modelo:
+        raise Http404("La entrega no tiene el archivo solicitado.")
+
+    try:
+        archivo = archivo_modelo.open("rb")
+    except (FileNotFoundError, OSError, ValueError) as exc:
+        raise Http404("El archivo de la entrega no esta disponible.") from exc
+
+    return FileResponse(archivo, as_attachment=False, filename=nombre_descarga(entrega))
+
+
+def ver_pdf_entrega(request, entrega_id):
+    """Muestra el comprobante PDF mediante una ruta autenticada."""
+    return _respuesta_archivo_entrega(
+        entrega_id,
+        "archivo_pdf",
+        lambda entrega: f"entrega_pedido_{entrega.pedido_id}_{entrega.id}.pdf",
+    )
+
+
+def ver_foto_entrega(request, entrega_id):
+    """Muestra la foto adjunta mediante una ruta autenticada."""
+    return _respuesta_archivo_entrega(
+        entrega_id,
+        "foto",
+        lambda entrega: entrega.foto.name.rsplit("/", 1)[-1],
+    )

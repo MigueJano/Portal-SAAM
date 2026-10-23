@@ -35,13 +35,13 @@
                 </div>
 
                 {% if e.archivo_pdf %}
-                  <a href="{{ e.archivo_pdf.url }}" target="_blank" class="btn btn-outline-danger btn-sm">
+                  <a href="{% url 'ver_pdf_entrega' e.id %}" target="_blank" class="btn btn-outline-danger btn-sm">
                     <i class="bi bi-file-pdf"></i> PDF
                   </a>
                 {% endif %}
 
                 {% if e.foto %}
-                  <a href="{{ e.foto.url }}" target="_blank" class="btn btn-outline-secondary btn-sm">
+                  <a href="{% url 'ver_foto_entrega' e.id %}" target="_blank" class="btn btn-outline-secondary btn-sm">
                     <i class="bi bi-image"></i> Foto
                   </a>
                 {% endif %}

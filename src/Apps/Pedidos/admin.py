@@ -5,6 +5,7 @@ Actualizado para mostrar el ID y optimizar búsqueda/filtros.
 """
 
 from django.contrib import admin
+from django.urls import reverse
 from django.utils.html import format_html
 from decimal import Decimal
 
@@ -39,13 +40,13 @@ class EntregaPedidoInline(admin.TabularInline):
 
     def archivo_link(self, obj):
         if obj.archivo_pdf:
-            return format_html('<a href="{}" target="_blank">Ver PDF</a>', obj.archivo_pdf.url)
+            return format_html('<a href="{}" target="_blank">Ver PDF</a>', reverse('ver_pdf_entrega', args=[obj.id]))
         return "—"
     archivo_link.short_description = "Archivo PDF"
 
     def foto_link(self, obj):
         if obj.foto:
-            return format_html('<a href="{}" target="_blank">Ver Foto</a>', obj.foto.url)
+            return format_html('<a href="{}" target="_blank">Ver Foto</a>', reverse('ver_foto_entrega', args=[obj.id]))
         return "—"
     foto_link.short_description = "Foto"
 
@@ -184,7 +185,7 @@ class CotizacionAdmin(admin.ModelAdmin):
 
     def archivo_link(self, obj):
         if obj.archivo_pdf:
-            return format_html('<a href="{}" target="_blank">Ver PDF</a>', obj.archivo_pdf.url)
+            return format_html('<a href="{}" target="_blank">Ver PDF</a>', reverse('ver_cotizacion_pdf', args=[obj.id]))
         return "—"
     archivo_link.short_description = "Archivo PDF"
 
@@ -224,13 +225,13 @@ class EntregaPedidoAdmin(admin.ModelAdmin):
 
     def archivo_link(self, obj):
         if obj.archivo_pdf:
-            return format_html('<a href="{}" target="_blank">Ver PDF</a>', obj.archivo_pdf.url)
+            return format_html('<a href="{}" target="_blank">Ver PDF</a>', reverse('ver_pdf_entrega', args=[obj.id]))
         return "—"
     archivo_link.short_description = "Archivo PDF"
 
     def foto_link(self, obj):
         if obj.foto:
-            return format_html('<a href="{}" target="_blank">Ver Foto</a>', obj.foto.url)
+            return format_html('<a href="{}" target="_blank">Ver Foto</a>', reverse('ver_foto_entrega', args=[obj.id]))
         return "—"
     foto_link.short_description = "Foto"
 

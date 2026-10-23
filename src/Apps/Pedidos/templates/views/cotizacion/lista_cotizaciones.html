@@ -26,7 +26,7 @@
           <td class="text-center" data-order="{{ c.fecha_cotizacion|date:'Y-m-d' }}">{{ c.fecha_cotizacion|date:"d-m-Y" }}</td>
           <td class="text-center">
             {% if c.archivo_pdf %}
-              <a href="{{ c.archivo_pdf.url }}" target="_blank" class="btn btn-sm btn-outline-danger" title="Ver PDF">
+              <a href="{% url 'ver_cotizacion_pdf' c.id %}" target="_blank" class="btn btn-sm btn-outline-danger" title="Ver PDF">
                 <i class="fas fa-file-pdf"></i>
               </a>
             {% else %}

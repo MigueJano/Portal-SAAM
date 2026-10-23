@@ -130,13 +130,13 @@
 
           <div class="d-flex gap-2 align-items-center mb-2">
             {% if e.archivo_pdf %}
-              <a class="btn btn-outline-danger btn-sm" href="{{ e.archivo_pdf.url }}" target="_blank">
+              <a class="btn btn-outline-danger btn-sm" href="{% url 'ver_pdf_entrega' e.id %}" target="_blank">
                 <i class="fas fa-file-pdf"></i> Ver Recepcion (PDF)
               </a>
             {% endif %}
 
             {% if e.foto %}
-              <a class="btn btn-outline-primary btn-sm" href="{{ e.foto.url }}" target="_blank">
+              <a class="btn btn-outline-primary btn-sm" href="{% url 'ver_foto_entrega' e.id %}" target="_blank">
                 <i class="fas fa-image"></i> Ver Foto
               </a>
             {% endif %}

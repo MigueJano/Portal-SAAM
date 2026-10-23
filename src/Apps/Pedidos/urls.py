@@ -133,6 +133,8 @@ urlpatterns = [
         name="eliminar_linea_pedido",
     ),
     path("pedidos/pedido/<int:pedido_id>/finalizar/", _private(views.finalizar_pedido), name="finalizar_pedido"),
+    path("entrega/<int:entrega_id>/pdf/", _private(views.ver_pdf_entrega), name="ver_pdf_entrega"),
+    path("entrega/<int:entrega_id>/foto/", _private(views.ver_foto_entrega), name="ver_foto_entrega"),
 
     # Cotizaciones
     path("cotizacion/", _private(views.lista_cotizaciones), name="lista_cotizaciones"),
@@ -144,6 +146,7 @@ urlpatterns = [
     ),
     path("cotizacion/vista-previa/", _private(views.vista_previa_cotizacion), name="vista_previa_cotizacion"),
     path("cotizacion/descargar/", _private(views.descargar_cotizacion_pdf), name="descargar_cotizacion_pdf"),
+    path("cotizacion/<int:cotizacion_id>/pdf/", _private(views.ver_cotizacion_pdf), name="ver_cotizacion_pdf"),
 
     # Ventas
     path("pedido/<int:pedido_id>/finalizar-venta/", _private(views.finalizar_venta), name="finalizar_venta"),

@@ -62,12 +62,12 @@
   <div class="alert report-note py-2">
     Cantidades expresadas en unidades primarias. Las ventas usan la fecha de venta; las entradas corresponden a recepciones disponibles y los despachos son unidades descontadas de bodega al despachar pedidos.
   </div>
-  {% if informe.producto_seleccionado %}
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-      <span class="badge bg-primary">Gráfico: {{ informe.producto_seleccionado.nombre_producto }}</span>
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <span class="badge bg-primary">Gráfico: {% if informe.producto_seleccionado %}{{ informe.producto_seleccionado.nombre_producto }}{% else %}Todos los productos{% endif %}</span>
+    {% if informe.producto_seleccionado %}
       <a class="btn btn-sm btn-outline-secondary" href="?informe=ventas_stock&amp;fecha_desde={{ desde|date:'Y-m-d' }}&amp;fecha_hasta={{ hasta|date:'Y-m-d' }}">Ver todos los productos</a>
-    </div>
-  {% endif %}
+    {% endif %}
+  </div>
   <div class="row g-3 mb-3">
     <div class="col-6 col-lg"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Unidades vendidas</div><div class="metric-value">{{ informe.unidades_vendidas|floatformat:0|formatear_miles }}</div></div></div></div>
     <div class="col-6 col-lg"><div class="card metric-card"><div class="card-body"><div class="small text-muted">Venta neta</div><div class="metric-value {% if informe.venta_neta < 0 %}text-danger{% endif %}">${{ informe.venta_neta|formatear_miles }}</div></div></div></div>

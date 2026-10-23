@@ -224,6 +224,21 @@ class InformesProfesionalesTests(TestCase):
         self.assertNotContains(response, "puntosEtiquetados")
         self.assertContains(response, "datos.length * 95")
 
+    def test_grafico_ventas_stock_sin_producto_muestra_todos_los_productos(self):
+        response = self.client.get(
+            reverse("dashboard_comercial_gestion"),
+            data={
+                "informe": "ventas_stock",
+                "fecha_desde": "2026-09-01",
+                "fecha_hasta": "2026-09-30",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["informe"]["producto_seleccionado"])
+        self.assertContains(response, "Gráfico: Todos los productos")
+        self.assertNotContains(response, "Ver todos los productos")
+
     def test_accesos_separan_los_portal_tabs_por_seccion(self):
         casos = (
             ("dashboard_financiero_simple", "financieros", "Estado de Resultados", "Presupuesto vs. Real"),
@@ -633,6 +648,8 @@ class InformesProfesionalesTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["informe"]["producto_seleccionado"], producto)
+        self.assertContains(response, f"Gráfico: {producto.nombre_producto}")
+        self.assertContains(response, "Ver todos los productos")
         self.assertContains(response, reverse("flujo_inventario_producto", args=[producto.id]))
         self.assertContains(response, 'aria-label="Ver flujo de inventario"')
         self.assertContains(response, 'aria-label="Ver producto en la gráfica"')

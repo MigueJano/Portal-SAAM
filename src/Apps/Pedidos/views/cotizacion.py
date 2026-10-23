@@ -11,7 +11,8 @@ Fecha de documentación: 2025-08-04
 """
 
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import FileResponse
+from django.http import FileResponse, Http404
+from django.urls import reverse
 from django.utils import timezone
 from django.core.files.base import ContentFile
 from django.db.models.functions import Lower
@@ -146,7 +147,8 @@ def vista_previa_cotizacion(request):
 
         return render(request, 'views/cotizacion/vista_previa_pdf.html', {
             'cliente': cliente,
-            'pdf_url': cotizacion.archivo_pdf.url,
+            'pdf_url': reverse('ver_cotizacion_pdf', args=[cotizacion.id]),
+            'pdf_download_url': f"{reverse('descargar_cotizacion_pdf')}?id={cotizacion.id}",
             'cotizacion': cotizacion,
         })
 
@@ -170,10 +172,33 @@ def descargar_cotizacion_pdf(request):
     if not cotizacion.archivo_pdf:
         return redirect("lista_cotizaciones")
 
+    try:
+        archivo = cotizacion.archivo_pdf.open("rb")
+    except (FileNotFoundError, OSError, ValueError) as exc:
+        raise Http404("El archivo PDF de la cotizacion no esta disponible.") from exc
+
     return FileResponse(
-        cotizacion.archivo_pdf.open("rb"),
+        archivo,
         as_attachment=True,
-        filename=f"cotizacion_{cotizacion.num_cotizacion}.pdf"
+        filename=f"cotizacion_{cotizacion.num_cotizacion}.pdf",
+    )
+
+
+def ver_cotizacion_pdf(request, cotizacion_id):
+    """Muestra un PDF de cotizacion sin depender de publicar MEDIA_URL."""
+    cotizacion = get_object_or_404(Cotizacion, id=cotizacion_id)
+    if not cotizacion.archivo_pdf:
+        raise Http404("La cotizacion no tiene un archivo PDF asociado.")
+
+    try:
+        archivo = cotizacion.archivo_pdf.open("rb")
+    except (FileNotFoundError, OSError, ValueError) as exc:
+        raise Http404("El archivo PDF de la cotizacion no esta disponible.") from exc
+
+    return FileResponse(
+        archivo,
+        as_attachment=False,
+        filename=f"cotizacion_{cotizacion.num_cotizacion}.pdf",
     )
 
 

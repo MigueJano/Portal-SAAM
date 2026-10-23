@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
@@ -1046,6 +1047,24 @@ class CotizacionOrderingTests(TestCase):
         items = mock_generar_pdf.call_args.args[2]
         nombres = [item["producto_nombre"] for item in items]
         self.assertEqual(nombres, ["Arandano", "Banana", "Zanahoria"])
+        cotizacion = Cotizacion.objects.get()
+        self.assertContains(resp, reverse("ver_cotizacion_pdf", args=[cotizacion.id]))
+        self.assertContains(resp, f'{reverse("descargar_cotizacion_pdf")}?id={cotizacion.id}')
+
+        with self.settings(MEDIA_ROOT=self.tmpdir.name):
+            pdf_resp = self.client.get(reverse("ver_cotizacion_pdf", args=[cotizacion.id]))
+            download_resp = self.client.get(
+                reverse("descargar_cotizacion_pdf"),
+                data={"id": cotizacion.id},
+            )
+
+        self.assertEqual(pdf_resp.status_code, 200)
+        self.assertEqual(pdf_resp["Content-Type"], "application/pdf")
+        self.assertIn("inline", pdf_resp["Content-Disposition"])
+        self.assertEqual(download_resp.status_code, 200)
+        self.assertIn("attachment", download_resp["Content-Disposition"])
+        pdf_resp.close()
+        download_resp.close()
 
 
 class ContabilidadProPymeTests(TestCase):
@@ -1804,6 +1823,39 @@ class EntregaPedidoFirmaCompatTests(TestCase):
         self.assertEqual(entrega.nombre_receptor, "Ana Perez")
         self.assertTrue(entrega.archivo_pdf.name.endswith(".pdf"))
         self.assertEqual(self.stock.responsable, self.user)
+
+    def test_finalizar_pedido_guarda_y_permite_ver_foto(self):
+        firma_b64 = base64.b64encode(b"firma-prueba").decode("ascii")
+        foto = SimpleUploadedFile("entrega.jpg", b"foto-prueba", content_type="image/jpeg")
+
+        with TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root):
+                with patch("Apps.Pedidos.utils_pdf.generar_pdf_entrega", return_value=b"%PDF-1.4 prueba"):
+                    resp = self.client.post(
+                        reverse("finalizar_pedido", args=[self.pedido.id]),
+                        data={
+                            "entrega_nombre": "Ana Perez",
+                            "entrega_rut": "11111111-1",
+                            "entrega_fecha": "2026-03-05T10:30",
+                            "entrega_firma": f"data:image/png;base64,{firma_b64}",
+                            "entrega_foto": foto,
+                        },
+                    )
+
+                entrega = EntregaPedido.objects.get(pedido=self.pedido)
+                foto_resp = self.client.get(reverse("ver_foto_entrega", args=[entrega.id]))
+                pdf_resp = self.client.get(reverse("ver_pdf_entrega", args=[entrega.id]))
+
+                self.assertEqual(resp.status_code, 302)
+                carpeta_foto = timezone.localdate().strftime("entregas_fotos/%Y/%m/")
+                self.assertTrue(entrega.foto.name.startswith(carpeta_foto))
+                self.assertTrue(entrega.foto.storage.exists(entrega.foto.name))
+                self.assertEqual(foto_resp.status_code, 200)
+                self.assertEqual(foto_resp["Content-Type"], "image/jpeg")
+                self.assertEqual(pdf_resp.status_code, 200)
+                self.assertEqual(pdf_resp["Content-Type"], "application/pdf")
+                foto_resp.close()
+                pdf_resp.close()
 
     def test_finalizar_pedido_redirige_a_login_si_no_hay_sesion(self):
         firma_b64 = base64.b64encode(b"firma-prueba").decode("ascii")
