@@ -30,6 +30,10 @@
         </a>
       {% endif %}
 
+      <a href="{% url 'historial_cargas_pedido' pedido.id %}" class="btn btn-outline-info me-2">
+        <i class="fas fa-history"></i> Historial
+      </a>
+
       <a href="{% url 'generar_pdf_pedido' pedido.id %}" class="btn btn-outline-danger me-2" title="PDF del pedido">
         <i class="fas fa-file-pdf"></i>
       </a>

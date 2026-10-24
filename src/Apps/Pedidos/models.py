@@ -445,6 +445,7 @@ class Stock(models.Model):
     precio_unitario = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
     fecha_movimiento = models.DateField(default=timezone.localdate, db_index=True)
     fecha_reserva = models.DateField(null=True, blank=True, db_index=True)
+    fecha_carga = models.DateTimeField(auto_now_add=True, db_index=True)
     recepcion = models.ForeignKey('Recepcion', null=True, blank=True, on_delete=models.SET_NULL)
     pedido = models.ForeignKey('Pedido', null=True, blank=True, on_delete=models.SET_NULL)
     linea_pedido = models.ForeignKey(
@@ -660,6 +661,7 @@ class PedidoLinea(models.Model):
 
     def __str__(self):
         return f"{self.pedido.referencia_pedido()} - {self.descripcion} x{self.cantidad}"
+
 
 class Venta(models.Model):
     """

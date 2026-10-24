@@ -1987,6 +1987,7 @@ class PedidoPendienteHibridoCompatTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Producto Legacy")
         self.assertContains(resp, "Producto Nuevo")
+        self.assertContains(resp, reverse("historial_cargas_pedido", args=[self.pedido.id]))
 
     def test_items_pdf_pedido_incluyen_flujo_legacy_y_nuevo(self):
         items = _items_pedido_para_pdf(self.pedido, reservas=Stock.objects.filter(pedido=self.pedido))
@@ -1994,6 +1995,43 @@ class PedidoPendienteHibridoCompatTests(TestCase):
         self.assertEqual(len(items), 2)
         self.assertEqual({item["nombre"] for item in items}, {"Producto Legacy", "Producto Nuevo"})
         self.assertEqual(sum(item["subtotal"] for item in items), Decimal("8000.00"))
+
+    def test_historial_cargas_muestra_fecha_producto_cantidad_y_orden_reciente(self):
+        carga_antigua = Stock.objects.create(
+            pedido=self.pedido,
+            producto=self.producto_legacy,
+            tipo_movimiento="RESERVA",
+            qty=2,
+            empaque="PRIMARIO",
+        )
+        carga_reciente = Stock.objects.create(
+            pedido=self.pedido,
+            producto=self.producto_nuevo,
+            tipo_movimiento="RESERVA",
+            qty=3,
+            empaque="PRIMARIO",
+        )
+        Stock.objects.filter(pk=carga_antigua.pk).update(
+            fecha_carga=timezone.make_aware(datetime(2030, 5, 16, 9, 0)),
+        )
+        Stock.objects.filter(pk=carga_reciente.pk).update(
+            fecha_carga=timezone.make_aware(datetime(2030, 5, 16, 11, 30)),
+        )
+
+        resp = self.client.get(reverse("historial_cargas_pedido", args=[self.pedido.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Fecha y hora")
+        self.assertContains(resp, "Producto")
+        self.assertContains(resp, "Cantidad")
+        self.assertContains(resp, 'id="tabla-filtros"')
+        self.assertContains(resp, 'data-page-length="25"')
+        self.assertContains(resp, "16-05-2030 11:30")
+        self.assertContains(resp, "Producto Nuevo")
+        self.assertEqual(
+            [carga.id for carga in resp.context["movimientos"][:2]],
+            [carga_reciente.id, carga_antigua.id],
+        )
 
 
 class StockResponsableTests(TestCase):
@@ -2667,9 +2705,9 @@ class PackFlowTests(TestCase):
         self.assertEqual(linea.tipo_linea, "PACK")
         self.assertEqual(linea.cantidad, 2)
         self.assertEqual(linea.precio_unitario, Decimal("4190.00"))
-
         reservas = Stock.objects.filter(pedido=pedido, tipo_movimiento="RESERVA").order_by("producto__codigo_producto_interno")
         self.assertEqual(reservas.count(), 3)
+        self.assertTrue(all(row.fecha_carga is not None for row in reservas))
         self.assertEqual(
             {
                 row.producto.codigo_producto_interno: row.qty

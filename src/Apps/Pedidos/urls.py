@@ -119,6 +119,7 @@ urlpatterns = [
     path("pedido/crear/", _private(views.crear_pedido), name="crear_pedido"),
     path("pedido/<int:pedido_id>/productos/", _private(views.agregar_productos_pedido), name="agregar_productos_pedido"),
     path("pedido/<int:pedido_id>/detalle/", _private(views.detalle_pedido), name="detalle_pedido"),
+    path("pedido/<int:pedido_id>/historial/", _private(views.historial_cargas_pedido), name="historial_cargas_pedido"),
     path("pedidos/eliminar/<int:id>", _private(views.eliminar_pedido), name="eliminar_pedido"),
     path("pedido/<int:pedido_id>/pdf/", _private(views.exportar_pdf_pedido), name="generar_pdf_pedido"),
     path("pedido/<int:pedido_id>/editar/", _private(views.editar_pedido), name="editar_pedido"),

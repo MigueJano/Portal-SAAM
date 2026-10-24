@@ -21,7 +21,14 @@ from django.core.files.base import ContentFile
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 
-from Apps.Pedidos.models import Pedido, PedidoLinea, Stock, Producto, ListaPrecios, EntregaPedido
+from Apps.Pedidos.models import (
+    EntregaPedido,
+    ListaPrecios,
+    Pedido,
+    PedidoLinea,
+    Producto,
+    Stock,
+)
 from Apps.Pedidos.forms import PedidoForm, ProductoReservaForm
 from Apps.Pedidos.services import (
     cantidad_primaria,
@@ -380,7 +387,6 @@ def agregar_productos_pedido(request, pedido_id):
                         precio_unitario,
                         qty,
                     )
-
                     if es_pack(producto):
                         for item in componentes_pack(producto):
                             Stock.objects.create(
@@ -469,6 +475,21 @@ def detalle_pedido(request, pedido_id):
         'iva': iva,
         'total': total,
         'ganancia_total': ganancia_total,
+    })
+
+
+def historial_cargas_pedido(request, pedido_id):
+    """Muestra cada carga de productos del pedido, desde la mas reciente."""
+    pedido = get_object_or_404(Pedido, id=pedido_id)
+    movimientos = (
+        Stock.objects
+        .filter(pedido=pedido)
+        .select_related('producto')
+        .order_by('-fecha_carga', '-id')
+    )
+    return render(request, './views/pedido/historial_cargas_pedido.html', {
+        'pedido': pedido,
+        'movimientos': movimientos,
     })
 
 
