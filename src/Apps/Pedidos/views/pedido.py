@@ -41,6 +41,7 @@ from Apps.Pedidos.services import (
     items_comerciales_pedido,
     stock_cache_simple,
     stock_disponible_pack,
+    registrar_estado_pedido,
     validar_stock_pack,
 )
 from Apps.Pedidos.utils import DELETE_CONFIRMATION_TEXT, validacion_doble_check_eliminacion
@@ -467,6 +468,13 @@ def detalle_pedido(request, pedido_id):
     """
     pedido = get_object_or_404(Pedido, id=pedido_id)
     lineas, total_neto, iva, total, ganancia_total = _detalle_lineas_pedido(pedido)
+    from Apps.costos.services import costos_configurados_pedido
+
+    costos_pedido = costos_configurados_pedido(pedido)
+    ganancia_real = (ganancia_total - costos_pedido["total"]).quantize(
+        DOS_DEC,
+        rounding=ROUND_HALF_UP,
+    )
 
     return render(request, './views/pedido/detalle_pedido.html', {
         'pedido': pedido,
@@ -475,6 +483,8 @@ def detalle_pedido(request, pedido_id):
         'iva': iva,
         'total': total,
         'ganancia_total': ganancia_total,
+        'costos_pedido': costos_pedido,
+        'ganancia_real': ganancia_real,
     })
 
 
@@ -528,7 +538,7 @@ def exportar_pdf_pedido(request, pedido_id):
         messages.error(request, f"No se pudo generar el PDF en este entorno: {e}")
         return redirect('detalle_pedido', pedido_id=pedido.id)
 
-    if pedido.estado_pedido == 'Entregado':
+    if pedido.estado_pedido in ('Despachado', 'Entregado', 'Pagado', 'Finalizado'):
         reservas = Stock.objects.filter(pedido=pedido, tipo_movimiento='DESPACHO')
         if not reservas.exists():
             reservas = Stock.objects.filter(pedido=pedido, tipo_movimiento='RESERVA')
@@ -585,7 +595,7 @@ def pedidos_en_proceso(request):
                 precio_unitario__isnull=False,
             )
 
-            if pedido.estado_pedido == 'Entregado':
+            if pedido.estado_pedido in ('Despachado', 'Entregado', 'Pagado', 'Finalizado'):
                 base_qs = qs_base.filter(tipo_movimiento='DESPACHO')
                 if not base_qs.exists():
                     base_qs = qs_base.filter(tipo_movimiento__in=['RESERVA', 'DESPACHO'])
@@ -603,6 +613,34 @@ def pedidos_en_proceso(request):
 
     return render(request, './views/pedido/lista_pedidos.html', {'pedidos': pedidos})
 
+
+@require_POST
+def despachar_pedido(request, pedido_id):
+    pedido = get_object_or_404(Pedido, pk=pedido_id)
+    if pedido.estado_pedido != 'Pendiente':
+        messages.info(request, f"El pedido ya se encuentra {pedido.estado_pedido.lower()}.")
+        return redirect('detalle_pedido', pedido_id=pedido.id)
+
+    reservas = Stock.objects.filter(pedido=pedido, tipo_movimiento='RESERVA')
+    if not reservas.exists():
+        messages.warning(request, "El pedido no tiene productos en reserva para despachar.")
+        return redirect('detalle_pedido', pedido_id=pedido.id)
+
+    ahora = timezone.now()
+    with transaction.atomic():
+        reservas.update(
+            tipo_movimiento='DESPACHO',
+            fecha_reserva=F('fecha_movimiento'),
+            fecha_movimiento=timezone.localdate(ahora),
+            responsable=_responsable_desde_request(request),
+        )
+        registrar_estado_pedido(
+            pedido, 'Despachado', _responsable_desde_request(request), ahora, 'Despacho de pedido'
+        )
+    messages.success(request, "Pedido marcado como DESPACHADO. Se contabilizaron picking y embalaje.")
+    return redirect('detalle_pedido', pedido_id=pedido.id)
+
+
 def finalizar_pedido(request, pedido_id):
     """
     Registra la entrega del pedido:
@@ -610,11 +648,15 @@ def finalizar_pedido(request, pedido_id):
     - Genera el PDF de Recepción con el mismo estilo del PDF de Pedido.
     - Crea EntregaPedido y adjunta el PDF en archivo_pdf.
     - Marca el pedido como 'Entregado'.
-    - Actualiza Stock de RESERVA -> DESPACHO.
+    - Conserva el despacho previo; para flujos antiguos, despacha en el mismo proceso.
     """
     pedido = get_object_or_404(Pedido, pk=pedido_id)
 
     if request.method != 'POST':
+        return redirect('detalle_pedido', pedido_id=pedido.id)
+
+    if pedido.estado_pedido not in ('Pendiente', 'Despachado'):
+        messages.warning(request, f"El pedido no se puede entregar desde el estado {pedido.estado_pedido}.")
         return redirect('detalle_pedido', pedido_id=pedido.id)
 
     # --- Datos del formulario ---
@@ -648,9 +690,12 @@ def finalizar_pedido(request, pedido_id):
         messages.error(request, f"Error al procesar la firma: {e}")
         return redirect('detalle_pedido', pedido_id=pedido.id)
 
+    movimientos = Stock.objects.filter(pedido=pedido, tipo_movimiento='DESPACHO')
     reservas = Stock.objects.filter(pedido=pedido, tipo_movimiento='RESERVA')
-    if not reservas.exists():
-        messages.warning(request, "El pedido no tiene productos en reserva para entregar.")
+    if not movimientos.exists() and reservas.exists():
+        movimientos = reservas
+    if not movimientos.exists():
+        messages.warning(request, "El pedido no tiene productos despachados para entregar.")
         return redirect('detalle_pedido', pedido_id=pedido.id)
 
     # --- Generar PDF de Recepción (estilo Pedido) ---
@@ -663,7 +708,7 @@ def finalizar_pedido(request, pedido_id):
             'fecha': fecha,
             'comentario': getattr(pedido, 'comentario_pedido', ''),
         }
-        pdf_bytes = generar_pdf_entrega(pedido, reservas, receptor, firma_bytes=firma_bytes)
+        pdf_bytes = generar_pdf_entrega(pedido, movimientos, receptor, firma_bytes=firma_bytes)
     except Exception as e:
         messages.error(request, f"No se pudo generar el PDF: {e}")
         return redirect('detalle_pedido', pedido_id=pedido.id)
@@ -671,6 +716,16 @@ def finalizar_pedido(request, pedido_id):
     # --- Crear EntregaPedido, marcar estado y mover stock ---
     try:
         with transaction.atomic():
+            if reservas.exists():
+                reservas.update(
+                    tipo_movimiento='DESPACHO',
+                    fecha_reserva=F('fecha_movimiento'),
+                    fecha_movimiento=fecha.date(),
+                    responsable=_responsable_desde_request(request),
+                )
+                registrar_estado_pedido(
+                    pedido, 'Despachado', _responsable_desde_request(request), fecha, 'Despacho al entregar'
+                )
             entrega = EntregaPedido(
                 pedido=pedido,
                 nombre_receptor=nombre,
@@ -682,14 +737,8 @@ def finalizar_pedido(request, pedido_id):
             entrega.archivo_pdf.save(filename, ContentFile(pdf_bytes), save=False)
             entrega.save()
 
-            pedido.estado_pedido = 'Entregado'
-            pedido.save(update_fields=['estado_pedido'])
-
-            reservas.update(
-                tipo_movimiento='DESPACHO',
-                fecha_reserva=F('fecha_movimiento'),
-                fecha_movimiento=fecha.date(),
-                responsable=_responsable_desde_request(request),
+            registrar_estado_pedido(
+                pedido, 'Entregado', _responsable_desde_request(request), fecha, 'Recepcion conforme'
             )
     except Exception as e:
         messages.error(request, f"No se pudo registrar la entrega: {e}")

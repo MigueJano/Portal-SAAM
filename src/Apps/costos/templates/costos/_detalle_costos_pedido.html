@@ -1,0 +1,58 @@
+{% load custom_filters %}
+<div class="mb-4">
+  <button
+    class="btn btn-sm btn-outline-info"
+    type="button"
+    data-bs-toggle="collapse"
+    data-bs-target="#detalleCostosPedido"
+    aria-expanded="false"
+    aria-controls="detalleCostosPedido"
+  >
+    Ver detalle de costos
+  </button>
+  <div class="collapse mt-3" id="detalleCostosPedido">
+    <div class="table-responsive">
+      <table class="table table-striped table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Actividad</th>
+            <th>Hito alcanzado</th>
+            <th>Tipo</th>
+            <th class="text-end">Tiempo</th>
+            <th class="text-end">Valor hora</th>
+            <th class="text-end">Costo tiempo</th>
+            <th class="text-end">Costo fijo</th>
+            <th class="text-end">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fila in costos_pedido.filas %}
+          <tr>
+            <td>{{ fila.accion.nombre }}</td>
+            <td>{{ fila.evento.estado }} <small class="text-muted">{{ fila.evento.ocurrido_en|date:"d-m-Y H:i" }}</small></td>
+            <td>{{ fila.accion.get_tipo_costo_display }}</td>
+            <td class="text-end">{{ fila.minutos }} min</td>
+            <td class="text-end">${{ fila.accion.valor_hora|formatear_miles }}</td>
+            <td class="text-end">${{ fila.costo_tiempo|formatear_miles }}</td>
+            <td class="text-end">${{ fila.costo_fijo|formatear_miles }}</td>
+            <td class="text-end fw-semibold">${{ fila.total|formatear_miles }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="8" class="text-center text-muted py-3">Este pedido todavía no alcanza hitos con costos configurados.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        {% if costos_pedido.filas %}
+        <tfoot>
+          <tr>
+            <th colspan="7" class="text-end">Total costos</th>
+            <th class="text-end">${{ costos_pedido.total|formatear_miles }}</th>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+    <p class="small text-muted mt-2 mb-0">Los valores se calculan automáticamente desde los hitos alcanzados y la configuración vigente.</p>
+  </div>
+</div>

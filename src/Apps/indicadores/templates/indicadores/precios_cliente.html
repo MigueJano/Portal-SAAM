@@ -46,7 +46,7 @@
     <div class="col-md-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Items evaluados</div>
+          <div class="small text-muted">Ítems evaluados {% include "indicadores/_info_icon.html" with texto="Ítems de la lista del cliente incluidos después de aplicar los filtros." %}</div>
           <div class="h5 mb-0">{{ items_evaluados|formatear_miles }}</div>
         </div>
       </div>
@@ -54,7 +54,7 @@
     <div class="col-md-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Con precio compra</div>
+          <div class="small text-muted">Con precio compra {% include "indicadores/_info_icon.html" with texto="Ítems que cuentan con un costo de compra disponible para comparar su margen." %}</div>
           <div class="h5 mb-0">{{ items_con_compra|formatear_miles }}</div>
         </div>
       </div>
@@ -62,7 +62,7 @@
     <div class="col-md-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Items en riesgo</div>
+          <div class="small text-muted">Ítems en riesgo {% include "indicadores/_info_icon.html" with texto="Ítems cuyo precio de venta es menor o igual al costo máximo de compra registrado." %}</div>
           <div class="h5 mb-0 {% if items_en_riesgo %}text-danger{% else %}text-success{% endif %}">
             {{ items_en_riesgo|formatear_miles }}
           </div>
@@ -73,7 +73,7 @@
     <div class="col-md-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Margen promedio</div>
+          <div class="small text-muted">Margen promedio {% include "indicadores/_info_icon.html" with texto="Promedio del margen porcentual de los ítems con precio de compra y venta comparables." %}</div>
           <div class="h5 mb-0">$ {{ diferencia_promedio|formatear_miles }}</div>
         </div>
       </div>

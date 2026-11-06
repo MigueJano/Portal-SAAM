@@ -34,7 +34,7 @@
     <div class="col-md-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Ventas Totales</div>
+          <div class="small text-muted">Ventas Totales {% include "indicadores/_info_icon.html" with texto="Suma de los montos totales, con IVA, de las ventas del período." %}</div>
           <div class="h5 mb-0">$ {{ kpis.ingresos|formatear_miles }}</div>
         </div>
       </div>
@@ -42,7 +42,7 @@
     <div class="col-md-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Utilidad del Periodo</div>
+          <div class="small text-muted">Utilidad del Periodo {% include "indicadores/_info_icon.html" with texto="Suma de la ganancia bruta registrada en las ventas del período." %}</div>
           <div class="h5 mb-0">$ {{ kpis.ganancia_bruta|formatear_miles }}</div>
         </div>
       </div>
@@ -50,7 +50,7 @@
     <div class="col-md-2">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Margen</div>
+          <div class="small text-muted">Margen {% include "indicadores/_info_icon.html" with texto="Porcentaje de utilidad bruta respecto de la venta neta del período." %}</div>
           <div class="h5 mb-0">{{ kpis.margen_utilidad }}%</div>
         </div>
       </div>
@@ -58,7 +58,7 @@
     <div class="col-md-2">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Ticket Promedio</div>
+          <div class="small text-muted">Ticket Promedio {% include "indicadores/_info_icon.html" with texto="Venta total del período dividida por la cantidad de documentos de venta." %}</div>
           <div class="h5 mb-0">$ {{ kpis.ticket_promedio|formatear_miles }}</div>
         </div>
       </div>
@@ -66,7 +66,7 @@
     <div class="col-md-2">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Crecimiento</div>
+          <div class="small text-muted">Crecimiento {% include "indicadores/_info_icon.html" with texto="Variación porcentual de las ventas frente al período comparable anterior." %}</div>
           <div class="h5 mb-0 {% if kpis.crecimiento_ventas < 0 %}text-danger{% else %}text-success{% endif %}">
             {{ kpis.crecimiento_ventas }}%
           </div>
@@ -86,7 +86,7 @@
       <div class="row g-3">
         <div class="col-md-4">
           <div class="border rounded p-3 h-100">
-            <div class="small text-muted mb-1">Cliente lider</div>
+            <div class="small text-muted mb-1">Cliente líder {% include "indicadores/_info_icon.html" with texto="Cliente con el mayor monto total de ventas durante el período." %}</div>
             {% if cliente_lider %}
               <div class="fw-semibold">{{ cliente_lider.pedidoid__nombre_cliente__nombre_cliente }}</div>
               <div class="small">$ {{ cliente_lider.total|formatear_miles }} en el periodo</div>
@@ -97,7 +97,7 @@
         </div>
         <div class="col-md-4">
           <div class="border rounded p-3 h-100">
-            <div class="small text-muted mb-1">Producto tractor</div>
+            <div class="small text-muted mb-1">Producto tractor {% include "indicadores/_info_icon.html" with texto="Producto con mayor aporte de unidades y utilidad dentro del período." %}</div>
             {% if producto_lider %}
               <div class="fw-semibold">{{ producto_lider.producto__nombre_producto }}</div>
               <div class="small">{{ producto_lider.unidades|formatear_miles }} unidades y $ {{ producto_lider.utilidad_total|formatear_miles }} de utilidad</div>
@@ -108,7 +108,7 @@
         </div>
         <div class="col-md-4">
           <div class="border rounded p-3 h-100">
-            <div class="small text-muted mb-1">Presion de compras</div>
+            <div class="small text-muted mb-1">Presión de compras {% include "indicadores/_info_icon.html" with texto="Compras netas del período expresadas como porcentaje de las ventas totales." %}</div>
             <div class="fw-semibold">{{ presion_compra }}%</div>
             <div class="small">Compras netas sobre ventas totales del periodo.</div>
             {% if mejor_mes %}

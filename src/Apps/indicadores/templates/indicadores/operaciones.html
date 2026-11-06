@@ -31,7 +31,7 @@
     <div class="col-md-3">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Pedidos cerrados en el período</div>
+          <div class="small text-muted">Pedidos cerrados en el período {% include "indicadores/_info_icon.html" with texto="Pedidos cuya venta fue finalizada dentro del período seleccionado." %}</div>
           <div class="h5 mb-0">{{ kpis.total_pedidos|formatear_miles }}</div>
         </div>
       </div>
@@ -39,7 +39,7 @@
     <div class="col-md-3">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Pedidos con venta</div>
+          <div class="small text-muted">Pedidos con venta {% include "indicadores/_info_icon.html" with texto="Pedidos del período que cuentan con una venta registrada." %}</div>
           <div class="h5 mb-0">{{ kpis.pedidos_cumplidos|formatear_miles }}</div>
         </div>
       </div>
@@ -47,7 +47,7 @@
     <div class="col-md-2">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Pendientes</div>
+          <div class="small text-muted">Pendientes {% include "indicadores/_info_icon.html" with texto="Pedidos creados que todavía no se encuentran finalizados." %}</div>
           <div class="h5 mb-0">{{ kpis.pedidos_pendientes|formatear_miles }}</div>
         </div>
       </div>
@@ -55,7 +55,7 @@
     <div class="col-md-2">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Cumplimiento</div>
+          <div class="small text-muted">Cumplimiento {% include "indicadores/_info_icon.html" with texto="Porcentaje de pedidos cerrados que cuentan con una venta registrada." %}</div>
           <div class="h5 mb-0">{{ kpis.cumplimiento }}%</div>
         </div>
       </div>
@@ -63,7 +63,7 @@
     <div class="col-md-2">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Ciclo promedio</div>
+          <div class="small text-muted">Ciclo promedio {% include "indicadores/_info_icon.html" with texto="Promedio de días transcurridos entre la fecha del pedido y la fecha de su venta." %}</div>
           <div class="h5 mb-0">
             {% if kpis.ciclo_promedio_dias is not None %}
               {{ kpis.ciclo_promedio_dias }} días

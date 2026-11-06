@@ -38,8 +38,12 @@ def _total_neto_desde_lineas(recepcion):
         F("qty") * F("precio_unitario"),
         output_field=DecimalField(max_digits=14, decimal_places=2),
     )
-    total = RecepcionLinea.objects.filter(recepcion=recepcion).aggregate(total=Sum(expr))["total"]
-    return (total or Decimal("0.00")).quantize(DOS_DEC, rounding=ROUND_HALF_UP)
+    total_productos = RecepcionLinea.objects.filter(recepcion=recepcion).aggregate(total=Sum(expr))["total"]
+    from Apps.costos.models import GastoRecepcion
+    total_gastos = GastoRecepcion.objects.filter(recepcion=recepcion).aggregate(total=Sum("monto_neto"))["total"]
+    return ((total_productos or Decimal("0.00")) + (total_gastos or Decimal("0.00"))).quantize(
+        DOS_DEC, rounding=ROUND_HALF_UP
+    )
 
 
 def _sincronizar_totales_recepcion(recepcion):
@@ -147,6 +151,7 @@ def crear_recepcion_productos(request, recepcion_id):
     codigos_proveedor = list(codigos_qs)
     productos_agregados = RecepcionLinea.objects.filter(recepcion=recepcion).select_related("producto")
 
+    from Apps.costos.forms import GastoRecepcionForm
     return render(
         request,
         "./views/recepcion/crear_recepcion_productos.html",
@@ -158,6 +163,8 @@ def crear_recepcion_productos(request, recepcion_id):
             "recepciones": productos_agregados,
             "total_recepcion": recepcion.total_recepcion,
             "codigos_proveedor": codigos_proveedor,
+            "gastos_externos": recepcion.gastos_externos.select_related("categoria", "pedido"),
+            "gasto_form": GastoRecepcionForm(),
         },
     )
 
@@ -195,6 +202,7 @@ def recepcion_productos_historico(request, documentoid):
             "recepciones": recepciones,
             "form": form,
             "categorias_empaque": categorias_empaque,
+            "gastos_externos": documento.gastos_externos.select_related("categoria", "pedido"),
         },
     )
 
@@ -223,6 +231,9 @@ def eliminar_recepcion(request, id):
 
     if RecepcionLinea.objects.filter(recepcion=recepcion).exists():
         messages.error(request, "No se puede eliminar: existen productos asociados.")
+        return redirect("lista_recepcion")
+    if recepcion.gastos_externos.exists():
+        messages.error(request, "No se puede eliminar: existen gastos externos asociados.")
         return redirect("lista_recepcion")
     return eliminar_generica(request, Recepcion, id, "lista_recepcion")
 

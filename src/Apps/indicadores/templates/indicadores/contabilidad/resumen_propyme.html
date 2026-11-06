@@ -20,10 +20,10 @@
     </div>
     <div class="card-body">
       <div class="row g-3">
-        <div class="col-md-3"><div class="small text-muted">Abonos recibidos</div><strong>{{ resumen.abonos_bancarios_count }}</strong></div>
-        <div class="col-md-3"><div class="small text-muted">Total abonado</div><strong>$ {{ resumen.abonos_bancarios_total|formatear_miles }}</strong></div>
-        <div class="col-md-3"><div class="small text-muted">Pagos conciliados</div><strong>$ {{ resumen.pagos_conciliados_total|formatear_miles }}</strong></div>
-        <div class="col-md-3"><div class="small text-muted">Movimientos pendientes</div><strong>{{ resumen.abonos_pendientes_count }}</strong></div>
+        <div class="col-md-3"><div class="small text-muted">Abonos recibidos {% include "indicadores/_info_icon.html" with texto="Cantidad de movimientos bancarios de abono registrados durante el período." %}</div><strong>{{ resumen.abonos_bancarios_count }}</strong></div>
+        <div class="col-md-3"><div class="small text-muted">Total abonado {% include "indicadores/_info_icon.html" with texto="Suma de los movimientos bancarios clasificados como abonos durante el período." %}</div><strong>$ {{ resumen.abonos_bancarios_total|formatear_miles }}</strong></div>
+        <div class="col-md-3"><div class="small text-muted">Pagos conciliados {% include "indicadores/_info_icon.html" with texto="Monto de abonos confirmado y asociado a pedidos mediante conciliación bancaria." %}</div><strong>$ {{ resumen.pagos_conciliados_total|formatear_miles }}</strong></div>
+        <div class="col-md-3"><div class="small text-muted">Movimientos pendientes {% include "indicadores/_info_icon.html" with texto="Abonos bancarios del período que todavía no están conciliados ni ignorados." %}</div><strong>{{ resumen.abonos_pendientes_count }}</strong></div>
       </div>
       <p class="small text-muted mb-0 mt-3">Los abonos bancarios no se reconocen como ventas nuevas. Solo complementan la trazabilidad de cobro de ventas ya registradas.</p>
     </div>
@@ -51,7 +51,7 @@
     <div class="col-md-3">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Ventas (Neto)</div>
+          <div class="small text-muted">Ventas (Neto) {% include "indicadores/_info_icon.html" with texto="Suma de ventas antes de IVA del período contable." %}</div>
           <div class="h5 mb-0">$ {{ resumen.ventas_total_neto|formatear_miles }}</div>
         </div>
       </div>
@@ -59,7 +59,7 @@
     <div class="col-md-3">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Compras facturadas (Neto)</div>
+          <div class="small text-muted">Compras facturadas (Neto) {% include "indicadores/_info_icon.html" with texto="Suma neta de recepciones no rechazadas registradas durante el período." %}</div>
           <div class="h5 mb-0">$ {{ resumen.compras_total_neto|formatear_miles }}</div>
         </div>
       </div>
@@ -67,7 +67,7 @@
     <div class="col-md-3">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Costo de ventas</div>
+          <div class="small text-muted">Costo de ventas {% include "indicadores/_info_icon.html" with texto="Costo reconocido por las ventas del período a partir de su utilidad registrada." %}</div>
           <div class="h5 mb-0">$ {{ resumen.costo_ventas|formatear_miles }}</div>
         </div>
       </div>
@@ -75,7 +75,7 @@
     <div class="col-md-3">
       <div class="card">
         <div class="card-body">
-          <div class="small text-muted">Margen bruto real</div>
+          <div class="small text-muted">Margen bruto real {% include "indicadores/_info_icon.html" with texto="Ventas netas menos costo de ventas reconocido." %}</div>
           <div class="h5 mb-0">$ {{ resumen.margen_bruto|formatear_miles }}</div>
         </div>
       </div>
@@ -89,13 +89,13 @@
     </div>
     <div class="card-body">
       <div class="row g-3 text-center align-items-center">
-        <div class="col-md"><div class="small text-muted">Inventario inicial</div><strong>$ {{ resumen.inventario_inicial|formatear_miles }}</strong></div>
+        <div class="col-md"><div class="small text-muted">Inventario inicial {% include "indicadores/_info_icon.html" with texto="Valor FIFO del inventario al cierre del día anterior al inicio del período." %}</div><strong>$ {{ resumen.inventario_inicial|formatear_miles }}</strong></div>
         <div class="col-auto d-none d-md-block">+</div>
-        <div class="col-md"><div class="small text-muted">Compras de inventario</div><strong>$ {{ resumen.compras_inventario|formatear_miles }}</strong></div>
+        <div class="col-md"><div class="small text-muted">Compras de inventario {% include "indicadores/_info_icon.html" with texto="Costo de las entradas de inventario recibidas durante el período." %}</div><strong>$ {{ resumen.compras_inventario|formatear_miles }}</strong></div>
         <div class="col-auto d-none d-md-block">−</div>
-        <div class="col-md"><div class="small text-muted">Inventario final</div><strong>$ {{ resumen.inventario_final|formatear_miles }}</strong></div>
+        <div class="col-md"><div class="small text-muted">Inventario final {% include "indicadores/_info_icon.html" with texto="Valor FIFO de las existencias disponibles a la fecha de cierre." %}</div><strong>$ {{ resumen.inventario_final|formatear_miles }}</strong></div>
         <div class="col-auto d-none d-md-block">=</div>
-        <div class="col-md"><div class="small text-muted">Costo de salidas por movimiento</div><strong>$ {{ resumen.costo_salidas_movimiento|formatear_miles }}</strong></div>
+        <div class="col-md"><div class="small text-muted">Costo de salidas por movimiento {% include "indicadores/_info_icon.html" with texto="Inventario inicial más compras menos inventario final; sirve para contrastar las salidas físicas con el costo reconocido en ventas." %}</div><strong>$ {{ resumen.costo_salidas_movimiento|formatear_miles }}</strong></div>
       </div>
       <p class="small text-muted mb-0 mt-3">
         El costo de ventas y el margen se reconocen usando la fecha de venta, igual que en el Dashboard Financiero.

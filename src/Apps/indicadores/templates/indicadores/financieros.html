@@ -94,30 +94,43 @@
 
     <div class="row g-3">
       <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card"><div class="card-body">
-        <div class="small text-muted">Ingresos por ventas netas</div>
+        <div class="small text-muted">Ingresos por ventas netas {% include "indicadores/_info_icon.html" with texto="Suma de ventas antes de IVA cuya fecha de venta está dentro del período." %}</div>
         <div class="metric-value">${{ informe.ventas_netas|formatear_miles }}</div>
         <div class="small text-muted">{{ informe.documentos }} documentos</div>
       </div></div></div>
       <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card"><div class="card-body">
-        <div class="small text-muted">Costo de ventas reconocido</div>
+        <div class="small text-muted">Costo de ventas reconocido {% include "indicadores/_info_icon.html" with texto="Costo asociado a las ventas con utilidad registrada, calculado como venta neta menos utilidad bruta." %}</div>
         <div class="metric-value">${{ informe.costo_ventas|formatear_miles }}</div>
         <div class="small text-muted">Costo asociado a ventas del período</div>
       </div></div></div>
       <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card"><div class="card-body">
-        <div class="small text-muted">Utilidad bruta</div>
+        <div class="small text-muted">Utilidad bruta {% include "indicadores/_info_icon.html" with texto="Ventas netas con costo reconocido menos el costo de esas ventas." %}</div>
         <div class="metric-value {% if informe.utilidad_bruta < 0 %}text-danger{% else %}text-success{% endif %}">${{ informe.utilidad_bruta|formatear_miles }}</div>
         <div class="small text-muted">Ventas netas menos costo de ventas</div>
       </div></div></div>
       <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card"><div class="card-body">
-        <div class="small text-muted">Margen bruto</div>
+        <div class="small text-muted">Margen bruto {% include "indicadores/_info_icon.html" with texto="Porcentaje de utilidad bruta sobre las ventas que cuentan con costo reconocido." %}</div>
         <div class="metric-value">{% include "indicadores/_indicador_porcentaje.html" with valor=informe.margen_bruto %}</div>
         <div class="small text-muted">Sobre ventas con costo: ${{ informe.ventas_netas_con_costo|formatear_miles }}</div>
         <div class="small text-muted">{{ informe.documentos_con_costo }} con costo / {{ informe.documentos_sin_costo }} sin costo</div>
       </div></div></div>
     </div>
+    <div class="row g-3 mt-1">
+      <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card h-100"><div class="card-body"><div class="small text-muted">Gastos externos {% include "indicadores/_info_icon.html" with texto="Servicios, despachos y otros cargos externos incluidos en las recepciones del período." %}</div><div class="metric-value">${{ informe.gastos_externos|formatear_miles }}</div><div class="small text-muted">Cargos incluidos en recepciones</div></div></div></div>
+      <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card h-100"><div class="card-body"><div class="small text-muted">Costo de tiempo {% include "indicadores/_info_icon.html" with texto="Usa tiempo real cuando existe; para pedidos sin medición usa minutos estándar por hito y el valor hora configurado." %}</div><div class="metric-value">${{ informe.costos_personal|formatear_miles }}</div><div class="small text-muted">Real: ${{ informe.costos_personal_real|formatear_miles }} · Estimado: ${{ informe.costos_personal_estimado|formatear_miles }}</div></div></div></div>
+      <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card h-100"><div class="card-body"><div class="small text-muted">Bencina y costos fijos {% include "indicadores/_info_icon.html" with texto="Gastos fijos asociados a hitos de pedidos. Bencina se calcula por cada pedido entregado y no se considera tiempo de personal." %}</div><div class="metric-value">${{ informe.gastos_operacionales_hitos|formatear_miles }}</div><div class="small text-muted">Bencina: ${{ informe.gasto_bencina|formatear_miles }} · Otros: ${{ informe.otros_gastos_fijos|formatear_miles }}</div></div></div></div>
+      <div class="col-6 col-lg-3"><div class="card shadow-sm metric-card h-100"><div class="card-body"><div class="small text-muted">Resultado operacional medido {% include "indicadores/_info_icon.html" with texto="Utilidad bruta menos gastos externos, costo de tiempo y gastos fijos asociados a hitos." %}</div><div class="metric-value {% if informe.resultado_operacional < 0 %}text-danger{% else %}text-success{% endif %}">${{ informe.resultado_operacional|formatear_miles }}</div><div class="small text-muted">Utilidad bruta menos costos operacionales</div></div></div></div>
+    </div>
+    <div class="card shadow-sm mt-3">
+      <div class="card-header"><h3 class="h6 mb-0">Detalle de costos operacionales por hitos</h3></div>
+      <div class="card-body p-0"><div class="table-responsive"><table class="table table-sm table-bordered mb-0" data-tabla-filtros="false">
+        <thead class="table-light"><tr><th>Actividad o gasto</th><th>Tipo</th><th>Hito</th><th>Eventos</th><th>Registros reales</th><th>Minutos reales</th><th>Minutos estimados</th><th>Costo tiempo</th><th>Costo fijo</th><th>Total</th></tr></thead>
+        <tbody>{% for fila in informe.detalle_costos_operacionales %}<tr><td>{{ fila.accion.nombre }}</td><td>{{ fila.accion.get_tipo_costo_display }}</td><td>{{ fila.accion.get_base_calculo_display }}</td><td class="text-end">{{ fila.cantidad }}</td><td class="text-end">{{ fila.registros_reales }}</td><td class="text-end">{{ fila.minutos_reales }}</td><td class="text-end">{{ fila.minutos_estimados }}</td><td class="text-end">${{ fila.costo_real|add:fila.costo_estimado|formatear_miles }}</td><td class="text-end">${{ fila.costo_fijo|formatear_miles }}</td><td class="text-end fw-semibold">${{ fila.total|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="10" class="text-center text-muted">Sin costos operacionales asociados a hitos en el período.</td></tr>{% endfor %}</tbody>
+      </table></div></div>
+    </div>
     <div class="alert alert-warning mt-3">
-      <strong>Utilidad neta no disponible:</strong> faltan gastos operacionales, remuneraciones, depreciaciones e intereses.
-      La cifra presentada es utilidad bruta FIFO.
+      <strong>Utilidad neta no disponible.</strong>
+      <strong>Resultado operacional parcial:</strong> incorpora gastos externos, tiempos reales o estimados y costos fijos por hitos, pero a&uacute;n no reemplaza un cierre contable con remuneraciones, depreciaciones e intereses completos.
     </div>
 
     <details class="mt-3">
@@ -128,18 +141,18 @@
       <div class="col-md-4 d-flex">
         <div class="card shadow-sm w-100 h-100">
           <div class="card-body">
-            <h5 class="card-title mb-3">Total Compras</h5>
+            <h5 class="card-title mb-3">Total Compras {% include "indicadores/_info_icon.html" with texto="Recepciones registradas dentro del período seleccionado." %}</h5>
             <div class="d-flex justify-content-between">
-              <span>Neto</span>
+              <span>Neto {% include "indicadores/_info_icon.html" with texto="Monto de compras antes de IVA." %}</span>
               <strong>${{ compras.neto|formatear_miles }}</strong>
             </div>
             <div class="d-flex justify-content-between">
-              <span>IVA</span>
+              <span>IVA {% include "indicadores/_info_icon.html" with texto="Crédito fiscal registrado en las recepciones del período." %}</span>
               <strong>${{ compras.iva|formatear_miles }}</strong>
             </div>
             <hr class="my-2">
             <div class="d-flex justify-content-between">
-              <span>Total</span>
+              <span>Total {% include "indicadores/_info_icon.html" with texto="Compras netas más IVA registrado." %}</span>
               <strong class="h5 mb-0">${{ compras.total|formatear_miles }}</strong>
             </div>
           </div>
@@ -150,18 +163,18 @@
       <div class="col-md-4 d-flex">
         <div class="card shadow-sm w-100 h-100">
           <div class="card-body">
-            <h5 class="card-title mb-3">Total Ventas</h5>
+            <h5 class="card-title mb-3">Total Ventas {% include "indicadores/_info_icon.html" with texto="Documentos de venta cuya fecha pertenece al período seleccionado." %}</h5>
             <div class="d-flex justify-content-between">
-              <span>Neto</span>
+              <span>Neto {% include "indicadores/_info_icon.html" with texto="Monto de ventas antes de IVA." %}</span>
               <strong>${{ ventas.neto|formatear_miles }}</strong>
             </div>
             <div class="d-flex justify-content-between">
-              <span>IVA</span>
+              <span>IVA {% include "indicadores/_info_icon.html" with texto="Débito fiscal registrado en las ventas del período." %}</span>
               <strong>${{ ventas.iva|formatear_miles }}</strong>
             </div>
             <hr class="my-2">
             <div class="d-flex justify-content-between">
-              <span>Total</span>
+              <span>Total {% include "indicadores/_info_icon.html" with texto="Ventas netas más IVA registrado." %}</span>
               <strong class="h5 mb-0">${{ ventas.total|formatear_miles }}</strong>
             </div>
           </div>
@@ -176,7 +189,7 @@
 
             <!-- Diferencia entre ventas netas y compras netas del periodo -->
             <div class="d-flex justify-content-between">
-              <span>Ventas netas &minus; compras netas</span>
+              <span>Ventas netas &minus; compras netas {% include "indicadores/_info_icon.html" with texto="Diferencia documental del período; no representa utilidad porque las compras pueden permanecer en inventario." %}</span>
               <strong class="{% if balance_neto_ventas_compras >= 0 %}text-success{% else %}text-danger{% endif %}">
                 ${{ balance_neto_ventas_compras|formatear_miles }}
               </strong>
@@ -184,7 +197,7 @@
 
             <!-- Ganancia del Período -->
             <div class="d-flex justify-content-between">
-              <span>Utilidad $</span>
+              <span>Utilidad $ {% include "indicadores/_info_icon.html" with texto="Suma de la ganancia bruta registrada en las ventas del período." %}</span>
               <strong class="{% if ganancia_periodo >= 0 %}text-success{% else %}text-danger{% endif %}">
                 ${{ ganancia_periodo|formatear_miles }}
               </strong>
@@ -192,20 +205,20 @@
 
             <!-- Ganancia del Período % -->
             <div class="d-flex justify-content-between">
-              <span>Utilidad %</span>
+              <span>Utilidad % {% include "indicadores/_info_icon.html" with texto="Ganancia bruta expresada como porcentaje de la venta neta correspondiente." %}</span>
                 <strong>{% include "indicadores/_indicador_porcentaje.html" with valor=ganancia_porcentaje_periodo %}</strong>
             </div>
 
             <!-- Diferencia de IVA -->
             <div class="d-flex justify-content-between">
-              <span>Diferencia IVA</span>
+              <span>Diferencia IVA {% include "indicadores/_info_icon.html" with texto="Crédito fiscal de compras menos débito fiscal de ventas en el período." %}</span>
               <strong class="{% if diferencia_iva >= 0 %}text-success{% else %}text-danger{% endif %}">
                 ${{ diferencia_iva|formatear_miles }}
               </strong>
             </div>
 
             <div class="d-flex justify-content-between">
-              <span>PPM (1,5%)</span>
+              <span>PPM (1,5%) {% include "indicadores/_info_icon.html" with texto="Pago provisional mensual estimado como 1,5% de las ventas netas del período." %}</span>
               <strong class="text-danger">
                 ${{ ppm_periodo|formatear_miles }}
               </strong>

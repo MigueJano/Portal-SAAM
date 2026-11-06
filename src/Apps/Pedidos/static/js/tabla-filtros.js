@@ -69,6 +69,11 @@
 
   function opcionesPara($tabla) {
     const esInforme = $tabla.hasClass("js-sortable-report-table");
+    const usaTarjetasMoviles = (
+      $tabla.hasClass("js-mobile-card-table") &&
+      window.matchMedia &&
+      window.matchMedia("(max-width: 576px)").matches
+    );
     const largoPagina = Number($tabla.attr("data-page-length"));
     const noOrdenables = $tabla.find("thead th.no-sort").map(function () {
       return $(this).index();
@@ -76,7 +81,7 @@
     const opciones = {
       language: idioma,
       autoWidth: false,
-      scrollX: !esInforme,
+      scrollX: !esInforme && !usaTarjetasMoviles,
       order: [],
     };
 

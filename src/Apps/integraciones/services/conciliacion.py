@@ -5,6 +5,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from Apps.Pedidos.models import Pedido, Stock, Venta
+from Apps.Pedidos.services import registrar_estado_pedido
 from Apps.integraciones.models import ConciliacionPago, MovimientoBancario
 
 IVA = Decimal("0.19")
@@ -28,7 +29,7 @@ def proponer_conciliaciones(movimiento: MovimientoBancario) -> int:
     if movimiento.tipo != MovimientoBancario.TIPO_ABONO:
         return 0
     creadas = 0
-    for pedido in Pedido.objects.filter(estado_pedido="Entregado").prefetch_related("lineas"):
+    for pedido in Pedido.objects.filter(estado_pedido__in=("Entregado", "Finalizado")).prefetch_related("lineas"):
         total = total_pedido(pedido)
         if total == movimiento.monto:
             _, creada = ConciliacionPago.objects.get_or_create(
@@ -71,7 +72,6 @@ def confirmar_conciliacion(conciliacion: ConciliacionPago, usuario) -> Conciliac
         or Decimal("0")
     )
     if confirmado_pedido >= total_pedido(pedido):
-        pedido.estado_pedido = "Pagado"
-        pedido.save(update_fields=("estado_pedido",))
+        registrar_estado_pedido(pedido, "Pagado", usuario, timezone.now(), "Conciliacion bancaria")
     return conciliacion
 

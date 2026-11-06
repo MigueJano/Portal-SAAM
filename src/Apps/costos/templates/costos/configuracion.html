@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block content %}
+<div class="container mt-4 mb-5">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Configuración de gastos y tiempos</h1>
+    <a class="btn btn-outline-secondary" href="{% url 'costos:panel' %}">Volver al resumen</a>
+  </div>
+  <div class="row mb-4"><div class="col-12"><section class="card shadow-sm">
+    <div class="card-header"><h2 class="h5 mb-0">Acciones operacionales</h2></div>
+    <div class="card-body">
+      <h3 class="h6">{% if accion_obj %}Editar acción{% else %}Nueva acción{% endif %}</h3>
+      <form method="post" class="row g-3 align-items-end">{% csrf_token %}<input type="hidden" name="tipo" value="accion">{% if accion_obj %}<input type="hidden" name="accion_id" value="{{ accion_obj.id }}">{% endif %}
+        <div class="col-md-2"><label class="form-label">Nombre</label>{{ accion_form.nombre }}</div><div class="col-md-2"><label class="form-label">Tipo de costo</label>{{ accion_form.tipo_costo }}</div><div class="col-md-2"><label class="form-label">Hito de cálculo</label>{{ accion_form.base_calculo }}</div><div class="col-md-1"><label class="form-label">Minutos</label>{{ accion_form.minutos_estandar }}</div><div class="col-md-1"><label class="form-label">Valor hora</label>{{ accion_form.valor_hora }}</div><div class="col-md-2"><label class="form-label">Costo fijo por pedido</label>{{ accion_form.costo_fijo_evento }}</div><div class="col-md-1"><label class="form-label d-block">Activa</label>{{ accion_form.activa }}</div><div class="col-md-1 d-flex gap-2"><button class="btn btn-primary">Guardar</button>{% if accion_obj %}<a class="btn btn-outline-secondary" href="{% url 'costos:configuracion' %}">Cancelar</a>{% endif %}</div>
+      </form>{{ accion_form.non_field_errors }}
+      <div class="table-responsive mt-4"><table class="table table-striped table-sm align-middle mb-0"><thead><tr><th>Acción</th><th>Tipo</th><th>Hito</th><th>Minutos estándar</th><th>Valor hora</th><th>Costo fijo</th><th>Estado</th><th></th></tr></thead><tbody>{% for a in acciones %}<tr><td>{{ a.nombre }}</td><td>{{ a.get_tipo_costo_display }}</td><td>{{ a.get_base_calculo_display }}</td><td>{{ a.minutos_estandar }} min</td><td>${{ a.valor_hora|formatear_miles }}</td><td>${{ a.costo_fijo_evento|formatear_miles }}</td><td>{% if a.activa %}<span class="badge bg-success">Activa</span>{% else %}<span class="badge bg-secondary">Inactiva</span>{% endif %}</td><td class="text-end"><a href="?accion_id={{ a.id }}" class="btn btn-sm btn-outline-primary">Editar</a></td></tr>{% endfor %}</tbody></table></div>
+    </div>
+  </section></div></div>
+  <div class="row"><div class="col-12"><section class="card shadow-sm">
+    <div class="card-header"><h2 class="h5 mb-0">Categorías de gastos externos</h2></div>
+    <div class="card-body">
+      <h3 class="h6">{% if categoria_obj %}Editar categoría{% else %}Nueva categoría{% endif %}</h3>
+      <form method="post" class="row g-3 align-items-end">{% csrf_token %}<input type="hidden" name="tipo" value="categoria">{% if categoria_obj %}<input type="hidden" name="categoria_id" value="{{ categoria_obj.id }}">{% endif %}<div class="col-md-7"><label class="form-label">Nombre</label>{{ categoria_form.nombre }}</div><div class="col-md-2"><label class="form-label d-block">Activa</label>{{ categoria_form.activa }}</div><div class="col-md-3 d-flex gap-2"><button class="btn btn-primary">Guardar</button>{% if categoria_obj %}<a class="btn btn-outline-secondary" href="{% url 'costos:configuracion' %}">Cancelar</a>{% endif %}</div></form>{{ categoria_form.non_field_errors }}
+      <div class="table-responsive mt-4"><table class="table table-striped table-sm align-middle mb-0"><thead><tr><th>Categoría</th><th>Estado</th><th></th></tr></thead><tbody>{% for c in categorias %}<tr><td>{{ c.nombre }}</td><td>{% if c.activa %}<span class="badge bg-success">Activa</span>{% else %}<span class="badge bg-secondary">Inactiva</span>{% endif %}</td><td class="text-end"><a href="?categoria_id={{ c.id }}" class="btn btn-sm btn-outline-primary">Editar</a></td></tr>{% endfor %}</tbody></table></div>
+    </div>
+  </section></div></div>
+</div>
+{% endblock %}

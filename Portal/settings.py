@@ -112,6 +112,7 @@ INSTALLED_APPS = [
     "Apps.observaciones.apps.ObservacionesConfig",
     "Apps.administracion.apps.AdministracionConfig",
     "Apps.integraciones.apps.IntegracionesConfig",
+    "Apps.costos.apps.CostosConfig",
 ]
 
 

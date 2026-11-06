@@ -14,6 +14,7 @@ from Apps.Pedidos.services.listaprecios_alertas import (
     filas_precios_cliente,
 )
 from Apps.Pedidos.services.precios_compra_alertas import filas_cambios_precio_compra
+from Apps.indicadores.models import RevisionCambioPrecioCompra
 from Apps.integraciones.models import CompraAgil
 
 IVA_RATE = Decimal('0.19')
@@ -111,6 +112,17 @@ def home(request):
     precios_cliente_bajo_costo_preview = precios_cliente_bajo_costo[:5]
 
     cambios_precio_compra = filas_cambios_precio_compra()
+    cambios_ids = [fila["stock_id"] for fila in cambios_precio_compra]
+    revisados_ok = set(
+        RevisionCambioPrecioCompra.objects.filter(
+            stock_id__in=cambios_ids,
+            estado=RevisionCambioPrecioCompra.ESTADO_OK,
+        ).values_list("stock_id", flat=True)
+    )
+    cambios_precio_compra = [
+        fila for fila in cambios_precio_compra
+        if fila["stock_id"] not in revisados_ok
+    ]
     cantidad_cambios_precio_compra = len(cambios_precio_compra)
     cambios_precio_compra_preview = cambios_precio_compra[:5]
 

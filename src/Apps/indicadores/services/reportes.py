@@ -6,6 +6,8 @@ from django.db.models import DecimalField, ExpressionWrapper, F, Sum
 
 from Apps.Pedidos.models import Producto, Recepcion, Stock, UtilidadProducto, Venta
 from Apps.integraciones.models import ConciliacionPago, SaldoBancario
+from Apps.costos.models import GastoRecepcion
+from Apps.costos.services import resumen_costos_operacionales
 from Apps.indicadores.services.contabilidad import _cantidad_unidad_primaria, _valuacion_fifo_por_producto
 
 
@@ -39,11 +41,30 @@ def informe_resultados(desde: date, hasta: date) -> dict:
     utilidad_bruta = _sum(ventas_con_costo, "ganancia_total")
     costo_ventas = _q2(ventas_netas_con_costo - utilidad_bruta)
     margen = _q2((utilidad_bruta / ventas_netas_con_costo) * 100) if ventas_netas_con_costo else ZERO
+    gastos_externos = _sum(
+        GastoRecepcion.objects.filter(recepcion__fecha_recepcion__range=(desde, hasta)),
+        "monto_neto",
+    )
+    costos_operacionales = resumen_costos_operacionales(desde, hasta)
+    costos_personal = costos_operacionales["costo_tiempo_total"]
+    gastos_operacionales_hitos = costos_operacionales["gastos_fijos"]
+    resultado_operacional = _q2(
+        utilidad_bruta - gastos_externos - costos_personal - gastos_operacionales_hitos
+    )
     return {
         "ventas_netas": ventas_netas,
         "ventas_netas_con_costo": ventas_netas_con_costo,
         "costo_ventas": costo_ventas,
         "utilidad_bruta": utilidad_bruta,
+        "gastos_externos": gastos_externos,
+        "costos_personal": costos_personal,
+        "costos_personal_real": costos_operacionales["costo_tiempo_real"],
+        "costos_personal_estimado": costos_operacionales["costo_tiempo_estimado"],
+        "gastos_operacionales_hitos": gastos_operacionales_hitos,
+        "gasto_bencina": costos_operacionales["bencina"],
+        "otros_gastos_fijos": costos_operacionales["otros_gastos_fijos"],
+        "detalle_costos_operacionales": costos_operacionales["filas"],
+        "resultado_operacional": resultado_operacional,
         "margen_bruto": margen,
         "ventas_total": _sum(ventas, "venta_total_pedido"),
         "documentos": ventas.count(),
@@ -72,13 +93,36 @@ def informe_balance(hasta: date) -> dict:
     valuacion = _valuacion_fifo_por_producto(fecha_corte=hasta)
     inventario = _q2(sum((fila["valor"] for fila in valuacion.values()), start=ZERO))
     cxc = informe_cuentas_por_cobrar(hasta)
+    cxp = informe_cuentas_por_pagar(hasta)
     activos_identificados = _q2(efectivo + inventario + cxc["total_pendiente"])
+    pasivos_identificados = _q2(cxp["total_pendiente"])
+
+    # El patrimonio se presenta como residual para conservar la ecuacion
+    # contable. No equivale a capital confirmado mientras no existan saldos
+    # de apertura y asientos contables completos.
+    patrimonio_residual = _q2(activos_identificados - pasivos_identificados)
+    resultados_acumulados = informe_resultados(date(1900, 1, 1), hasta)
+    resultado_operacional_acumulado = resultados_acumulados["resultado_operacional"]
+    capital_ajustes_no_identificados = _q2(
+        patrimonio_residual - resultado_operacional_acumulado
+    )
+    total_pasivo_patrimonio = _q2(pasivos_identificados + patrimonio_residual)
+    diferencia_cuadre = _q2(activos_identificados - total_pasivo_patrimonio)
     return {
         "saldos": saldos,
         "efectivo": efectivo,
         "inventario": inventario,
         "cuentas_por_cobrar": cxc["total_pendiente"],
+        "cuentas_por_pagar": cxp["total_pendiente"],
+        "cxc_documentos": cxc["filas"],
+        "cxp_documentos": cxp["documentos"],
         "activos_identificados": activos_identificados,
+        "pasivos_identificados": pasivos_identificados,
+        "patrimonio_residual": patrimonio_residual,
+        "resultado_operacional_acumulado": resultado_operacional_acumulado,
+        "capital_ajustes_no_identificados": capital_ajustes_no_identificados,
+        "total_pasivo_patrimonio": total_pasivo_patrimonio,
+        "diferencia_cuadre": diferencia_cuadre,
         "fecha_corte": hasta,
         "completo": False,
     }

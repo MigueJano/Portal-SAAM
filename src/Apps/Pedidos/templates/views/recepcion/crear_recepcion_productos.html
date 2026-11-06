@@ -136,6 +136,29 @@
   </tfoot>
 </table>
 
+<hr>
+<h4>Servicios y gastos externos de la misma factura</h4>
+<p class="text-muted">Estas l&iacute;neas se contabilizan en la recepci&oacute;n, pero no aumentan inventario.</p>
+<form method="post" action="{% url 'costos:agregar_gasto_recepcion' recepcion.id %}" class="row g-3 align-items-end">
+  {% csrf_token %}
+  <div class="col-md-2"><label class="form-label">Categor&iacute;a</label>{{ gasto_form.categoria }}</div>
+  <div class="col-md-3"><label class="form-label">Descripci&oacute;n</label>{{ gasto_form.descripcion }}</div>
+  <div class="col-md-2"><label class="form-label">Neto</label>{{ gasto_form.monto_neto }}</div>
+  <div class="col-md-3"><label class="form-label">Pedido asociado</label>{{ gasto_form.pedido }}</div>
+  <div class="col-md-1"><label class="form-label d-block">Refacturable</label>{{ gasto_form.refacturable }}</div>
+  <div class="col-md-1"><button class="btn btn-outline-primary" type="submit">Agregar</button></div>
+</form>
+<div class="table-responsive mt-3">
+  <table class="table table-sm table-striped">
+    <thead><tr><th>Categor&iacute;a</th><th>Descripci&oacute;n</th><th>Pedido</th><th>Refacturable</th><th class="text-end">Neto</th><th></th></tr></thead>
+    <tbody>
+      {% for gasto in gastos_externos %}
+      <tr><td>{{ gasto.categoria }}</td><td>{{ gasto.descripcion }}</td><td>{{ gasto.pedido|default:"Empresa" }}</td><td>{% if gasto.refacturable %}S&iacute;{% else %}No{% endif %}</td><td class="text-end">${{ gasto.monto_neto|formatear_miles }}</td><td><form method="post" action="{% url 'costos:eliminar_gasto_recepcion' gasto.id %}">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" type="submit">Eliminar</button></form></td></tr>
+      {% empty %}<tr><td colspan="6" class="text-center text-muted">Sin gastos externos.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+
 <!-- Botón Finalizar Recepción -->
 <div class="d-flex justify-content-end gap-2 mt-4">
   <form method="post" action="{% url 'finalizar_recepcion' id=recepcion.id %}" class="d-inline">

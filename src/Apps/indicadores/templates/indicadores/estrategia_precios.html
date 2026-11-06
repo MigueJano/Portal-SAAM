@@ -86,7 +86,7 @@
     <div class="col-md-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Productos evaluados</div>
+          <div class="small text-muted">Productos evaluados {% include "indicadores/_info_icon.html" with texto="Productos con información suficiente para aplicar el análisis de precios y los filtros seleccionados." %}</div>
           <div class="h5 mb-0">{{ productos_evaluados|formatear_miles }}</div>
         </div>
       </div>
@@ -94,7 +94,7 @@
     <div class="col-md-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Con compra y venta</div>
+          <div class="small text-muted">Con compra y venta {% include "indicadores/_info_icon.html" with texto="Productos que poseen al menos un precio de compra y un precio de venta comparables." %}</div>
           <div class="h5 mb-0">{{ productos_con_referencia|formatear_miles }}</div>
         </div>
       </div>
@@ -102,7 +102,7 @@
     <div class="col-md-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Productos en riesgo</div>
+          <div class="small text-muted">Productos en riesgo {% include "indicadores/_info_icon.html" with texto="Productos cuyo precio mínimo de venta es menor o igual al precio máximo de compra." %}</div>
           <div class="h5 mb-0 {% if productos_en_riesgo %}text-danger{% else %}text-success{% endif %}">
             {{ productos_en_riesgo|formatear_miles }}
           </div>
@@ -113,7 +113,7 @@
     <div class="col-md-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="small text-muted">Cambios precio compra</div>
+          <div class="small text-muted">Cambios precio compra {% include "indicadores/_info_icon.html" with texto="Variaciones de precio de compra que cumplen los filtros y el umbral porcentual seleccionado." %}</div>
           <div class="h5 mb-0 {% if cantidad_cambios_precio_compra %}text-info{% endif %}">
             {{ cantidad_cambios_precio_compra|formatear_miles }}
           </div>

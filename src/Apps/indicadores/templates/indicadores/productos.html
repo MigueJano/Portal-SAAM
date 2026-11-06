@@ -49,25 +49,25 @@
   <div class="row g-2 mb-3 productos-resumen">
     <div class="col-6 col-lg-3">
       <div class="card"><div class="card-body">
-        <div class="small text-muted">Cantidad (unidades {{ unidad_label }})</div>
+        <div class="small text-muted">Cantidad (unidades {{ unidad_label }}) {% include "indicadores/_info_icon.html" with texto="Cantidad vendida convertida al nivel de empaque seleccionado." %}</div>
         <div class="h5 mb-0">{{ resumen.cantidad|floatformat:2|formatear_miles }}</div>
       </div></div>
     </div>
     <div class="col-6 col-lg-3">
       <div class="card"><div class="card-body">
-        <div class="small text-muted">Venta neta de productos</div>
+        <div class="small text-muted">Venta neta de productos {% include "indicadores/_info_icon.html" with texto="Monto vendido antes de IVA correspondiente a los productos filtrados." %}</div>
         <div class="h5 mb-0">${{ resumen.total_venta|floatformat:0|formatear_miles }}</div>
       </div></div>
     </div>
     <div class="col-6 col-lg-3">
       <div class="card"><div class="card-body">
-        <div class="small text-muted">Productos vendidos</div>
+        <div class="small text-muted">Productos vendidos {% include "indicadores/_info_icon.html" with texto="Número de productos distintos con ventas dentro del período." %}</div>
         <div class="h5 mb-0">{{ resumen.productos|formatear_miles }}</div>
       </div></div>
     </div>
     <div class="col-6 col-lg-3">
       <div class="card"><div class="card-body">
-        <div class="small text-muted">Compradores</div>
+        <div class="small text-muted">Compradores {% include "indicadores/_info_icon.html" with texto="Cantidad de clientes distintos que compraron los productos incluidos." %}</div>
         <div class="h5 mb-0">{{ resumen.compradores|formatear_miles }}</div>
       </div></div>
     </div>

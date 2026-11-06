@@ -133,6 +133,7 @@ urlpatterns = [
         _private(views.eliminar_linea_pedido),
         name="eliminar_linea_pedido",
     ),
+    path("pedidos/pedido/<int:pedido_id>/despachar/", _private(views.despachar_pedido), name="despachar_pedido"),
     path("pedidos/pedido/<int:pedido_id>/finalizar/", _private(views.finalizar_pedido), name="finalizar_pedido"),
     path("entrega/<int:entrega_id>/pdf/", _private(views.ver_pdf_entrega), name="ver_pdf_entrega"),
     path("entrega/<int:entrega_id>/foto/", _private(views.ver_foto_entrega), name="ver_foto_entrega"),

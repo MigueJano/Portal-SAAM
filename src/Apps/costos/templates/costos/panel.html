@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block content %}
+<div class="container-fluid mt-4 mb-5">
+  <div class="d-flex justify-content-between align-items-center"><h1 class="h4 mb-0">Gastos y tiempos operacionales</h1>{% if user.is_staff %}<a class="btn btn-outline-secondary" href="{% url 'costos:configuracion' %}">Configuración</a>{% endif %}</div>
+  <form method="get" class="row g-2 align-items-end mb-3">
+    <input type="hidden" name="informe" value="resultados">
+    <div class="col-sm-3">
+      <label class="form-label mb-1">Fecha desde</label>
+      {{ form.fecha_desde }}
+    </div>
+    <div class="col-sm-3">
+      <label class="form-label mb-1">Fecha hasta</label>
+      {{ form.fecha_hasta }}
+    </div>
+    <div class="col-sm-6 d-flex gap-2 align-items-end">
+      <button type="submit" class="btn btn-outline-primary">Aplicar</button>
+      <a href="{% url 'costos:panel' %}" class="btn btn-outline-secondary">Limpiar</a>
+      <div class="ms-auto d-flex gap-2 align-items-end">
+        <div class="flex-grow-1">
+          <label class="form-label mb-1">Rango rápido</label>
+          <select id="preset-range" class="form-select">
+            <optgroup label="Quarter (año actual)">
+              <option value="q1">Quarter 1 (Ene–Mar)</option>
+              <option value="q2">Quarter 2 (Abr–Jun)</option>
+              <option value="q3">Quarter 3 (Jul–Sep)</option>
+              <option value="q4">Quarter 4 (Oct–Dic)</option>
+            </optgroup>
+            <optgroup label="Semestre (año actual)">
+              <option value="sem1">Semestre 1 (Ene–Jun)</option>
+              <option value="sem2">Semestre 2 (Jul–Dic)</option>
+            </optgroup>
+            <optgroup label="Año (año actual)">
+              <option value="year">Año (Ene–Dic)</option>
+            </optgroup>
+            <optgroup label="Relativos">
+              <option value="prev_month">Mes pasado</option>
+              <option value="last3">Últimos 3 meses</option>
+              <option value="last6">Últimos 6 meses</option>
+              <option value="last12">Últimos 12 meses</option>
+            </optgroup>
+          </select>
+        </div>
+        <button type="button" class="btn btn-outline-primary" onclick="applyPreset()">Aplicar rango</button>
+      </div>
+    </div>
+  </form>
+  <p class="text-muted">Período: <strong>{{ desde|date:"d-m-Y" }}</strong> a <strong>{{ hasta|date:"d-m-Y" }}</strong></p>
+  <div class="row g-3 mb-4"><div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><small class="text-muted">Tiempo real registrado {% include "indicadores/_info_icon.html" with texto="Minutos reales de actividades finalizadas por las personas durante el período." %}</small><h3>{{ total_minutos }} min</h3></div></div></div><div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><small class="text-muted">Tiempo estándar por hitos {% include "indicadores/_info_icon.html" with texto="Minutos configurados por acción multiplicados por los pedidos que alcanzaron cada hito en el período." %}</small><h3>{{ total_minutos_estandar }} min</h3></div></div></div><div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><small class="text-muted">Costo estándar estimado {% include "indicadores/_info_icon.html" with texto="Costo calculado con tiempo estándar, valor hora y costo fijo configurado por cada pedido." %}</small><h3>${{ total_costo_estandar|formatear_miles }}</h3></div></div></div><div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><small class="text-muted">Gastos externos netos {% include "indicadores/_info_icon.html" with texto="Cargos externos netos incluidos en las recepciones del período, sin IVA." %}</small><h3>${{ total_gastos|formatear_miles }}</h3></div></div></div></div>
+  <div class="row mb-4"><div class="col-12"><section class="card shadow-sm"><div class="card-header"><h2 class="h5 mb-0">Carga estándar según hitos</h2></div><div class="card-body p-0"><div class="table-responsive"><table class="table table-striped table-sm align-middle mb-0"><thead><tr><th>Actividad</th><th>Hito</th><th>Eventos</th><th>Tiempo por evento</th><th>Tiempo total</th><th>Costo tiempo</th><th>Costo fijo</th><th>Total</th></tr></thead><tbody>{% for f in carga_estandar %}<tr><td>{{ f.accion.nombre }}</td><td>{{ f.accion.get_base_calculo_display }}</td><td>{{ f.cantidad }}</td><td>{{ f.accion.minutos_estandar }} min</td><td>{{ f.minutos }} min</td><td>${{ f.costo_tiempo|formatear_miles }}</td><td>${{ f.costo_fijo|formatear_miles }}</td><td>${{ f.total|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="8" class="text-center text-muted py-3">Configure acciones asociadas a hitos para calcular la carga mensual.</td></tr>{% endfor %}</tbody></table></div></div></section></div></div>
+  <div class="row mb-4"><div class="col-12"><section class="card shadow-sm"><div class="card-header"><h2 class="h5 mb-0">Tiempo por persona y actividad</h2></div><div class="card-body p-0"><div class="table-responsive"><table class="table table-striped table-sm align-middle mb-0"><thead><tr><th>Persona</th><th>Actividad</th><th>Registros</th><th>Estándar</th><th>Real</th><th>Diferencia</th><th>Costo</th></tr></thead><tbody>{% for f in por_persona_actividad %}<tr><td>{% if f.usuario__first_name or f.usuario__last_name %}{{ f.usuario__first_name }} {{ f.usuario__last_name }} <small class="text-muted">({{ f.usuario__username }})</small>{% else %}{{ f.usuario__username }}{% endif %}</td><td>{{ f.accion__nombre }}</td><td>{{ f.registros }}</td><td>{{ f.estandar }} min</td><td>{{ f.minutos }} min</td><td class="{% if f.diferencia > 0 %}text-danger{% elif f.diferencia < 0 %}text-success{% endif %}">{{ f.diferencia }} min</td><td>${{ f.costo|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="7" class="text-center text-muted py-3">Sin tiempos registrados en el período.</td></tr>{% endfor %}</tbody></table></div></div></section></div></div>
+  <div class="row"><div class="col-12"><section class="card shadow-sm"><div class="card-header"><h2 class="h5 mb-0">Gastos externos</h2></div><div class="card-body p-0"><div class="table-responsive"><table class="table table-striped table-sm align-middle mb-0"><thead><tr><th>Fecha</th><th>Factura</th><th>Proveedor</th><th>Categoría</th><th>Descripción</th><th>Pedido</th><th class="text-end">Neto</th></tr></thead><tbody>{% for g in gastos %}<tr><td>{{ g.recepcion.fecha_recepcion|date:"d-m-Y" }}</td><td>{{ g.recepcion.documento_recepcion }} #{{ g.recepcion.num_documento_recepcion }}</td><td>{{ g.recepcion.proveedor }}</td><td>{{ g.categoria }}</td><td>{{ g.descripcion }}</td><td>{{ g.pedido|default:"Empresa" }}</td><td class="text-end">${{ g.monto_neto|formatear_miles }}</td></tr>{% empty %}<tr><td colspan="7" class="text-center text-muted py-3">Sin gastos externos en el período.</td></tr>{% endfor %}</tbody></table></div></div></section></div></div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  function pad2(n){ return String(n).padStart(2, '0'); }
+  function monthStart(year, monthIndex){ return new Date(year, monthIndex, 1); }
+  function monthEnd(year, monthIndex){ return new Date(year, monthIndex + 1, 0); }
+  function toYMD(d){
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  }
+  function setDates(desdeDate, hastaDate){
+    document.querySelector('[name="fecha_desde"]').value = toYMD(desdeDate);
+    document.querySelector('[name="fecha_hasta"]').value = toYMD(hastaDate);
+  }
+  function applyPreset(){
+    const sel = document.getElementById('preset-range');
+    const val = sel.value;
+    const today = new Date();
+    const year = today.getFullYear();
+    let desde, hasta;
+    switch(val){
+      case 'q1': desde = monthStart(year, 0); hasta = monthEnd(year, 2); break;
+      case 'q2': desde = monthStart(year, 3); hasta = monthEnd(year, 5); break;
+      case 'q3': desde = monthStart(year, 6); hasta = monthEnd(year, 8); break;
+      case 'q4': desde = monthStart(year, 9); hasta = monthEnd(year, 11); break;
+      case 'sem1': desde = monthStart(year, 0); hasta = monthEnd(year, 5); break;
+      case 'sem2': desde = monthStart(year, 6); hasta = monthEnd(year, 11); break;
+      case 'year': desde = monthStart(year, 0); hasta = monthEnd(year, 11); break;
+      case 'prev_month': {
+        const previous = new Date(year, today.getMonth() - 1, 1);
+        desde = monthStart(previous.getFullYear(), previous.getMonth());
+        hasta = monthEnd(previous.getFullYear(), previous.getMonth());
+        break;
+      }
+      case 'last3': desde = monthStart(year, today.getMonth() - 2); hasta = today; break;
+      case 'last6': desde = monthStart(year, today.getMonth() - 5); hasta = today; break;
+      case 'last12': desde = monthStart(year, today.getMonth() - 11); hasta = today; break;
+      default: return;
+    }
+    setDates(desde, hasta);
+    sel.closest('form').submit();
+  }
+</script>
+{% endblock %}

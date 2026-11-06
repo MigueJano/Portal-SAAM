@@ -599,6 +599,7 @@ class Pedido(models.Model):
     """
     ESTADO_PEDIDO_CHOICES = [
         ('Pendiente', 'Pendiente'),
+        ('Despachado', 'Despachado'),
         ('Entregado', 'Entregado'),
         ('Pagado', 'Pagado'),
         ('Finalizado', 'Finalizado'),
@@ -622,6 +623,31 @@ class Pedido(models.Model):
         if self.num_cotizacion_id:
             partes.append(f"Cot. {self.num_cotizacion.num_cotizacion}")
         return " - ".join(partes)
+
+
+class PedidoEstadoEvento(models.Model):
+    """Hito fechado usado para indicadores y costos operacionales."""
+
+    pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name="eventos_estado")
+    estado = models.CharField(max_length=10, choices=Pedido.ESTADO_PEDIDO_CHOICES)
+    ocurrido_en = models.DateTimeField(default=timezone.now)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hitos_pedidos",
+    )
+    origen = models.CharField(max_length=80, blank=True)
+
+    class Meta:
+        ordering = ("ocurrido_en", "id")
+        constraints = [
+            models.UniqueConstraint(fields=("pedido", "estado"), name="un_hito_estado_por_pedido")
+        ]
+
+    def __str__(self):
+        return f"{self.pedido.referencia_pedido()} - {self.estado}"
 
 
 class PedidoLinea(models.Model):

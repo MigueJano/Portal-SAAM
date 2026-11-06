@@ -48,6 +48,10 @@
 </table>
 
 <!-- Botón Cerrar -->
+{% if gastos_externos %}
+<h4 class="mt-4">Servicios y gastos externos</h4>
+<table class="table table-sm table-striped"><thead><tr><th>Categor&iacute;a</th><th>Descripci&oacute;n</th><th>Pedido</th><th>Refacturable</th><th class="text-end">Neto</th></tr></thead><tbody>{% for gasto in gastos_externos %}<tr><td>{{ gasto.categoria }}</td><td>{{ gasto.descripcion }}</td><td>{{ gasto.pedido|default:"Empresa" }}</td><td>{% if gasto.refacturable %}S&iacute;{% else %}No{% endif %}</td><td class="text-end">${{ gasto.monto_neto|formatear_miles }}</td></tr>{% endfor %}</tbody></table>
+{% endif %}
 <div class="d-flex justify-content-end gap-2 mt-3">
   <a href="{% url 'lista_recepcion_historico' %}" class="btn btn-outline-primary me-2">Cerrar</a>
 </div>

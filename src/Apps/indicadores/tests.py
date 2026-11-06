@@ -27,6 +27,7 @@ from Apps.Pedidos.models import (
 )
 from Apps.indicadores.models import RevisionCambioPrecioCompra
 from Apps.indicadores.services.reportes import (
+    informe_balance,
     informe_cuentas_por_cobrar,
     informe_cuentas_por_pagar,
     informe_flujo_efectivo,
@@ -34,7 +35,7 @@ from Apps.indicadores.services.reportes import (
     informe_resultados,
     informe_ventas_stock_mensual,
 )
-from Apps.integraciones.models import ConciliacionPago, MovimientoBancario
+from Apps.integraciones.models import ConciliacionPago, MovimientoBancario, SaldoBancario
 
 
 class IndicadoresViewsTests(TestCase):
@@ -83,12 +84,36 @@ class IndicadoresViewsTests(TestCase):
         self.assertContains(resp, reverse("dashboard_financiero_simple"), count=1)
         self.assertContains(resp, reverse("dashboard_comercial_gestion"), count=1)
         self.assertContains(resp, reverse("dashboard_control_riesgo"), count=1)
+        self.assertContains(resp, reverse("costos:panel"), count=1)
+        contenido = resp.content.decode("utf-8")
+        self.assertLess(contenido.index("Indicadores"), contenido.index(reverse("costos:panel")))
+        self.assertLess(contenido.index(reverse("costos:panel")), contenido.index("Administraci&oacute;n"))
         self.assertNotContains(resp, reverse("informe_productos"))
         self.assertNotContains(resp, reverse("dashboard_operaciones"))
         self.assertNotContains(resp, reverse("dashboard_inventario"))
         self.assertContains(resp, reverse("stock_productos"))
         self.assertContains(resp, "css/style_base.css?v=")
         self.assertContains(resp, "css/colors.css?v=")
+
+    def test_indicadores_principales_incluyen_ayuda_contextual(self):
+        self.client.force_login(self.user)
+        urls = (
+            reverse("dashboard_financiero_simple"),
+            reverse("dashboard_ventas"),
+            reverse("informe_productos"),
+            reverse("dashboard_operaciones"),
+            reverse("dashboard_estrategia"),
+            reverse("dashboard_estrategia_precios"),
+            reverse("dashboard_lista_precios_vigentes"),
+            reverse("dashboard_precios_cliente"),
+            reverse("costos:panel"),
+        )
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'data-bs-toggle="tooltip"')
+                self.assertContains(response, 'aria-label="Información:')
 
     def test_urls_contabilidad_resueltas_en_indicadores(self):
         self.assertTrue(reverse("resumen_contable_propyme").startswith("/indicadores/"))
@@ -156,6 +181,7 @@ class InformesProfesionalesTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.context["informe_activo"], tab)
                 self.assertContains(response, 'class="portal-tabs mb-3"')
+                self.assertContains(response, 'data-bs-toggle="tooltip"')
 
     def test_informes_estrategicos_usan_portal_tabs_y_un_solo_link_precios(self):
         casos = (
@@ -268,6 +294,83 @@ class InformesProfesionalesTests(TestCase):
         )
         self.assertContains(response, "Utilidad neta no disponible")
         self.assertContains(response, "Costo de ventas reconocido")
+
+    def test_balance_cuadra_activos_pasivos_y_patrimonio_residual(self):
+        cliente = Cliente.objects.create(
+            nombre_cliente="Cliente balance",
+            rut_cliente="77123456-7",
+            direccion_cliente="Dirección",
+            direccion_bodega_cliente="Bodega",
+            cliente_activo=True,
+            telefono_cliente="1",
+            correo_cliente="balance@test.local",
+            categoria="PYME",
+        )
+        pedido = Pedido.objects.create(
+            nombre_cliente=cliente,
+            fecha_pedido=date(2026, 9, 1),
+            estado_pedido="Finalizado",
+        )
+        Venta.objects.create(
+            pedidoid=pedido,
+            fecha_venta=date(2026, 9, 10),
+            documento_pedido="Credito",
+            num_documento=9001,
+            venta_neto_pedido=Decimal("100.00"),
+            venta_iva_pedido=Decimal("19.00"),
+            venta_total_pedido=Decimal("119.00"),
+            ganancia_total=Decimal("20.00"),
+            ganancia_porcentaje=Decimal("20.00"),
+        )
+        proveedor = Proveedor.objects.create(
+            rut_proveedor="76123456-8",
+            nombre_proveedor="Proveedor balance",
+            direccion_proveedor="Dirección",
+            direccion_bodega_proveedor="Bodega",
+            banco_proveedor="Banco",
+            cta_proveedor="Corriente",
+            num_cuenta_proveedor="1",
+        )
+        Recepcion.objects.create(
+            proveedor=proveedor,
+            fecha_recepcion=date(2026, 9, 5),
+            estado_recepcion="Finalizado",
+            documento_recepcion="Credito",
+            num_documento_recepcion=8001,
+            total_neto_recepcion=Decimal("200.00"),
+            iva_recepcion=Decimal("38.00"),
+            total_recepcion=Decimal("238.00"),
+            moneda_recepcion="CLP",
+        )
+        SaldoBancario.objects.create(
+            cuenta_enmascarada="****1234",
+            saldo_disponible=Decimal("1000.00"),
+            saldo_contable=Decimal("1000.00"),
+            periodo_desde=date(2026, 9, 1),
+            periodo_hasta=date(2026, 9, 30),
+            respuesta_hash="balance-prueba",
+        )
+
+        balance = informe_balance(date(2026, 9, 30))
+
+        self.assertEqual(balance["activos_identificados"], Decimal("1119.00"))
+        self.assertEqual(balance["pasivos_identificados"], Decimal("238.00"))
+        self.assertEqual(balance["patrimonio_residual"], Decimal("881.00"))
+        self.assertEqual(balance["total_pasivo_patrimonio"], Decimal("1119.00"))
+        self.assertEqual(balance["diferencia_cuadre"], Decimal("0.00"))
+
+        response = self.client.get(
+            reverse("dashboard_financiero_simple"),
+            data={
+                "informe": "balance",
+                "fecha_desde": "2026-09-01",
+                "fecha_hasta": "2026-09-30",
+            },
+        )
+        self.assertContains(response, "Pasivo y patrimonio")
+        self.assertContains(response, "Balance provisional")
+        self.assertGreaterEqual(response.content.count(b'data-bs-toggle="tooltip"'), 15)
+        self.assertContains(response, "Diferencia entre el total de activos y los pasivos identificados")
 
     def test_resultados_separa_costo_fifo_de_compras_del_periodo(self):
         cliente = Cliente.objects.create(
@@ -546,6 +649,7 @@ class InformesProfesionalesTests(TestCase):
         self.assertContains(response, "Inventario valorizado FIFO")
         self.assertContains(response, "Factura #1002")
         self.assertContains(response, "Monto total del stock")
+        self.assertContains(response, 'data-order="28">28 días')
 
     def test_ventas_y_stock_agrupa_por_mes_en_unidades_primarias(self):
         categoria = Categoria.objects.create(categoria="Categoría flujo mensual")

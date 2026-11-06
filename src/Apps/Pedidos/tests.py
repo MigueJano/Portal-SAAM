@@ -733,6 +733,7 @@ class DashboardHomeTests(TestCase):
             (datetime(2026, 8, 15).date(), Decimal("1600.00")),
             (datetime(2026, 9, 1).date(), Decimal("1500.00")),
         ]
+        stocks = []
         for idx, (fecha, precio_compra) in enumerate(precios, start=1):
             recepcion = Recepcion.objects.create(
                 proveedor=self.proveedor,
@@ -746,7 +747,7 @@ class DashboardHomeTests(TestCase):
                 incluir_iva=True,
                 moneda_recepcion="CLP",
             )
-            Stock.objects.create(
+            stocks.append(Stock.objects.create(
                 tipo_movimiento="DISPONIBLE",
                 producto=producto,
                 qty=1,
@@ -754,7 +755,7 @@ class DashboardHomeTests(TestCase):
                 precio_unitario=precio_compra,
                 fecha_movimiento=fecha,
                 recepcion=recepcion,
-            )
+            ))
 
         resp = self.client.get(reverse("home"))
 
@@ -771,6 +772,22 @@ class DashboardHomeTests(TestCase):
         self.assertContains(resp, f'{reverse("dashboard_estrategia_precios")}?range_months=all')
         self.assertNotContains(resp, "Precio anterior:")
         self.assertNotContains(resp, "Precio nuevo:")
+
+        from Apps.indicadores.models import RevisionCambioPrecioCompra
+
+        RevisionCambioPrecioCompra.objects.create(
+            stock=stocks[1],
+            estado=RevisionCambioPrecioCompra.ESTADO_OK,
+            revisado_por=self.user,
+        )
+        resp_revisado = self.client.get(reverse("home"))
+        self.assertEqual(resp_revisado.context["cantidad_cambios_precio_compra"], 1)
+        self.assertNotIn(
+            stocks[1].id,
+            [row["stock_id"] for row in resp_revisado.context["cambios_precio_compra"]],
+        )
+        self.assertNotContains(resp_revisado, "+$200")
+        self.assertContains(resp_revisado, "-$100")
 
 
 class ListaPedidosTests(TestCase):
@@ -1790,6 +1807,17 @@ class EntregaPedidoFirmaCompatTests(TestCase):
         self.assertContains(resp, "pointerdown")
         self.assertContains(resp, "shown.bs.modal")
         self.assertContains(resp, "canvas.toDataURL('image/png')")
+
+    def test_despachar_pedido_mueve_stock_y_registra_hito(self):
+        resp = self.client.post(reverse("despachar_pedido", args=[self.pedido.id]))
+
+        self.assertRedirects(resp, reverse("detalle_pedido", args=[self.pedido.id]))
+        self.pedido.refresh_from_db()
+        self.stock.refresh_from_db()
+        self.assertEqual(self.pedido.estado_pedido, "Despachado")
+        self.assertEqual(self.stock.tipo_movimiento, "DESPACHO")
+        self.assertEqual(self.stock.responsable, self.user)
+        self.assertTrue(self.pedido.eventos_estado.filter(estado="Despachado").exists())
 
     def test_finalizar_pedido_acepta_firma_dataurl_y_mueve_stock(self):
         firma_b64 = base64.b64encode(b"firma-prueba").decode("ascii")
@@ -3103,7 +3131,11 @@ class ProductoEstadoVentaTests(ProductoEstadoBaseTests):
 
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'id="tabla-filtros"')
+        self.assertContains(resp, "order-entry-page")
+        self.assertContains(resp, "order-products-table-wrap")
+        self.assertContains(resp, "js-mobile-card-table")
         self.assertContains(resp, 'class="text-center col-producto"')
+        self.assertContains(resp, 'data-label="Cantidad"')
         self.assertNotContains(resp, 'id="buscador"')
         self.assertNotContains(resp, 'id="scan-codigo"')
         producto_ids = {int(form.initial["producto_id"]) for form in resp.context["formset"].forms}

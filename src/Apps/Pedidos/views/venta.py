@@ -20,7 +20,7 @@ from django.db.models import Case, When, F, Value, CharField, ExpressionWrapper,
 from django.db.models.functions import Coalesce
 
 from Apps.Pedidos.models import Pedido, PedidoLinea, Stock, Venta, UtilidadProducto, EntregaPedido
-from Apps.Pedidos.services import costo_maximo_unitario, desglose_ingreso_pack, es_pack, factor_empaque
+from Apps.Pedidos.services import costo_maximo_unitario, desglose_ingreso_pack, es_pack, factor_empaque, registrar_estado_pedido
 
 from django.db import transaction
 from Apps.Pedidos.forms import FinalizarVentaForm
@@ -202,8 +202,7 @@ def finalizar_venta(request, pedido_id):
             UtilidadProducto.objects.bulk_create(utilidades)
 
         # Actualiza estado del pedido si quieres cerrarlo aquí
-        pedido.estado_pedido = 'Finalizado'
-        pedido.save(update_fields=['estado_pedido'])
+        registrar_estado_pedido(pedido, 'Finalizado', request.user, ahora, 'Venta consolidada')
 
     messages.success(request, "Venta consolidada a partir de DESPACHADOS y registrada correctamente.")
     return redirect('lista_ventas')

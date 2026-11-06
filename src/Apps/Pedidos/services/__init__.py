@@ -3,6 +3,7 @@ from .listaprecios_sync import (
     sincronizar_lista_predeterminada_a_clientes_asociados,
 )
 from .pedido_items import items_comerciales_pedido
+from .estados import fecha_pedido_a_datetime, registrar_estado_pedido
 from .packs import (
     cantidad_primaria,
     componentes_pack,
@@ -27,8 +28,10 @@ __all__ = [
     "desglose_ingreso_pack",
     "es_pack",
     "factor_empaque",
+    "fecha_pedido_a_datetime",
     "items_comerciales_pedido",
     "q2",
+    "registrar_estado_pedido",
     "sincronizar_lista_predeterminada_a_cliente",
     "sincronizar_lista_predeterminada_a_clientes_asociados",
     "snapshot_pack",
