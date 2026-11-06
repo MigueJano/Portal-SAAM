@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block CSS %}
+<style>
+  .compras-cliente-resumen .card { height:100%; }
+  .tabla-compras-cliente td, .tabla-compras-cliente th { padding:.4rem .5rem; }
+  @media (min-width: 576px) {
+    .filtro-fecha-compacto { flex:0 0 12.5%; max-width:12.5%; }
+  }
+</style>
+{% endblock CSS %}
+
+{% block content %}
+<div class="container-fluid mt-3 mb-5">
+  <div class="mb-3">
+    <h1 class="h4 mb-1">Compras por cliente</h1>
+    <div class="small text-muted">Productos vendidos a clientes según fecha de venta.</div>
+  </div>
+
+  <form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-6 filtro-fecha-compacto">
+      <label class="form-label mb-1" for="{{ form.fecha_desde.id_for_label }}">Fecha desde</label>
+      {{ form.fecha_desde }}
+    </div>
+    <div class="col-6 filtro-fecha-compacto">
+      <label class="form-label mb-1" for="{{ form.fecha_hasta.id_for_label }}">Fecha hasta</label>
+      {{ form.fecha_hasta }}
+    </div>
+    <div class="col-sm-2">
+      <label class="form-label mb-1" for="{{ form.cliente.id_for_label }}">Cliente</label>
+      {{ form.cliente }}
+    </div>
+    <div class="col-sm-3 d-flex gap-2 align-items-end">
+      <button type="submit" class="btn btn-outline-primary">Aplicar</button>
+      <a href="{% url 'informe_compras_cliente' %}" class="btn btn-outline-secondary">Limpiar</a>
+    </div>
+    <div class="col-12 d-flex justify-content-end">
+      <div class="d-flex gap-2 align-items-end">
+        <div>
+          <label class="form-label mb-1">Rango rápido</label>
+          <select id="preset-range" class="form-select">
+            <optgroup label="Quarter (año actual)">
+              <option value="q1">Quarter 1 (Ene–Mar)</option>
+              <option value="q2">Quarter 2 (Abr–Jun)</option>
+              <option value="q3">Quarter 3 (Jul–Sep)</option>
+              <option value="q4">Quarter 4 (Oct–Dic)</option>
+            </optgroup>
+            <optgroup label="Semestre (año actual)">
+              <option value="sem1">Semestre 1 (Ene–Jun)</option>
+              <option value="sem2">Semestre 2 (Jul–Dic)</option>
+            </optgroup>
+            <optgroup label="Año (año actual)">
+              <option value="year">Año (Ene–Dic)</option>
+            </optgroup>
+            <optgroup label="Relativos">
+              <option value="prev_month">Mes pasado</option>
+              <option value="last3">Últimos 3 meses</option>
+              <option value="last6">Últimos 6 meses</option>
+              <option value="last12">Últimos 12 meses</option>
+            </optgroup>
+          </select>
+        </div>
+        <button type="button" class="btn btn-outline-primary" onclick="applyPreset()">Aplicar rango</button>
+      </div>
+    </div>
+  </form>
+
+  <p class="text-muted">Período: <strong>{{ inicio|date:"d-m-Y" }}</strong> a <strong>{{ fin|date:"d-m-Y" }}</strong>{% if cliente %} · Cliente: <strong>{{ cliente.nombre_cliente }}</strong>{% endif %}</p>
+
+  <div class="row g-2 mb-3 compras-cliente-resumen">
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="small text-muted">Cantidad comprada {% include "indicadores/_info_icon.html" with texto="Unidades primarias vendidas a los clientes dentro del período." %}</div><div class="h5 mb-0">{{ resumen.cantidad|floatformat:2|formatear_miles }}</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="small text-muted">Productos distintos {% include "indicadores/_info_icon.html" with texto="Productos diferentes comprados dentro del período y filtro de cliente." %}</div><div class="h5 mb-0">{{ resumen.productos|formatear_miles }}</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="small text-muted">Total neto {% include "indicadores/_info_icon.html" with texto="Monto comprado antes de IVA." %}</div><div class="h5 mb-0">${{ resumen.total_neto|formatear_miles }}</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="small text-muted">Total compra {% include "indicadores/_info_icon.html" with texto="Monto neto más IVA de 19%." %}</div><div class="h5 mb-0">${{ resumen.total_compra|formatear_miles }}</div></div></div></div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-striped table-bordered table-sm align-middle tabla-compras-cliente js-tabla-filtros" data-page-length="50">
+      <thead class="table-light text-center">
+        <tr><th>Cliente</th><th>Código</th><th>Producto</th><th>Cantidad período</th><th>Unidad</th><th>Precio promedio neto</th><th>Total neto</th><th>Total compra</th></tr>
+      </thead>
+      <tbody>
+        {% for fila in filas %}
+        <tr>
+          <td>{{ fila.cliente.nombre_cliente }} <span class="text-muted">({{ fila.cliente.rut_cliente }})</span></td>
+          <td>{{ fila.producto.codigo_producto_interno }}</td>
+          <td>{{ fila.producto.nombre_producto }}</td>
+          <td class="text-end" data-order="{{ fila.cantidad|stringformat:'f' }}">{{ fila.cantidad|floatformat:2|formatear_miles }}</td>
+          <td>{{ fila.unidad }}</td>
+          <td class="text-end" data-order="{{ fila.precio_promedio|stringformat:'f' }}">${{ fila.precio_promedio|formatear_miles }}</td>
+          <td class="text-end" data-order="{{ fila.total_neto|stringformat:'f' }}">${{ fila.total_neto|formatear_miles }}</td>
+          <td class="text-end fw-semibold" data-order="{{ fila.total_compra|stringformat:'f' }}">${{ fila.total_compra|formatear_miles }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-center text-muted py-3">Sin compras para los filtros seleccionados.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock content %}
+
+{% block script %}
+<script>
+  function pad2(n){ return String(n).padStart(2, '0'); }
+  function monthStart(year, monthIndex){ return new Date(year, monthIndex, 1); }
+  function monthEnd(year, monthIndex){ return new Date(year, monthIndex + 1, 0); }
+  function toYMD(d){ return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+  function setDates(desdeDate, hastaDate){
+    document.querySelector('[name="fecha_desde"]').value = toYMD(desdeDate);
+    document.querySelector('[name="fecha_hasta"]').value = toYMD(hastaDate);
+  }
+  function applyPreset(){
+    const sel = document.getElementById('preset-range');
+    const val = sel.value;
+    const today = new Date();
+    const year = today.getFullYear();
+    let desde, hasta;
+    switch(val){
+      case 'q1': desde = monthStart(year, 0); hasta = monthEnd(year, 2); break;
+      case 'q2': desde = monthStart(year, 3); hasta = monthEnd(year, 5); break;
+      case 'q3': desde = monthStart(year, 6); hasta = monthEnd(year, 8); break;
+      case 'q4': desde = monthStart(year, 9); hasta = monthEnd(year, 11); break;
+      case 'sem1': desde = monthStart(year, 0); hasta = monthEnd(year, 5); break;
+      case 'sem2': desde = monthStart(year, 6); hasta = monthEnd(year, 11); break;
+      case 'year': desde = monthStart(year, 0); hasta = monthEnd(year, 11); break;
+      case 'prev_month': {
+        const previous = new Date(year, today.getMonth() - 1, 1);
+        desde = monthStart(previous.getFullYear(), previous.getMonth());
+        hasta = monthEnd(previous.getFullYear(), previous.getMonth());
+        break;
+      }
+      case 'last3': desde = monthStart(year, today.getMonth() - 2); hasta = today; break;
+      case 'last6': desde = monthStart(year, today.getMonth() - 5); hasta = today; break;
+      case 'last12': desde = monthStart(year, today.getMonth() - 11); hasta = today; break;
+      default: return;
+    }
+    setDates(desde, hasta);
+    sel.closest('form').submit();
+  }
+</script>
+{% endblock script %}

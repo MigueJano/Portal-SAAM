@@ -45,6 +45,7 @@ class IndicadoresViewsTests(TestCase):
             reverse("dashboard_financiero_simple"),
             reverse("dashboard_ventas"),
             reverse("informe_productos"),
+            reverse("informe_compras_cliente"),
             reverse("dashboard_operaciones"),
             reverse("dashboard_estrategia"),
             reverse("dashboard_estrategia_precios"),
@@ -84,6 +85,7 @@ class IndicadoresViewsTests(TestCase):
         self.assertContains(resp, reverse("dashboard_financiero_simple"), count=1)
         self.assertContains(resp, reverse("dashboard_comercial_gestion"), count=1)
         self.assertContains(resp, reverse("dashboard_control_riesgo"), count=1)
+        self.assertContains(resp, reverse("informe_compras_cliente"), count=1)
         self.assertContains(resp, reverse("costos:panel"), count=1)
         contenido = resp.content.decode("utf-8")
         self.assertLess(contenido.index("Indicadores"), contenido.index(reverse("costos:panel")))
@@ -892,6 +894,95 @@ class InformeProductosTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["filas"], [])
         self.assertEqual(UtilidadProducto.objects.get().cantidad, 12)
+
+    def test_compras_por_cliente_agrupa_mes_producto_y_precio_promedio(self):
+        pedido_2 = Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=date(2026, 10, 20),
+            estado_pedido="Finalizado",
+        )
+        venta_2 = Venta.objects.create(
+            pedidoid=pedido_2,
+            fecha_venta=date(2026, 10, 21),
+            documento_pedido="Boleta",
+            num_documento=322,
+            venta_neto_pedido=Decimal("1200.00"),
+            venta_iva_pedido=Decimal("228.00"),
+            venta_total_pedido=Decimal("1428.00"),
+        )
+        UtilidadProducto.objects.create(
+            venta=venta_2,
+            producto=self.producto,
+            empaque="PRIMARIO",
+            cantidad=4,
+            precio_compra_unitario=Decimal("120.00"),
+            precio_venta_unitario=Decimal("300.00"),
+            utilidad=Decimal("180.00"),
+            utilidad_porcentaje=Decimal("60.00"),
+            fecha=timezone.now(),
+        )
+        otro_cliente = Cliente.objects.create(
+            nombre_cliente="Otro comprador",
+            rut_cliente="77555555-5",
+            direccion_cliente="Dirección otro cliente",
+            direccion_bodega_cliente="Bodega otro cliente",
+            cliente_activo=True,
+            telefono_cliente="+56955555555",
+            correo_cliente="otro-comprador@test.local",
+            categoria="PYME",
+        )
+        otro_pedido = Pedido.objects.create(
+            nombre_cliente=otro_cliente,
+            fecha_pedido=date(2026, 10, 22),
+            estado_pedido="Finalizado",
+        )
+        otra_venta = Venta.objects.create(
+            pedidoid=otro_pedido,
+            fecha_venta=date(2026, 10, 23),
+            documento_pedido="Factura",
+            num_documento=323,
+            venta_neto_pedido=Decimal("5000.00"),
+            venta_iva_pedido=Decimal("950.00"),
+            venta_total_pedido=Decimal("5950.00"),
+        )
+        UtilidadProducto.objects.create(
+            venta=otra_venta,
+            producto=self.producto,
+            empaque="PRIMARIO",
+            cantidad=10,
+            precio_compra_unitario=Decimal("200.00"),
+            precio_venta_unitario=Decimal("500.00"),
+            utilidad=Decimal("300.00"),
+            utilidad_porcentaje=Decimal("60.00"),
+            fecha=timezone.now(),
+        )
+
+        resp = self.client.get(
+            reverse("informe_compras_cliente"),
+            data={
+                "fecha_desde": "2026-10-01",
+                "fecha_hasta": "2026-10-31",
+                "cliente": self.cliente.id,
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.context["filas"]), 1)
+        fila = resp.context["filas"][0]
+        self.assertEqual(fila["mes"], date(2026, 10, 1))
+        self.assertEqual(fila["cantidad"], Decimal("16"))
+        self.assertEqual(fila["precio_promedio"], Decimal("262.50"))
+        self.assertEqual(fila["total_neto"], Decimal("4200.00"))
+        self.assertEqual(fila["total_compra"], Decimal("4998.00"))
+        self.assertEqual(fila["cliente"], self.cliente)
+        self.assertContains(resp, "Compras por cliente")
+        self.assertContains(resp, "Cantidad período")
+        self.assertContains(resp, "Precio promedio neto")
+        self.assertNotContains(resp, "<th>Período</th>", html=True)
+        self.assertContains(resp, "filtro-fecha-compacto", count=3)
+        self.assertContains(resp, 'id="preset-range"')
+        self.assertContains(resp, self.cliente.nombre_cliente)
+        self.assertContains(resp, self.producto.nombre_producto)
 
 
 class DashboardFinancieroPpmTests(TestCase):

@@ -43,6 +43,7 @@
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'dashboard_financiero_simple' %}">Financieros</a></li>
               <li><a class="dropdown-item" href="{% url 'dashboard_comercial_gestion' %}">Comercial y gesti&oacute;n</a></li>
+              <li><a class="dropdown-item" href="{% url 'informe_compras_cliente' %}">Compras por cliente</a></li>
               <li><a class="dropdown-item" href="{% url 'dashboard_control_riesgo' %}">Control y riesgo</a></li>
               <li><a class="dropdown-item" href="{% url 'costos:panel' %}">Gastos y tiempos</a></li>
               {% if user.is_staff %}<li><a class="dropdown-item" href="{% url 'costos:configuracion' %}">Configurar costos</a></li>{% endif %}

@@ -52,6 +52,16 @@ class FiltroFinancieroForm(forms.Form):
         return data
 
 
+class FiltroComprasClienteForm(FiltroFinancieroForm):
+    cliente = forms.ModelChoiceField(
+        queryset=Cliente.objects.all().order_by("nombre_cliente", "rut_cliente"),
+        required=False,
+        label="Cliente",
+        empty_label="Todos los clientes",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+
 class FiltroVentasForm(forms.Form):
     cliente = forms.ModelChoiceField(
         queryset=Cliente.objects.all().order_by("nombre_cliente"),
