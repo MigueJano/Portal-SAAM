@@ -36,10 +36,16 @@
               <td class="text-center">
                 {% if pedido.estado_pedido == "Pendiente" %}
                   <span class="badge bg-warning text-dark">Pendiente</span>
+                {% elif pedido.estado_pedido == "Despachado" %}
+                  <span class="badge bg-info text-dark">Despachado</span>
                 {% elif pedido.estado_pedido == "Entregado" %}
                   <span class="badge bg-primary">Entregado</span>
                 {% elif pedido.estado_pedido == "Pagado" %}
                   <span class="badge bg-success">Pagado</span>
+                {% elif pedido.estado_pedido == "Finalizado" %}
+                  <span class="badge bg-dark">Finalizado</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ pedido.estado_pedido|default:"Sin estado" }}</span>
                 {% endif %}
               </td>
               <td class="text-end">$ {{ pedido.total_pedido|floatformat:0|formatear_miles }}</td>

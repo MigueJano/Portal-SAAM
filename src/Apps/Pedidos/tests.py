@@ -828,6 +828,34 @@ class ListaPedidosTests(TestCase):
             contenido.index(f'<td class="text-center">{self.cliente.nombre_cliente}</td>'),
         )
 
+    def test_lista_pedidos_identifica_todos_los_estados_en_proceso(self):
+        for estado in ("Despachado", "Entregado", "Pagado"):
+            Pedido.objects.create(
+                nombre_cliente=self.cliente,
+                fecha_pedido=datetime(2026, 5, 1).date(),
+                estado_pedido=estado,
+            )
+
+        resp = self.client.get(reverse("lista_pedidos"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, '<span class="badge bg-warning text-dark">Pendiente</span>', html=True)
+        self.assertContains(resp, '<span class="badge bg-info text-dark">Despachado</span>', html=True)
+        self.assertContains(resp, '<span class="badge bg-primary">Entregado</span>', html=True)
+        self.assertContains(resp, '<span class="badge bg-success">Pagado</span>', html=True)
+
+    def test_lista_pedidos_no_deja_en_blanco_un_estado_historico_inesperado(self):
+        Pedido.objects.create(
+            nombre_cliente=self.cliente,
+            fecha_pedido=datetime(2026, 5, 2).date(),
+            estado_pedido="Archivado",
+        )
+
+        resp = self.client.get(reverse("lista_pedidos"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, '<span class="badge bg-secondary">Archivado</span>', html=True)
+
 
 class ListaVentasTests(TestCase):
     def setUp(self):
